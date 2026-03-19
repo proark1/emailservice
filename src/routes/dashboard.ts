@@ -82,8 +82,42 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/domains/:id/verify", async (request) => {
     const domain = await domainService.getDomain(request.account.id, request.params.id);
-    try { await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0 }); } catch {}
-    return { data: { message: "Verification started" } };
+    const { verifyDnsRecords } = await import("../services/dns.service.js");
+    const { getDb } = await import("../db/index.js");
+    const { domains: domainsTable } = await import("../db/schema/index.js");
+    const { eq } = await import("drizzle-orm");
+
+    // Run verification directly (no Redis dependency)
+    const result = await verifyDnsRecords(
+      domain.name,
+      domain.spfRecord || "",
+      domain.dkimSelector || "es1",
+      domain.dkimDnsValue || "",
+    );
+
+    const allVerified = result.spfVerified && result.dkimVerified && result.dmarcVerified;
+    const newStatus = allVerified ? "verified" as const : "pending" as const;
+
+    await domainService.updateDomainVerification(domain.id, {
+      spfVerified: result.spfVerified,
+      dkimVerified: result.dkimVerified,
+      dmarcVerified: result.dmarcVerified,
+      mxVerified: result.mxVerified,
+      status: newStatus,
+    });
+
+    return {
+      data: {
+        status: newStatus,
+        spf: result.spfVerified,
+        dkim: result.dkimVerified,
+        dmarc: result.dmarcVerified,
+        mx: result.mxVerified,
+        message: allVerified
+          ? "Domain verified successfully!"
+          : `Pending: ${[!result.spfVerified && "SPF", !result.dkimVerified && "DKIM", !result.dmarcVerified && "DMARC"].filter(Boolean).join(", ")} not yet detected. DNS propagation can take up to 24 hours.`,
+      },
+    };
   });
 
   // DNS provider detection

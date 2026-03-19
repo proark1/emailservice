@@ -190,7 +190,18 @@ function DomainsPage() {
   };
 
   const remove = async (id: string) => { if (!confirm("Delete this domain?")) return; await del(`/dashboard/domains/${id}`); load(); };
-  const verify = async (id: string) => { await post(`/dashboard/domains/${id}/verify`, {}); alert("Verification started. Check back in a minute."); load(); };
+  const [verifyResult, setVerifyResult] = useState<any>(null);
+  const [verifying, setVerifying] = useState(false);
+
+  const verify = async (id: string) => {
+    setVerifying(true); setVerifyResult(null);
+    try {
+      const res = await post(`/dashboard/domains/${id}/verify`, {});
+      setVerifyResult(res.data);
+      load();
+    } catch (e: any) { setVerifyResult({ message: e.message }); }
+    finally { setVerifying(false); }
+  };
 
   const providerNames: Record<string, string> = { godaddy: "GoDaddy", cloudflare: "Cloudflare", namecheap: "Namecheap" };
 
@@ -283,7 +294,7 @@ function DomainsPage() {
                     <p className="text-[11px] text-zinc-300 font-mono break-all mt-1">{r.value}</p>
                   </div>
                 ))}
-                <Button variant="secondary" onClick={() => { verify(setupDomain.id); setSetupDomain(null); setDetail(null); }}>I've added the records — Verify now</Button>
+                <Button variant="secondary" onClick={() => verify(setupDomain.id)} disabled={verifying}>{verifying ? "Checking DNS..." : "I've added the records — Verify now"}</Button>
               </div>
             )}
 
@@ -295,7 +306,25 @@ function DomainsPage() {
                     {r.purpose}: {r.success ? "configured" : r.error}
                   </div>
                 ))}
-                {setupResult.success && <p className="text-[12px] text-zinc-500 mt-2">DNS records configured. Verification will start automatically in ~10 seconds.</p>}
+                {setupResult.success && (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-[12px] text-emerald-400">DNS records configured successfully.</p>
+                    <Button onClick={() => verify(setupDomain.id)} disabled={verifying}>{verifying ? "Verifying..." : "Verify DNS Now"}</Button>
+                  </div>
+                )}
+              </div>
+            )}
+            {verifyResult && (
+              <div className={`mt-3 p-3 rounded-xl border text-[13px] ${verifyResult.status === "verified" ? "bg-emerald-500/[0.06] border-emerald-500/10 text-emerald-400" : "bg-amber-500/[0.06] border-amber-500/10 text-amber-300"}`}>
+                <p className="font-medium mb-1">{verifyResult.status === "verified" ? "Domain verified!" : "Verification results:"}</p>
+                <p>{verifyResult.message}</p>
+                {verifyResult.status !== "verified" && (
+                  <div className="flex gap-3 mt-2 text-[12px]">
+                    <span>SPF: {verifyResult.spf ? "OK" : "pending"}</span>
+                    <span>DKIM: {verifyResult.dkim ? "OK" : "pending"}</span>
+                    <span>DMARC: {verifyResult.dmarc ? "OK" : "pending"}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
