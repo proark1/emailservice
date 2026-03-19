@@ -5,7 +5,8 @@ import { z } from "zod";
 const DEFAULT_ENCRYPTION_KEY = crypto.randomBytes(32).toString("hex");
 
 const envSchema = z.object({
-  DATABASE_URL: z.string().min(1),
+  DATABASE_URL: z.string().min(1).optional(),
+  DATABASE_PUBLIC_URL: z.string().min(1).optional(),
   REDIS_URL: z.string().min(1).optional(),
   API_PORT: z.coerce.number().default(3000),
   API_HOST: z.string().default("0.0.0.0"),
@@ -31,6 +32,13 @@ let _config: Env | null = null;
 export function loadConfig(): Env {
   if (_config) return _config;
   const parsed = envSchema.parse(process.env);
+  // Resolve DATABASE_URL from multiple possible env var names
+  if (!parsed.DATABASE_URL && parsed.DATABASE_PUBLIC_URL) {
+    parsed.DATABASE_URL = parsed.DATABASE_PUBLIC_URL;
+  }
+  if (!parsed.DATABASE_URL) {
+    throw new Error("DATABASE_URL or DATABASE_PUBLIC_URL environment variable is required");
+  }
   // Cloud platforms set PORT — use it as API_PORT fallback
   if (parsed.PORT) {
     parsed.API_PORT = parsed.PORT;

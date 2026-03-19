@@ -8,7 +8,7 @@ let _sql: ReturnType<typeof postgres> | null = null;
 
 function createDb() {
   const config = getConfig();
-  _sql = postgres(config.DATABASE_URL, { max: 20 });
+  _sql = postgres(config.DATABASE_URL!, { max: 20 });
   return drizzle(_sql, { schema });
 }
 
