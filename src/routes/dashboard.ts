@@ -10,6 +10,7 @@ import { getDb } from "../db/index.js";
 import { emails, domains, apiKeys, webhooks, audiences } from "../db/schema/index.js";
 import { ForbiddenError } from "../lib/errors.js";
 import { getDnsVerifyQueue } from "../queues/index.js";
+import { getConfig } from "../config/index.js";
 import { WEBHOOK_EVENT_TYPES } from "../types/webhook-events.js";
 
 export default async function dashboardRoutes(app: FastifyInstance) {
@@ -164,7 +165,9 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const domain = await domainService.getDomain(request.account.id, request.params.id);
     const { detectDnsProvider } = await import("../services/dns-providers.service.js");
     const provider = await detectDnsProvider(domain.name);
-    return { data: { provider } };
+    // Check if credentials are already saved
+    const hasSaved = !!(domain as any).dnsProvider;
+    return { data: { provider, savedProvider: (domain as any).dnsProvider || null, hasSavedCredentials: hasSaved } };
   });
 
   // DNS auto-setup
@@ -178,6 +181,21 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       cloudflare_token: z.string().optional(),
       cloudflare_zone_id: z.string().optional(),
     }).parse(request.body);
+
+    // Save provider credentials (encrypted)
+    const { encryptPrivateKey } = await import("../lib/crypto.js");
+    const config = getConfig();
+    const db = getDb();
+    const { domains: domainsTable } = await import("../db/schema/index.js");
+    const encKey = (k: string) => encryptPrivateKey(k, config.ENCRYPTION_KEY);
+
+    await db.update(domainsTable).set({
+      dnsProvider: input.provider,
+      dnsProviderKey: input.provider === "godaddy" && input.godaddy_key ? encKey(input.godaddy_key) : input.provider === "cloudflare" && input.cloudflare_token ? encKey(input.cloudflare_token) : null,
+      dnsProviderSecret: input.provider === "godaddy" && input.godaddy_secret ? encKey(input.godaddy_secret) : null,
+      dnsProviderZoneId: input.cloudflare_zone_id || null,
+      updatedAt: new Date(),
+    }).where(eq(domainsTable.id, domain.id));
 
     const { setupDnsRecords } = await import("../services/dns-providers.service.js");
     const result = await setupDnsRecords(domain.name, formatted.records, {

@@ -1,6 +1,6 @@
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db/index.js";
-import { domains } from "../db/schema/index.js";
+import { domains, emails, inboundEmails } from "../db/schema/index.js";
 import { generateDkimForDomain } from "./dkim.service.js";
 import { generateDnsRecords } from "./dns.service.js";
 import { getConfig } from "../config/index.js";
@@ -10,7 +10,6 @@ import type { CreateDomainInput } from "../schemas/domain.schema.js";
 export async function createDomain(accountId: string, input: CreateDomainInput) {
   const db = getDb();
 
-  // Check for duplicate
   const existing = await db
     .select()
     .from(domains)
@@ -20,10 +19,7 @@ export async function createDomain(accountId: string, input: CreateDomainInput) 
     throw new ConflictError(`Domain ${input.name} already exists`);
   }
 
-  // Generate DKIM keys
   const dkim = generateDkimForDomain();
-
-  // Generate DNS records
   const dnsRecords = generateDnsRecords(input.name);
 
   const [domain] = await db
@@ -62,13 +58,30 @@ export async function listDomains(accountId: string) {
 
 export async function deleteDomain(accountId: string, domainId: string) {
   const db = getDb();
+
+  // Verify domain exists and belongs to account
+  const [domain] = await db
+    .select()
+    .from(domains)
+    .where(and(eq(domains.id, domainId), eq(domains.accountId, accountId)));
+
+  if (!domain) throw new NotFoundError("Domain");
+
+  // Nullify FK references first (handles case where migration hasn't run)
+  try {
+    await db.update(emails).set({ domainId: null }).where(eq(emails.domainId, domainId));
+  } catch {}
+  try {
+    await db.update(inboundEmails).set({ domainId: null }).where(eq(inboundEmails.domainId, domainId));
+  } catch {}
+
+  // Now delete
   const [deleted] = await db
     .delete(domains)
-    .where(and(eq(domains.id, domainId), eq(domains.accountId, accountId)))
+    .where(eq(domains.id, domainId))
     .returning();
 
-  if (!deleted) throw new NotFoundError("Domain");
-  return deleted;
+  return deleted!;
 }
 
 export async function updateDomainVerification(
@@ -108,31 +121,34 @@ export function formatDomainResponse(domain: typeof domains.$inferSelect) {
         type: "TXT",
         name: domain.name,
         value: domain.spfRecord || "",
-        purpose: "SPF",
+        purpose: "SPF (Sending)",
         verified: domain.spfVerified,
       },
       {
         type: "TXT",
         name: `${domain.dkimSelector}._domainkey.${domain.name}`,
         value: domain.dkimDnsValue || "",
-        purpose: "DKIM",
+        purpose: "DKIM (Sending)",
         verified: domain.dkimVerified,
       },
       {
         type: "TXT",
         name: `_dmarc.${domain.name}`,
         value: domain.dmarcRecord || "",
-        purpose: "DMARC",
+        purpose: "DMARC (Sending)",
         verified: domain.dmarcVerified,
       },
       {
         type: "MX",
         name: domain.name,
         value: `10 ${mxHost}`,
-        purpose: "MX (Inbound Email)",
+        purpose: "MX (Receiving)",
         verified: domain.mxVerified,
       },
     ],
+    // Include saved provider info (masked)
+    provider: (domain as any).dnsProvider || null,
+    providerConfigured: !!(domain as any).dnsProviderKey,
     created_at: domain.createdAt.toISOString(),
   };
 }

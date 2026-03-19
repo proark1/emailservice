@@ -164,17 +164,24 @@ function DomainsPage() {
     finally { setLoading(false); }
   };
 
+  const [hasSavedCreds, setHasSavedCreds] = useState(false);
+
   const openSetup = async (domain: any) => {
     setSetupDomain(domain);
     setSetupResult(null);
+    setVerifyResult(null);
     setSetupProvider("manual");
     setSetupCreds({ godaddy_key: "", godaddy_secret: "", cloudflare_token: "", cloudflare_zone_id: "" });
     setDetecting(true);
     setDetectedProvider(null);
+    setHasSavedCreds(false);
     try {
       const res = await api(`/dashboard/domains/${domain.id}/detect-provider`);
       setDetectedProvider(res.data.provider);
-      if (res.data.provider === "godaddy" || res.data.provider === "cloudflare") {
+      if (res.data.savedProvider) {
+        setSetupProvider(res.data.savedProvider);
+        setHasSavedCreds(true);
+      } else if (res.data.provider === "godaddy" || res.data.provider === "cloudflare") {
         setSetupProvider(res.data.provider);
       }
     } catch {} finally { setDetecting(false); }
@@ -271,19 +278,31 @@ function DomainsPage() {
 
             {setupProvider === "godaddy" && (
               <div className="space-y-3">
+                {hasSavedCreds && setupProvider === "godaddy" && (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-violet-500/[0.06] border border-violet-500/10 text-[13px] text-violet-300">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                    Credentials saved securely. Enter new ones to update.
+                  </div>
+                )}
                 <p className="text-[12px] text-zinc-500">Enter your GoDaddy API credentials. Get them at <a href="https://developer.godaddy.com/keys" target="_blank" className="text-violet-400 hover:text-violet-300">developer.godaddy.com/keys</a></p>
-                <Input label="API Key" placeholder="GoDaddy API Key" value={setupCreds.godaddy_key} onChange={(e) => setSetupCreds({ ...setupCreds, godaddy_key: (e.target as HTMLInputElement).value })} />
-                <Input label="API Secret" placeholder="GoDaddy API Secret" type="password" value={setupCreds.godaddy_secret} onChange={(e) => setSetupCreds({ ...setupCreds, godaddy_secret: (e.target as HTMLInputElement).value })} />
-                <Button onClick={runAutoSetup} disabled={setupLoading || !setupCreds.godaddy_key || !setupCreds.godaddy_secret}>{setupLoading ? "Setting up DNS..." : "Auto-Configure DNS"}</Button>
+                <Input label="API Key" placeholder={hasSavedCreds ? "••••••••••••••• (saved)" : "GoDaddy API Key"} type="password" value={setupCreds.godaddy_key} onChange={(e) => setSetupCreds({ ...setupCreds, godaddy_key: (e.target as HTMLInputElement).value })} />
+                <Input label="API Secret" placeholder={hasSavedCreds ? "••••••••••••••• (saved)" : "GoDaddy API Secret"} type="password" value={setupCreds.godaddy_secret} onChange={(e) => setSetupCreds({ ...setupCreds, godaddy_secret: (e.target as HTMLInputElement).value })} />
+                <Button onClick={runAutoSetup} disabled={setupLoading || (!hasSavedCreds && (!setupCreds.godaddy_key || !setupCreds.godaddy_secret))}>{setupLoading ? "Setting up DNS..." : "Auto-Configure DNS"}</Button>
               </div>
             )}
 
             {setupProvider === "cloudflare" && (
               <div className="space-y-3">
+                {hasSavedCreds && setupProvider === "cloudflare" && (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-violet-500/[0.06] border border-violet-500/10 text-[13px] text-violet-300">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                    Credentials saved securely. Enter new ones to update.
+                  </div>
+                )}
                 <p className="text-[12px] text-zinc-500">Enter your Cloudflare API token and Zone ID. Create a token at <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" className="text-violet-400 hover:text-violet-300">Cloudflare Dashboard</a></p>
-                <Input label="API Token" placeholder="Cloudflare API Token" type="password" value={setupCreds.cloudflare_token} onChange={(e) => setSetupCreds({ ...setupCreds, cloudflare_token: (e.target as HTMLInputElement).value })} />
+                <Input label="API Token" placeholder={hasSavedCreds ? "••••••••••••••• (saved)" : "Cloudflare API Token"} type="password" value={setupCreds.cloudflare_token} onChange={(e) => setSetupCreds({ ...setupCreds, cloudflare_token: (e.target as HTMLInputElement).value })} />
                 <Input label="Zone ID" placeholder="Found on your domain's overview page" value={setupCreds.cloudflare_zone_id} onChange={(e) => setSetupCreds({ ...setupCreds, cloudflare_zone_id: (e.target as HTMLInputElement).value })} />
-                <Button onClick={runAutoSetup} disabled={setupLoading || !setupCreds.cloudflare_token || !setupCreds.cloudflare_zone_id}>{setupLoading ? "Setting up DNS..." : "Auto-Configure DNS"}</Button>
+                <Button onClick={runAutoSetup} disabled={setupLoading || (!hasSavedCreds && (!setupCreds.cloudflare_token || !setupCreds.cloudflare_zone_id))}>{setupLoading ? "Setting up DNS..." : "Auto-Configure DNS"}</Button>
               </div>
             )}
 
@@ -544,7 +563,6 @@ function InboxPage() {
   };
 
   const unread = items.filter((e) => !e.isRead && !e.isArchived);
-  const read = items.filter((e) => e.isRead && !e.isArchived);
   const activeItems = items.filter((e) => !e.isArchived);
 
   const timeAgo = (d: string) => {

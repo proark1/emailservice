@@ -21,6 +21,11 @@ export const domains = pgTable("domains", {
   mxVerified: boolean("mx_verified").notNull().default(false),
   returnPathDomain: varchar("return_path_domain", { length: 255 }),
   returnPathVerified: boolean("return_path_verified").notNull().default(false),
+  // DNS provider credentials (encrypted)
+  dnsProvider: varchar("dns_provider", { length: 20 }),
+  dnsProviderKey: text("dns_provider_key"), // encrypted
+  dnsProviderSecret: text("dns_provider_secret"), // encrypted
+  dnsProviderZoneId: varchar("dns_provider_zone_id", { length: 255 }),
   lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
