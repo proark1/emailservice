@@ -1,7 +1,7 @@
 import { eq, and, desc } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, suppressions } from "../db/schema/index.js";
-import { getEmailSendQueue } from "../queues/index.js";
+import { isRedisConfigured, getEmailSendQueue } from "../queues/index.js";
 import { transformHtml } from "../lib/html-transform.js";
 import { checkIdempotencyKey, storeIdempotencyKey } from "../lib/idempotency.js";
 import { ValidationError, NotFoundError } from "../lib/errors.js";
@@ -106,12 +106,27 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
     data: {},
   });
 
-  // Enqueue for sending (with delay if scheduled)
+  // Send: try queue first, fall back to direct send
   const delay = input.scheduled_at
     ? Math.max(0, new Date(input.scheduled_at).getTime() - Date.now())
     : 0;
 
-  await getEmailSendQueue().add("send", { emailId: email.id, accountId }, { delay });
+  if (isRedisConfigured() && delay === 0) {
+    try {
+      await getEmailSendQueue().add("send", { emailId: email.id, accountId });
+    } catch {
+      // Queue failed, send directly
+      const { sendEmailDirect } = await import("./email-sender.js");
+      sendEmailDirect(email.id, accountId).catch(() => {});
+    }
+  } else if (delay > 0 && isRedisConfigured()) {
+    // Scheduled emails need the queue
+    await getEmailSendQueue().add("send", { emailId: email.id, accountId }, { delay });
+  } else {
+    // No Redis — send directly (async, don't block the response)
+    const { sendEmailDirect } = await import("./email-sender.js");
+    sendEmailDirect(email.id, accountId).catch(() => {});
+  }
 
   const response = formatEmailResponse(email);
 

@@ -3,6 +3,7 @@ import { getDb } from "../db/index.js";
 import { domains } from "../db/schema/index.js";
 import { generateDkimForDomain } from "./dkim.service.js";
 import { generateDnsRecords } from "./dns.service.js";
+import { getConfig } from "../config/index.js";
 import { NotFoundError, ConflictError } from "../lib/errors.js";
 import type { CreateDomainInput } from "../schemas/domain.schema.js";
 
@@ -90,6 +91,14 @@ export async function updateDomainVerification(
 }
 
 export function formatDomainResponse(domain: typeof domains.$inferSelect) {
+  let mxHost: string;
+  try {
+    const config = getConfig();
+    mxHost = new URL(config.BASE_URL).hostname;
+  } catch {
+    mxHost = "mail.yourdomain.com";
+  }
+
   return {
     id: domain.id,
     name: domain.name,
@@ -119,8 +128,8 @@ export function formatDomainResponse(domain: typeof domains.$inferSelect) {
       {
         type: "MX",
         name: domain.name,
-        value: "10 inbound.emailservice.dev",
-        purpose: "Inbound Email",
+        value: `10 ${mxHost}`,
+        purpose: "MX (Inbound Email)",
         verified: domain.mxVerified,
       },
     ],

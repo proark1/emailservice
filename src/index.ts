@@ -114,6 +114,16 @@ async function main() {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("SIGINT", () => shutdown("SIGINT"));
 
+  // Start workers in-process if Redis is available
+  const { isRedisConfigured } = await import("./queues/index.js");
+  if (isRedisConfigured()) {
+    const { startAllWorkers } = await import("./workers/index.js");
+    startAllWorkers();
+    app.log.info("Background workers started (Redis connected)");
+  } else {
+    app.log.info("Running without Redis — emails will be sent directly (no queue)");
+  }
+
   // Start
   await app.listen({ port: config.API_PORT, host: config.API_HOST });
   app.log.info(`Email Service API running on http://${config.API_HOST}:${config.API_PORT}`);
