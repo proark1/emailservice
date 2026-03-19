@@ -308,6 +308,15 @@ function DomainsPage() {
 
             {setupProvider === "manual" && (
               <div className="space-y-3">
+                {setupDomain?.mailHostConfigured === false && (
+                  <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-red-500/[0.08] border border-red-500/[0.12] text-[13px] text-red-300">
+                    <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                    <div>
+                      <p className="font-medium">Mail host not configured</p>
+                      <p className="text-red-400/80 mt-0.5">Set the <code className="bg-red-500/10 px-1 rounded">MAIL_HOST</code> environment variable to your server's public hostname. MX and SPF records need this to work correctly.</p>
+                    </div>
+                  </div>
+                )}
                 <p className="text-[13px] text-zinc-400">Add these DNS records with your domain registrar:</p>
                 {setupDomain?.records?.map((r: any) => (
                   <div key={r.purpose} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">

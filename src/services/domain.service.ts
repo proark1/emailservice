@@ -3,7 +3,7 @@ import { getDb } from "../db/index.js";
 import { domains, emails, inboundEmails } from "../db/schema/index.js";
 import { generateDkimForDomain } from "./dkim.service.js";
 import { generateDnsRecords } from "./dns.service.js";
-import { getConfig } from "../config/index.js";
+import { getConfig, getMailHost } from "../config/index.js";
 import { NotFoundError, ConflictError } from "../lib/errors.js";
 import type { CreateDomainInput } from "../schemas/domain.schema.js";
 
@@ -104,23 +104,25 @@ export async function updateDomainVerification(
 }
 
 export function formatDomainResponse(domain: typeof domains.$inferSelect) {
-  let mxHost: string;
-  try {
-    const config = getConfig();
-    mxHost = new URL(config.BASE_URL).hostname;
-  } catch {
-    mxHost = "mail.yourdomain.com";
-  }
+  const mxHost = getMailHost();
+  const isHostConfigured = mxHost !== "your-server-hostname.com";
+
+  // Build SPF value — regenerate with current config if the stored one is stale
+  const currentSpf = domain.spfRecord && !domain.spfRecord.includes("localhost")
+    ? domain.spfRecord
+    : (isHostConfigured ? `v=spf1 a mx include:${mxHost} ~all` : `v=spf1 a mx ~all`);
 
   return {
     id: domain.id,
     name: domain.name,
     status: domain.status,
+    mailHost: mxHost,
+    mailHostConfigured: isHostConfigured,
     records: [
       {
         type: "TXT",
         name: domain.name,
-        value: domain.spfRecord || "",
+        value: currentSpf,
         purpose: "SPF (Sending)",
         verified: domain.spfVerified,
       },
@@ -146,7 +148,6 @@ export function formatDomainResponse(domain: typeof domains.$inferSelect) {
         verified: domain.mxVerified,
       },
     ],
-    // Include saved provider info (masked)
     provider: (domain as any).dnsProvider || null,
     providerConfigured: !!(domain as any).dnsProviderKey,
     created_at: domain.createdAt.toISOString(),
