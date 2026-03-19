@@ -86,6 +86,43 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     return { data: { message: "Verification started" } };
   });
 
+  // DNS provider detection
+  app.get<{ Params: { id: string } }>("/domains/:id/detect-provider", async (request) => {
+    const domain = await domainService.getDomain(request.account.id, request.params.id);
+    const { detectDnsProvider } = await import("../services/dns-providers.service.js");
+    const provider = await detectDnsProvider(domain.name);
+    return { data: { provider } };
+  });
+
+  // DNS auto-setup
+  app.post<{ Params: { id: string } }>("/domains/:id/auto-setup", async (request) => {
+    const domain = await domainService.getDomain(request.account.id, request.params.id);
+    const formatted = domainService.formatDomainResponse(domain);
+    const input = z.object({
+      provider: z.enum(["godaddy", "cloudflare"]),
+      godaddy_key: z.string().optional(),
+      godaddy_secret: z.string().optional(),
+      cloudflare_token: z.string().optional(),
+      cloudflare_zone_id: z.string().optional(),
+    }).parse(request.body);
+
+    const { setupDnsRecords } = await import("../services/dns-providers.service.js");
+    const result = await setupDnsRecords(domain.name, formatted.records, {
+      provider: input.provider,
+      godaddyKey: input.godaddy_key,
+      godaddySecret: input.godaddy_secret,
+      cloudflareToken: input.cloudflare_token,
+      cloudflareZoneId: input.cloudflare_zone_id,
+    });
+
+    // Trigger verification after auto-setup
+    if (result.success) {
+      try { await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0 }, { delay: 10_000 }); } catch {}
+    }
+
+    return { data: result };
+  });
+
   // --- API Keys ---
   app.get("/api-keys", async (request) => {
     const keys = await apiKeyService.listApiKeys(request.account.id);
