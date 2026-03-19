@@ -231,6 +231,68 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     return { data: result };
   });
 
+  // Test GoDaddy/Cloudflare credentials before running setup
+  app.post<{ Params: { id: string } }>("/domains/:id/test-credentials", async (request) => {
+    const domain = await domainService.getDomain(request.account.id, request.params.id);
+    const input = z.object({
+      provider: z.enum(["godaddy", "cloudflare"]),
+      godaddy_key: z.string().optional(),
+      godaddy_secret: z.string().optional(),
+      cloudflare_token: z.string().optional(),
+      cloudflare_zone_id: z.string().optional(),
+    }).parse(request.body);
+
+    const { decryptPrivateKey } = await import("../lib/crypto.js");
+    const config = getConfig();
+
+    if (input.provider === "godaddy") {
+      let key = input.godaddy_key || (domain.dnsProviderKey ? decryptPrivateKey(domain.dnsProviderKey, config.ENCRYPTION_KEY) : "");
+      let secret = input.godaddy_secret || (domain.dnsProviderSecret ? decryptPrivateKey(domain.dnsProviderSecret, config.ENCRYPTION_KEY) : "");
+
+      if (!key || !secret) return { data: { success: false, error: "API key and secret are required" } };
+
+      const res = await fetch(`https://api.godaddy.com/v1/domains/${domain.name}/records`, {
+        headers: { Authorization: `sso-key ${key}:${secret}` },
+      });
+      const body = await res.text();
+
+      if (!res.ok) {
+        let msg = body;
+        try { msg = JSON.parse(body)?.message || JSON.parse(body)?.description || body; } catch {}
+        const hints: Record<number, string> = {
+          401: "Invalid API key or secret. Make sure you're using Production keys (not OTE/test keys) from developer.godaddy.com/keys.",
+          403: "Access denied — the domain may be in a different GoDaddy account, or your API key needs 'Domain - Edit DNS' permission.",
+          404: "Domain not found. Is onepizza.io registered in the same GoDaddy account that issued this API key?",
+        };
+        return { data: { success: false, status: res.status, error: msg, hint: hints[res.status] || "" } };
+      }
+
+      let records: any[] = [];
+      try { records = JSON.parse(body); } catch {}
+      return { data: { success: true, message: `Connected! Found ${records.length} existing DNS records on ${domain.name}.` } };
+    }
+
+    if (input.provider === "cloudflare") {
+      const token = input.cloudflare_token || (domain.dnsProviderKey ? decryptPrivateKey(domain.dnsProviderKey, config.ENCRYPTION_KEY) : "");
+      const zoneId = input.cloudflare_zone_id || domain.dnsProviderZoneId || "";
+
+      if (!token || !zoneId) return { data: { success: false, error: "API token and Zone ID are required" } };
+
+      const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records?per_page=1`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = await res.json().catch(() => ({})) as any;
+
+      if (!res.ok || !body.success) {
+        const msg = body.errors?.[0]?.message || "Authentication failed";
+        return { data: { success: false, status: res.status, error: msg, hint: "Check that your API token has 'Zone DNS Edit' permission and the Zone ID is correct." } };
+      }
+      return { data: { success: true, message: `Connected! Cloudflare zone accessible.` } };
+    }
+
+    return { data: { success: false, error: "Unsupported provider" } };
+  });
+
   // Debug: read current GoDaddy DNS records for a domain
   app.get<{ Params: { id: string } }>("/domains/:id/dns-check", async (request) => {
     const domain = await domainService.getDomain(request.account.id, request.params.id);

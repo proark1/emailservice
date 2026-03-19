@@ -170,6 +170,7 @@ function DomainsPage() {
     setSetupDomain(domain);
     setSetupResult(null);
     setVerifyResult(null);
+    setTestResult(null);
     setSetupProvider("manual");
     setSetupCreds({ godaddy_key: "", godaddy_secret: "", cloudflare_token: "", cloudflare_zone_id: "" });
     setDetecting(true);
@@ -185,6 +186,19 @@ function DomainsPage() {
         setSetupProvider(res.data.provider);
       }
     } catch {} finally { setDetecting(false); }
+  };
+
+  const [testResult, setTestResult] = useState<any>(null);
+  const [testing, setTesting] = useState(false);
+
+  const testCredentials = async () => {
+    if (!setupDomain || setupProvider === "manual") return;
+    setTesting(true); setTestResult(null);
+    try {
+      const res = await post(`/dashboard/domains/${setupDomain.id}/test-credentials`, { provider: setupProvider, ...setupCreds });
+      setTestResult(res.data);
+    } catch (e: any) { setTestResult({ success: false, error: e.message }); }
+    finally { setTesting(false); }
   };
 
   const runAutoSetup = async () => {
@@ -278,31 +292,50 @@ function DomainsPage() {
 
             {setupProvider === "godaddy" && (
               <div className="space-y-3">
-                {hasSavedCreds && setupProvider === "godaddy" && (
+                {hasSavedCreds && (
                   <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-violet-500/[0.06] border border-violet-500/10 text-[13px] text-violet-300">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
-                    Credentials saved securely. Enter new ones to update.
+                    Credentials saved. Leave blank to reuse saved keys, or enter new ones to update.
                   </div>
                 )}
-                <p className="text-[12px] text-zinc-500">Enter your GoDaddy API credentials. Get them at <a href="https://developer.godaddy.com/keys" target="_blank" className="text-violet-400 hover:text-violet-300">developer.godaddy.com/keys</a></p>
-                <Input label="API Key" placeholder={hasSavedCreds ? "••••••••••••••• (saved)" : "GoDaddy API Key"} type="password" value={setupCreds.godaddy_key} onChange={(e) => setSetupCreds({ ...setupCreds, godaddy_key: (e.target as HTMLInputElement).value })} />
-                <Input label="API Secret" placeholder={hasSavedCreds ? "••••••••••••••• (saved)" : "GoDaddy API Secret"} type="password" value={setupCreds.godaddy_secret} onChange={(e) => setSetupCreds({ ...setupCreds, godaddy_secret: (e.target as HTMLInputElement).value })} />
-                <Button onClick={runAutoSetup} disabled={setupLoading || (!hasSavedCreds && (!setupCreds.godaddy_key || !setupCreds.godaddy_secret))}>{setupLoading ? "Setting up DNS..." : "Auto-Configure DNS"}</Button>
+                <p className="text-[12px] text-zinc-500">Get <strong className="text-zinc-400">Production</strong> keys (not OTE/test) at <a href="https://developer.godaddy.com/keys" target="_blank" className="text-violet-400 hover:text-violet-300">developer.godaddy.com/keys</a></p>
+                <Input label="API Key" placeholder={hasSavedCreds ? "••••••••••••••• (saved)" : "GoDaddy API Key"} type="password" value={setupCreds.godaddy_key} onChange={(e) => { setSetupCreds({ ...setupCreds, godaddy_key: (e.target as HTMLInputElement).value }); setTestResult(null); }} />
+                <Input label="API Secret" placeholder={hasSavedCreds ? "••••••••••••••• (saved)" : "GoDaddy API Secret"} type="password" value={setupCreds.godaddy_secret} onChange={(e) => { setSetupCreds({ ...setupCreds, godaddy_secret: (e.target as HTMLInputElement).value }); setTestResult(null); }} />
+                {testResult && (
+                  <div className={`px-3 py-2.5 rounded-xl border text-[13px] ${testResult.success ? "bg-emerald-500/[0.06] border-emerald-500/10 text-emerald-300" : "bg-red-500/[0.08] border-red-500/10 text-red-300"}`}>
+                    <p className="font-medium">{testResult.success ? "✓ " : "✗ "}{testResult.message || testResult.error}</p>
+                    {testResult.hint && <p className="mt-1 text-[12px] opacity-80">{testResult.hint}</p>}
+                    {testResult.status && <p className="mt-0.5 text-[11px] opacity-60">HTTP {testResult.status}</p>}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button variant="secondary" onClick={testCredentials} disabled={testing || (!hasSavedCreds && (!setupCreds.godaddy_key || !setupCreds.godaddy_secret))}>{testing ? "Testing..." : "Test Connection"}</Button>
+                  <Button onClick={runAutoSetup} disabled={setupLoading || (!hasSavedCreds && (!setupCreds.godaddy_key || !setupCreds.godaddy_secret))}>{setupLoading ? "Setting up DNS..." : "Auto-Configure DNS"}</Button>
+                </div>
               </div>
             )}
 
             {setupProvider === "cloudflare" && (
               <div className="space-y-3">
-                {hasSavedCreds && setupProvider === "cloudflare" && (
+                {hasSavedCreds && (
                   <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-violet-500/[0.06] border border-violet-500/10 text-[13px] text-violet-300">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
-                    Credentials saved securely. Enter new ones to update.
+                    Credentials saved. Leave blank to reuse, or enter new ones to update.
                   </div>
                 )}
-                <p className="text-[12px] text-zinc-500">Enter your Cloudflare API token and Zone ID. Create a token at <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" className="text-violet-400 hover:text-violet-300">Cloudflare Dashboard</a></p>
-                <Input label="API Token" placeholder={hasSavedCreds ? "••••••••••••••• (saved)" : "Cloudflare API Token"} type="password" value={setupCreds.cloudflare_token} onChange={(e) => setSetupCreds({ ...setupCreds, cloudflare_token: (e.target as HTMLInputElement).value })} />
-                <Input label="Zone ID" placeholder="Found on your domain's overview page" value={setupCreds.cloudflare_zone_id} onChange={(e) => setSetupCreds({ ...setupCreds, cloudflare_zone_id: (e.target as HTMLInputElement).value })} />
-                <Button onClick={runAutoSetup} disabled={setupLoading || (!hasSavedCreds && (!setupCreds.cloudflare_token || !setupCreds.cloudflare_zone_id))}>{setupLoading ? "Setting up DNS..." : "Auto-Configure DNS"}</Button>
+                <p className="text-[12px] text-zinc-500">Create a token at <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" className="text-violet-400 hover:text-violet-300">Cloudflare Dashboard</a> with "Zone DNS Edit" permission</p>
+                <Input label="API Token" placeholder={hasSavedCreds ? "••••••••••••••• (saved)" : "Cloudflare API Token"} type="password" value={setupCreds.cloudflare_token} onChange={(e) => { setSetupCreds({ ...setupCreds, cloudflare_token: (e.target as HTMLInputElement).value }); setTestResult(null); }} />
+                <Input label="Zone ID" placeholder="Found on your domain's overview page" value={setupCreds.cloudflare_zone_id} onChange={(e) => { setSetupCreds({ ...setupCreds, cloudflare_zone_id: (e.target as HTMLInputElement).value }); setTestResult(null); }} />
+                {testResult && (
+                  <div className={`px-3 py-2.5 rounded-xl border text-[13px] ${testResult.success ? "bg-emerald-500/[0.06] border-emerald-500/10 text-emerald-300" : "bg-red-500/[0.08] border-red-500/10 text-red-300"}`}>
+                    <p className="font-medium">{testResult.success ? "✓ " : "✗ "}{testResult.message || testResult.error}</p>
+                    {testResult.hint && <p className="mt-1 text-[12px] opacity-80">{testResult.hint}</p>}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button variant="secondary" onClick={testCredentials} disabled={testing || (!hasSavedCreds && (!setupCreds.cloudflare_token || !setupCreds.cloudflare_zone_id))}>{testing ? "Testing..." : "Test Connection"}</Button>
+                  <Button onClick={runAutoSetup} disabled={setupLoading || (!hasSavedCreds && (!setupCreds.cloudflare_token || !setupCreds.cloudflare_zone_id))}>{setupLoading ? "Setting up DNS..." : "Auto-Configure DNS"}</Button>
+                </div>
               </div>
             )}
 
