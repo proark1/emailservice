@@ -4,8 +4,9 @@ export async function api<T = any>(path: string, options?: RequestInit): Promise
     headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message || "Request failed");
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!res.ok) throw new Error(data?.error?.message || `Request failed (${res.status})`);
   return data;
 }
 

@@ -8,7 +8,7 @@ export type EmailStatus = (typeof emailStatusEnum)[number];
 export const emails = pgTable("emails", {
   id: uuid("id").primaryKey().defaultRandom(),
   accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
-  domainId: uuid("domain_id").references(() => domains.id),
+  domainId: uuid("domain_id").references(() => domains.id, { onDelete: "set null" }),
   idempotencyKey: varchar("idempotency_key", { length: 255 }),
   fromAddress: varchar("from_address", { length: 255 }).notNull(),
   fromName: varchar("from_name", { length: 255 }),

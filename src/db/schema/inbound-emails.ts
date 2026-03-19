@@ -5,7 +5,7 @@ import { domains } from "./domains.js";
 export const inboundEmails = pgTable("inbound_emails", {
   id: uuid("id").primaryKey().defaultRandom(),
   accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
-  domainId: uuid("domain_id").references(() => domains.id),
+  domainId: uuid("domain_id").references(() => domains.id, { onDelete: "set null" }),
   fromAddress: varchar("from_address", { length: 255 }).notNull(),
   fromName: varchar("from_name", { length: 255 }),
   toAddress: varchar("to_address", { length: 255 }).notNull(),

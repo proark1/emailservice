@@ -191,7 +191,11 @@ function DomainsPage() {
     finally { setSetupLoading(false); }
   };
 
-  const remove = async (id: string) => { if (!confirm("Delete this domain?")) return; await del(`/dashboard/domains/${id}`); load(); };
+  const remove = async (id: string) => {
+    if (!window.confirm("Delete this domain?")) return;
+    try { await del(`/dashboard/domains/${id}`); } catch (e: any) { alert(e.message || "Delete failed"); }
+    load();
+  };
   const [verifyResult, setVerifyResult] = useState<any>(null);
   const [verifying, setVerifying] = useState(false);
 
@@ -374,7 +378,11 @@ function ApiKeysPage() {
     catch {} finally { setLoading(false); }
   };
 
-  const revoke = async (id: string) => { if (!confirm("Revoke this API key?")) return; await del(`/dashboard/api-keys/${id}`); load(); };
+  const revoke = async (id: string) => {
+    if (!window.confirm("Revoke this API key?")) return;
+    try { await del(`/dashboard/api-keys/${id}`); } catch (e: any) { alert(e.message || "Revoke failed"); }
+    load();
+  };
 
   return (
     <div>
@@ -432,7 +440,11 @@ function WebhooksPage() {
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   };
 
-  const remove = async (id: string) => { if (!confirm("Delete this webhook?")) return; await del(`/dashboard/webhooks/${id}`); load(); };
+  const remove = async (id: string) => {
+    if (!window.confirm("Delete this webhook?")) return;
+    try { await del(`/dashboard/webhooks/${id}`); } catch (e: any) { alert(e.message || "Delete failed"); }
+    load();
+  };
 
   return (
     <div>

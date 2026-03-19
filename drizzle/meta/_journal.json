@@ -15,6 +15,13 @@
       "when": 1773927551497,
       "tag": "0001_lethal_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773929481975,
+      "tag": "0002_mute_jack_murdock",
+      "breakpoints": true
     }
   ]
 }
