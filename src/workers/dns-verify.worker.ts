@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { getRedisConnection, dnsVerifyQueue } from "../queues/index.js";
+import { getRedisConnection, getDnsVerifyQueue } from "../queues/index.js";
 import { getDomain, updateDomainVerification } from "../services/domain.service.js";
 import { verifyDnsRecords } from "../services/dns.service.js";
 import { getDb } from "../db/index.js";
@@ -61,7 +61,7 @@ async function processDnsVerify(job: Job<DnsVerifyJobData>) {
       const delayIndex = Math.min(attempt, POLL_INTERVALS_MS.length - 1);
       const delay = POLL_INTERVALS_MS[delayIndex];
 
-      await dnsVerifyQueue.add("dns-verify", {
+      await getDnsVerifyQueue().add("dns-verify", {
         domainId,
         attempt: attempt + 1,
       }, { delay });

@@ -7,12 +7,10 @@ import { getConfig } from "../config/index.js";
 async function rateLimitPlugin(app: FastifyInstance) {
   const config = getConfig();
 
-  await app.register(rateLimit, {
+  const opts: Parameters<typeof rateLimit>[1] = {
     max: 60,
     timeWindow: "1 minute",
-    redis: new IORedis.default(config.REDIS_URL),
     keyGenerator: (request) => {
-      // Use API key ID if authenticated, otherwise IP
       return request.apiKey?.id || request.ip;
     },
     errorResponseBuilder: () => ({
@@ -21,7 +19,14 @@ async function rateLimitPlugin(app: FastifyInstance) {
         message: "Too many requests. Please retry later.",
       },
     }),
-  });
+  };
+
+  // Use Redis for rate limiting if available, otherwise in-memory
+  if (config.REDIS_URL) {
+    (opts as any).redis = new IORedis.default(config.REDIS_URL);
+  }
+
+  await app.register(rateLimit, opts);
 }
 
 export default fp(rateLimitPlugin, { name: "rate-limit" });

@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq";
 import { lte, eq, and } from "drizzle-orm";
-import { getRedisConnection, emailSendQueue, scheduledEmailQueue } from "../queues/index.js";
+import { getRedisConnection, getEmailSendQueue, getScheduledEmailQueue } from "../queues/index.js";
 import { getDb } from "../db/index.js";
 import { emails } from "../db/schema/index.js";
 
@@ -20,7 +20,7 @@ async function processScheduledEmails(_job: Job) {
     .limit(100);
 
   for (const email of dueEmails) {
-    await emailSendQueue.add("send", {
+    await getEmailSendQueue().add("send", {
       emailId: email.id,
       accountId: email.accountId,
     });
@@ -31,7 +31,7 @@ async function processScheduledEmails(_job: Job) {
 
 export function createScheduledEmailWorker() {
   // Add a repeatable job that runs every 30 seconds
-  scheduledEmailQueue.add(
+  getScheduledEmailQueue().add(
     "check-scheduled",
     {},
     {

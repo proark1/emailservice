@@ -3,7 +3,7 @@ import { simpleParser } from "mailparser";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { domains } from "../db/schema/index.js";
-import { inboundEmailQueue } from "../queues/index.js";
+import { getInboundEmailQueue } from "../queues/index.js";
 
 export function createInboundServer(): SMTPServer {
   const server = new SMTPServer({
@@ -56,7 +56,7 @@ export function createInboundServer(): SMTPServer {
           }
 
           // Enqueue for processing
-          await inboundEmailQueue.add("inbound", {
+          await getInboundEmailQueue().add("inbound", {
             accountId: domain.accountId,
             from: parsed.from?.text || "",
             to: toAddress,

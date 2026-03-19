@@ -1,7 +1,7 @@
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { webhooks, webhookDeliveries, emailEvents } from "../db/schema/index.js";
-import { webhookDeliverQueue } from "../queues/index.js";
+import { getWebhookDeliverQueue } from "../queues/index.js";
 import { generateWebhookSecret } from "../lib/crypto.js";
 import { NotFoundError } from "../lib/errors.js";
 import type { CreateWebhookInput, UpdateWebhookInput } from "../schemas/webhook.schema.js";
@@ -92,7 +92,7 @@ export async function dispatchEvent(
 
   // Enqueue a delivery job for each matching webhook
   for (const webhook of matching) {
-    await webhookDeliverQueue.add("deliver", {
+    await getWebhookDeliverQueue().add("deliver", {
       webhookId: webhook.id,
       emailEventId,
       eventType,

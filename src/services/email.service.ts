@@ -1,7 +1,7 @@
 import { eq, and, desc } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, suppressions } from "../db/schema/index.js";
-import { emailSendQueue } from "../queues/index.js";
+import { getEmailSendQueue } from "../queues/index.js";
 import { transformHtml } from "../lib/html-transform.js";
 import { checkIdempotencyKey, storeIdempotencyKey } from "../lib/idempotency.js";
 import { ValidationError, NotFoundError } from "../lib/errors.js";
@@ -111,7 +111,7 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
     ? Math.max(0, new Date(input.scheduled_at).getTime() - Date.now())
     : 0;
 
-  await emailSendQueue.add("send", { emailId: email.id, accountId }, { delay });
+  await getEmailSendQueue().add("send", { emailId: email.id, accountId }, { delay });
 
   const response = formatEmailResponse(email);
 

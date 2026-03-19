@@ -2,7 +2,7 @@ import { simpleParser } from "mailparser";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { domains, emails, emailEvents } from "../db/schema/index.js";
-import { emailSendQueue } from "../queues/index.js";
+import { getEmailSendQueue } from "../queues/index.js";
 import type { Readable } from "node:stream";
 
 export async function handleIncomingMessage(
@@ -68,7 +68,7 @@ export async function handleIncomingMessage(
     data: { source: "smtp" },
   });
 
-  await emailSendQueue.add("send", { emailId: email.id, accountId });
+  await getEmailSendQueue().add("send", { emailId: email.id, accountId });
 
   return { accepted: true, emailId: email.id };
 }
