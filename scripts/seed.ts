@@ -1,3 +1,4 @@
+import * as argon2 from "argon2";
 import { loadConfig } from "../src/config/index.js";
 import { getDb, closeDb } from "../src/db/index.js";
 import { accounts, apiKeys } from "../src/db/schema/index.js";
@@ -9,12 +10,16 @@ async function seed() {
 
   console.log("Seeding database...\n");
 
-  // Create a default account
+  // Create an admin account
+  const passwordHash = await argon2.hash("admin123");
+
   const [account] = await db
     .insert(accounts)
     .values({
-      name: "Default Account",
+      name: "Admin",
       email: "admin@localhost",
+      passwordHash,
+      role: "admin",
     })
     .onConflictDoNothing()
     .returning();
@@ -25,14 +30,14 @@ async function seed() {
     return;
   }
 
-  console.log(`Created account: ${account.name} (${account.id})`);
+  console.log(`Created admin account: ${account.email} (password: admin123)`);
 
   // Create an API key
   const fullKey = generateApiKey();
   const keyHash = await hashApiKey(fullKey);
   const keyPrefix = getKeyPrefix(fullKey);
 
-  const [apiKey] = await db
+  await db
     .insert(apiKeys)
     .values({
       accountId: account.id,
@@ -41,13 +46,11 @@ async function seed() {
       keyHash,
       permissions: { sending: true, domains: true, webhooks: true, audiences: true },
       rateLimit: 100,
-    })
-    .returning();
+    });
 
-  console.log(`Created API key: ${apiKey.name}`);
   console.log(`\n${"=".repeat(60)}`);
-  console.log(`  Your API key (save this, it won't be shown again):`);
-  console.log(`  ${fullKey}`);
+  console.log(`  Admin login: admin@localhost / admin123`);
+  console.log(`  API key: ${fullKey}`);
   console.log(`${"=".repeat(60)}\n`);
 
   await closeDb();

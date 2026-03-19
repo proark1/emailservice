@@ -1,13 +1,20 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
+import fastifyStatic from "@fastify/static";
+import fastifyCookie from "@fastify/cookie";
+import fastifyJwt from "@fastify/jwt";
 import { loadConfig } from "./config/index.js";
 import authPlugin from "./plugins/auth.js";
 import rateLimitPlugin from "./plugins/rate-limit.js";
 import errorHandler from "./plugins/error-handler.js";
 import { registerRoutes } from "./routes/index.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function main() {
   const config = loadConfig();
@@ -19,6 +26,13 @@ async function main() {
     },
     requestIdHeader: "x-request-id",
     genReqId: () => crypto.randomUUID(),
+  });
+
+  // Cookie + JWT for web auth
+  await app.register(fastifyCookie);
+  await app.register(fastifyJwt, {
+    secret: config.ENCRYPTION_KEY,
+    cookie: { cookieName: "token", signed: false },
   });
 
   // OpenAPI docs
@@ -42,23 +56,47 @@ async function main() {
     },
   });
 
-  await app.register(swaggerUi, {
-    routePrefix: "/docs",
-  });
+  await app.register(swaggerUi, { routePrefix: "/docs" });
 
   // Security
-  await app.register(cors, { origin: true });
-  await app.register(helmet, {
-    contentSecurityPolicy: false, // Allow Swagger UI to load
-  });
+  await app.register(cors, { origin: true, credentials: true });
+  await app.register(helmet, { contentSecurityPolicy: false });
 
   // Plugins
   await app.register(errorHandler);
   await app.register(authPlugin);
   await app.register(rateLimitPlugin);
 
-  // Routes
+  // API Routes
   await registerRoutes(app);
+
+  // Serve React frontend (built to web/dist)
+  const frontendPath = path.join(__dirname, "..", "web", "dist");
+  await app.register(fastifyStatic, {
+    root: frontendPath,
+    prefix: "/",
+    decorateReply: false,
+    wildcard: false,
+  });
+
+  // SPA fallback: any non-API route serves index.html
+  app.setNotFoundHandler(async (request, reply) => {
+    if (
+      request.url.startsWith("/v1/") ||
+      request.url.startsWith("/auth/") ||
+      request.url.startsWith("/admin/") ||
+      request.url.startsWith("/dashboard/") ||
+      request.url.startsWith("/health") ||
+      request.url.startsWith("/docs") ||
+      request.url.startsWith("/t/") ||
+      request.url.startsWith("/c/")
+    ) {
+      return reply.status(404).send({
+        error: { type: "not_found", message: "Route not found" },
+      });
+    }
+    return reply.sendFile("index.html", frontendPath);
+  });
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {

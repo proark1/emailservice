@@ -7,6 +7,9 @@ import batchRoutes from "./batch.js";
 import webhookRoutes from "./webhooks.js";
 import audienceRoutes from "./audiences.js";
 import trackingRoutes from "./tracking.js";
+import authRoutes from "./auth.js";
+import adminRoutes from "./admin.js";
+import dashboardRoutes from "./dashboard.js";
 import { addSuppression, listSuppressions, removeSuppression, formatSuppressionResponse } from "../services/suppression.service.js";
 import { getAccountAnalytics } from "../services/analytics.service.js";
 
@@ -30,7 +33,16 @@ export async function registerRoutes(app: FastifyInstance) {
   // Tracking routes (no auth, public)
   await app.register(trackingRoutes);
 
-  // API v1 routes
+  // Web auth routes
+  await app.register(authRoutes, { prefix: "/auth" });
+
+  // Dashboard API (cookie auth)
+  await app.register(dashboardRoutes, { prefix: "/dashboard" });
+
+  // Admin panel API (cookie auth + admin role)
+  await app.register(adminRoutes, { prefix: "/admin" });
+
+  // API v1 routes (API key auth)
   await app.register(apiKeyRoutes, { prefix: "/v1/api-keys" });
   await app.register(domainRoutes, { prefix: "/v1/domains" });
   await app.register(emailRoutes, { prefix: "/v1/emails" });
