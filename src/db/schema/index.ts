@@ -1,0 +1,12 @@
+export { accounts } from "./accounts.js";
+export { apiKeys } from "./api-keys.js";
+export { domains } from "./domains.js";
+export { emails } from "./emails.js";
+export { emailEvents } from "./email-events.js";
+export { emailBatches } from "./email-batches.js";
+export { webhooks } from "./webhooks.js";
+export { webhookDeliveries } from "./webhook-deliveries.js";
+export { audiences } from "./audiences.js";
+export { contacts } from "./contacts.js";
+export { suppressions } from "./suppressions.js";
+export { idempotencyKeys } from "./idempotency-keys.js";

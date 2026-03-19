@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+certs/
+*.pem
+drizzle/meta/
+*.log
+.DS_Store
+coverage/
