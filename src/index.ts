@@ -19,6 +19,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 async function main() {
   const config = loadConfig();
 
+  // Run database migrations before starting server
+  const { runMigrations } = await import("./db/index.js");
+  await runMigrations();
+
   const app = Fastify({
     logger: {
       level: config.LOG_LEVEL,

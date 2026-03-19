@@ -1,103 +1,242 @@
 import { Link } from "react-router-dom";
 
 const features = [
-  { title: "Email API", desc: "Send transactional emails with a simple REST API. HTML, text, attachments, and more.", icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
-  { title: "SMTP Relay", desc: "Native SMTP support on ports 587/465. Connect any email client or server.", icon: "M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" },
-  { title: "Domain Verification", desc: "Automatic SPF, DKIM, and DMARC record generation. One-click DNS verification.", icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" },
-  { title: "Webhooks", desc: "Real-time event notifications for delivery, bounces, opens, clicks, and more.", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
-  { title: "Analytics", desc: "Track open rates, click-through rates, bounce rates, and delivery metrics.", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
-  { title: "Audience Management", desc: "Manage contacts, audiences, and suppression lists. Unsubscribe handling built in.", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" },
+  {
+    title: "Transactional Email API",
+    desc: "Send emails with a single API call. Full support for HTML, plain text, attachments, CC/BCC, and custom headers.",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+      </svg>
+    ),
+  },
+  {
+    title: "SMTP Relay",
+    desc: "Connect any mail client or server. Native SMTP support with STARTTLS on port 587 and implicit TLS on 465.",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Domain Verification",
+    desc: "Auto-generated SPF, DKIM, and DMARC records. One-click verification with real-time DNS polling.",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Webhooks",
+    desc: "Real-time event delivery for sent, delivered, bounced, opened, and clicked. HMAC-signed payloads with retry logic.",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+      </svg>
+    ),
+  },
+  {
+    title: "Delivery Analytics",
+    desc: "Open and click tracking with pixel injection and link rewriting. Bounce rates, complaint tracking, and more.",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Audience Management",
+    desc: "Contact lists, audience segments, and automatic suppression handling for bounces and complaints.",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+      </svg>
+    ),
+  },
+];
+
+const stats = [
+  { value: "10M+", label: "Emails / month" },
+  { value: "<200ms", label: "API latency" },
+  { value: "99.9%", label: "Uptime SLA" },
+  { value: "100%", label: "Open source" },
 ];
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* Nav */}
-      <nav className="border-b border-gray-800">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-[#09090b] text-white antialiased">
+      {/* Navbar */}
+      <nav className="fixed top-0 w-full z-50 border-b border-white/[0.06] bg-[#09090b]/80 backdrop-blur-xl">
+        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+              </svg>
+            </div>
+            <span className="font-semibold text-[15px] tracking-tight">MailStride</span>
+          </Link>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center font-bold text-sm">MS</div>
-            <span className="font-semibold text-lg">MailStride</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <a href="/docs" className="text-sm text-gray-400 hover:text-white transition">API Docs</a>
-            <Link to="/login" className="text-sm text-gray-400 hover:text-white transition">Sign in</Link>
-            <Link to="/register" className="text-sm bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg transition">Get Started</Link>
+            <a href="/docs" className="hidden sm:inline-flex px-3 py-1.5 text-[13px] text-zinc-400 hover:text-white transition-colors">
+              API Docs
+            </a>
+            <Link to="/login" className="px-3 py-1.5 text-[13px] text-zinc-400 hover:text-white transition-colors">
+              Sign in
+            </Link>
+            <Link
+              to="/register"
+              className="px-4 py-1.5 text-[13px] font-medium rounded-lg bg-white text-black hover:bg-zinc-200 transition-colors"
+            >
+              Get Started
+            </Link>
           </div>
         </div>
       </nav>
 
       {/* Hero */}
-      <section className="max-w-6xl mx-auto px-6 pt-24 pb-20 text-center">
-        <div className="inline-block px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-sm font-medium mb-6 border border-indigo-500/20">
-          Self-hosted email infrastructure
-        </div>
-        <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
-          Email for developers
-          <br />
-          <span className="text-indigo-400">that just works</span>
-        </h1>
-        <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-10">
-          The complete email platform. Send transactional emails, manage domains,
-          track delivery — all through a simple API or SMTP. Self-hosted, open source.
-        </p>
-        <div className="flex gap-4 justify-center">
-          <Link to="/register" className="bg-indigo-500 hover:bg-indigo-600 text-white px-8 py-3 rounded-lg text-lg font-medium transition">
-            Start Sending
-          </Link>
-          <a href="/docs" className="border border-gray-700 hover:border-gray-500 text-gray-300 px-8 py-3 rounded-lg text-lg font-medium transition">
-            View API Docs
-          </a>
+      <section className="relative pt-32 pb-20 overflow-hidden">
+        {/* Gradient orbs */}
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-violet-500/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute top-40 left-1/4 w-[400px] h-[400px] bg-indigo-500/8 rounded-full blur-[100px] pointer-events-none" />
+
+        <div className="relative max-w-4xl mx-auto px-6 text-center">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] text-[13px] text-zinc-400 mb-8">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Self-hosted &middot; Open source &middot; Full control
+          </div>
+
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight leading-[1.08] mb-6">
+            The email platform
+            <br />
+            <span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+              built for developers
+            </span>
+          </h1>
+
+          <p className="text-lg sm:text-xl text-zinc-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+            Send transactional emails, verify domains, track delivery — all through
+            a powerful API or SMTP relay. Self-hosted, no vendor lock-in.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link
+              to="/register"
+              className="inline-flex items-center justify-center px-6 py-3 text-[15px] font-medium rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white shadow-lg shadow-violet-500/20 transition-all hover:shadow-violet-500/30"
+            >
+              Start for free
+              <svg className="w-4 h-4 ml-2" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
+            </Link>
+            <a
+              href="/docs"
+              className="inline-flex items-center justify-center px-6 py-3 text-[15px] font-medium rounded-xl border border-white/[0.08] text-zinc-300 hover:bg-white/[0.04] hover:border-white/[0.12] transition-all"
+            >
+              View documentation
+            </a>
+          </div>
         </div>
       </section>
 
-      {/* Code example */}
-      <section className="max-w-4xl mx-auto px-6 pb-20">
-        <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800">
-            <div className="w-3 h-3 rounded-full bg-red-500/50"></div>
-            <div className="w-3 h-3 rounded-full bg-yellow-500/50"></div>
-            <div className="w-3 h-3 rounded-full bg-green-500/50"></div>
-            <span className="text-xs text-gray-500 ml-2">Send your first email</span>
+      {/* Code block */}
+      <section className="max-w-3xl mx-auto px-6 pb-24">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden shadow-2xl shadow-black/40">
+          <div className="flex items-center gap-2 px-5 py-3.5 border-b border-white/[0.06] bg-white/[0.02]">
+            <div className="flex gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-white/[0.06]" />
+              <div className="w-2.5 h-2.5 rounded-full bg-white/[0.06]" />
+              <div className="w-2.5 h-2.5 rounded-full bg-white/[0.06]" />
+            </div>
+            <span className="text-[11px] text-zinc-500 ml-2 font-mono">Send your first email</span>
           </div>
-          <pre className="p-6 text-sm overflow-x-auto"><code className="text-gray-300">{`curl -X POST https://your-domain.com/v1/emails \\
-  -H "Authorization: Bearer es_your_api_key" \\
-  -H "Content-Type: application/json" \\
-  -d '{
+          <pre className="p-5 text-[13px] leading-relaxed overflow-x-auto"><code>{`<span style="color:#a78bfa">curl</span> <span style="color:#67e8f9">-X POST</span> https://api.yourdomain.com/v1/emails \\
+  <span style="color:#67e8f9">-H</span> <span style="color:#fbbf24">"Authorization: Bearer es_your_api_key"</span> \\
+  <span style="color:#67e8f9">-H</span> <span style="color:#fbbf24">"Content-Type: application/json"</span> \\
+  <span style="color:#67e8f9">-d</span> <span style="color:#fbbf24">'{
     "from": "hello@yourdomain.com",
     "to": ["user@example.com"],
-    "subject": "Welcome!",
-    "html": "<h1>Hello World</h1>"
-  }'`}</code></pre>
+    "subject": "Welcome aboard!",
+    "html": "&lt;h1&gt;Welcome!&lt;/h1&gt;&lt;p&gt;Thanks for joining.&lt;/p&gt;"
+  }'</span>`}</code></pre>
+        </div>
+      </section>
+
+      {/* Stats */}
+      <section className="border-y border-white/[0.06] bg-white/[0.01] py-14">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {stats.map((s) => (
+              <div key={s.label} className="text-center">
+                <div className="text-3xl sm:text-4xl font-bold bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent">{s.value}</div>
+                <div className="text-sm text-zinc-500 mt-1">{s.label}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* Features */}
-      <section className="max-w-6xl mx-auto px-6 pb-24">
-        <h2 className="text-3xl font-bold text-center mb-4">Everything you need</h2>
-        <p className="text-gray-400 text-center mb-12 max-w-xl mx-auto">A complete email infrastructure platform with all the tools to send, receive, and manage email at scale.</p>
-        <div className="grid md:grid-cols-3 gap-6">
+      <section className="max-w-6xl mx-auto px-6 py-24">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Everything you need to send email</h2>
+          <p className="text-zinc-400 max-w-xl mx-auto text-lg">
+            A complete, production-ready email infrastructure you own and control.
+          </p>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {features.map((f) => (
-            <div key={f.title} className="bg-gray-900/50 border border-gray-800 rounded-xl p-6 hover:border-gray-700 transition">
-              <div className="w-10 h-10 bg-indigo-500/10 rounded-lg flex items-center justify-center mb-4">
-                <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={f.icon} />
-                </svg>
+            <div
+              key={f.title}
+              className="group relative p-6 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.1] transition-all duration-300"
+            >
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/10 to-indigo-500/10 border border-violet-500/10 flex items-center justify-center text-violet-400 mb-4 group-hover:border-violet-500/20 transition-colors">
+                {f.icon}
               </div>
-              <h3 className="font-semibold text-lg mb-2">{f.title}</h3>
-              <p className="text-sm text-gray-400">{f.desc}</p>
+              <h3 className="font-semibold text-[15px] mb-2">{f.title}</h3>
+              <p className="text-sm text-zinc-400 leading-relaxed">{f.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
+      {/* CTA */}
+      <section className="max-w-6xl mx-auto px-6 pb-24">
+        <div className="relative rounded-3xl border border-white/[0.06] bg-gradient-to-br from-violet-500/[0.07] to-indigo-500/[0.04] p-12 sm:p-16 text-center overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent pointer-events-none" />
+          <div className="relative">
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Ready to start sending?</h2>
+            <p className="text-zinc-400 max-w-md mx-auto mb-8 text-lg">
+              Create your account in seconds. No credit card required.
+            </p>
+            <Link
+              to="/register"
+              className="inline-flex items-center px-8 py-3.5 text-[15px] font-medium rounded-xl bg-white text-black hover:bg-zinc-200 transition-colors shadow-lg"
+            >
+              Create free account
+              <svg className="w-4 h-4 ml-2" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer className="border-t border-gray-800 py-8">
-        <div className="max-w-6xl mx-auto px-6 flex items-center justify-between text-sm text-gray-500">
-          <span>MailStride — Self-hosted email service</span>
+      <footer className="border-t border-white/[0.06] py-8">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[13px] text-zinc-500">
+          <div className="flex items-center gap-2.5">
+            <div className="w-5 h-5 rounded bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
+              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+              </svg>
+            </div>
+            MailStride
+          </div>
           <div className="flex gap-6">
-            <a href="/docs" className="hover:text-gray-300 transition">API Docs</a>
-            <a href="/health" className="hover:text-gray-300 transition">Status</a>
+            <a href="/docs" className="hover:text-zinc-300 transition-colors">API Docs</a>
+            <a href="/health" className="hover:text-zinc-300 transition-colors">Status</a>
           </div>
         </div>
       </footer>

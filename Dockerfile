@@ -27,6 +27,7 @@ FROM node:20-alpine AS production
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/drizzle ./drizzle
 COPY --from=frontend /app/web/dist ./web/dist
 COPY package.json ./
 USER node
