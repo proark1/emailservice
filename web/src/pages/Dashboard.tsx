@@ -3,9 +3,11 @@ import { Link, Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { api, post, del } from "../lib/api";
 import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Textarea, Modal, CopyButton, Dot } from "../components/ui";
+import { patch } from "../lib/api";
 
 const navItems = [
   { to: "/dashboard", label: "Overview", end: true, icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" /></svg> },
+  { to: "/dashboard/inbox", label: "Inbox", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z" /></svg> },
   { to: "/dashboard/emails", label: "Emails", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg> },
   { to: "/dashboard/domains", label: "Domains", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3" /></svg> },
   { to: "/dashboard/api-keys", label: "API Keys", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg> },
@@ -460,6 +462,197 @@ function WebhooksPage() {
   );
 }
 
+// --- INBOX with email viewer + reply ---
+function InboxPage() {
+  const [items, setItems] = useState<any[]>([]);
+  const [selected, setSelected] = useState<any>(null);
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [replyForm, setReplyForm] = useState({ from: "", body: "" });
+  const [replying, setReplying] = useState(false);
+  const [error, setError] = useState("");
+  const [domainsList, setDomainsList] = useState<any[]>([]);
+
+  const load = () => {
+    api("/dashboard/inbox").then((r) => setItems(r.data)).catch(() => {});
+    api("/dashboard/domains").then((r) => setDomainsList(r.data)).catch(() => {});
+  };
+  useEffect(() => { load(); }, []);
+
+  const verifiedDomains = domainsList.filter((d: any) => d.status === "verified");
+
+  const openEmail = async (email: any) => {
+    try {
+      const res = await api(`/dashboard/inbox/${email.id}`);
+      setSelected(res.data);
+      setItems((prev) => prev.map((e) => e.id === email.id ? { ...e, isRead: true } : e));
+    } catch { setSelected(email); }
+  };
+
+  const toggleStar = async (id: string, current: boolean) => {
+    await patch(`/dashboard/inbox/${id}`, { isStarred: !current });
+    setItems((prev) => prev.map((e) => e.id === id ? { ...e, isStarred: !current } : e));
+    if (selected?.id === id) setSelected({ ...selected, isStarred: !current });
+  };
+
+  const archive = async (id: string) => {
+    await patch(`/dashboard/inbox/${id}`, { isArchived: true });
+    setItems((prev) => prev.filter((e) => e.id !== id));
+    if (selected?.id === id) setSelected(null);
+  };
+
+  const deleteEmail = async (id: string) => {
+    await del(`/dashboard/inbox/${id}`);
+    setItems((prev) => prev.filter((e) => e.id !== id));
+    if (selected?.id === id) setSelected(null);
+  };
+
+  const startReply = () => {
+    if (!selected) return;
+    const toDomain = selected.toAddress?.split("@")[1] || "";
+    const fromDomain = verifiedDomains.find((d: any) => d.name === toDomain);
+    setReplyForm({ from: fromDomain ? selected.toAddress : "", body: "" });
+    setReplyOpen(true);
+    setError("");
+  };
+
+  const sendReply = async () => {
+    if (!selected) return;
+    setError(""); setReplying(true);
+    try {
+      await post("/dashboard/emails", {
+        from: replyForm.from,
+        to: selected.fromAddress,
+        subject: `Re: ${selected.subject}`,
+        html: replyForm.body,
+      });
+      setReplyOpen(false);
+      setReplyForm({ from: "", body: "" });
+    } catch (e: any) { setError(e.message); }
+    finally { setReplying(false); }
+  };
+
+  const unread = items.filter((e) => !e.isRead && !e.isArchived);
+  const read = items.filter((e) => e.isRead && !e.isArchived);
+  const activeItems = items.filter((e) => !e.isArchived);
+
+  const timeAgo = (d: string) => {
+    const diff = Date.now() - new Date(d).getTime();
+    if (diff < 60_000) return "now";
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`;
+    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h`;
+    return new Date(d).toLocaleDateString();
+  };
+
+  return (
+    <div className="flex gap-0 -m-8 h-[calc(100vh)] overflow-hidden">
+      {/* Email list */}
+      <div className="w-[360px] shrink-0 border-r border-white/[0.06] flex flex-col h-full">
+        <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
+          <h2 className="text-[15px] font-semibold text-white">Inbox</h2>
+          <span className="text-[12px] text-zinc-500">{unread.length} unread</span>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {activeItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center px-6">
+              <svg className="w-10 h-10 text-zinc-800 mb-3" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z" /></svg>
+              <p className="text-[13px] text-zinc-500">No emails yet</p>
+              <p className="text-[12px] text-zinc-700 mt-1">Emails sent to your verified domains will appear here</p>
+            </div>
+          ) : activeItems.map((email) => (
+            <button
+              key={email.id}
+              onClick={() => openEmail(email)}
+              className={`w-full text-left px-4 py-3 border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors ${selected?.id === email.id ? "bg-white/[0.05]" : ""} ${!email.isRead ? "bg-white/[0.02]" : ""}`}
+            >
+              <div className="flex items-center justify-between mb-0.5">
+                <span className={`text-[13px] truncate ${!email.isRead ? "font-semibold text-white" : "text-zinc-300"}`}>
+                  {email.fromName || email.fromAddress}
+                </span>
+                <span className="text-[11px] text-zinc-600 shrink-0 ml-2">{timeAgo(email.createdAt)}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {!email.isRead && <div className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0" />}
+                {email.isStarred && <svg className="w-3 h-3 text-amber-400 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>}
+                <p className={`text-[12px] truncate ${!email.isRead ? "text-zinc-300" : "text-zinc-500"}`}>{email.subject}</p>
+              </div>
+              <p className="text-[11px] text-zinc-700 truncate mt-0.5">{email.toAddress}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Email viewer */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {!selected ? (
+          <div className="flex-1 flex items-center justify-center text-zinc-700">
+            <p className="text-[14px]">Select an email to read</p>
+          </div>
+        ) : (
+          <>
+            {/* Email header */}
+            <div className="px-6 py-4 border-b border-white/[0.06] shrink-0">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-[16px] font-semibold text-white truncate pr-4">{selected.subject}</h2>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => toggleStar(selected.id, selected.isStarred)} className={`p-1.5 rounded-lg hover:bg-white/[0.06] ${selected.isStarred ? "text-amber-400" : "text-zinc-600"}`}>
+                    <svg className="w-4 h-4" fill={selected.isStarred ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>
+                  </button>
+                  <button onClick={() => archive(selected.id)} className="p-1.5 rounded-lg text-zinc-600 hover:text-white hover:bg-white/[0.06]" title="Archive">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" /></svg>
+                  </button>
+                  <button onClick={() => deleteEmail(selected.id)} className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/[0.06]" title="Delete">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-[13px]">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-white/[0.06] flex items-center justify-center text-[11px] font-semibold text-violet-300">
+                  {(selected.fromName || selected.fromAddress)?.charAt(0)?.toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-white font-medium">{selected.fromName || selected.fromAddress}</p>
+                  <p className="text-zinc-500 text-[12px]">{selected.fromAddress} &rarr; {selected.toAddress}</p>
+                </div>
+                <span className="text-[12px] text-zinc-600 ml-auto">{new Date(selected.createdAt).toLocaleString()}</span>
+              </div>
+            </div>
+
+            {/* Email body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              {selected.htmlBody ? (
+                <div className="prose prose-invert prose-sm max-w-none [&_*]:text-zinc-300" dangerouslySetInnerHTML={{ __html: selected.htmlBody }} />
+              ) : (
+                <pre className="text-[13px] text-zinc-300 whitespace-pre-wrap font-sans leading-relaxed">{selected.textBody || "(empty)"}</pre>
+              )}
+            </div>
+
+            {/* Reply bar */}
+            <div className="shrink-0 px-6 py-3 border-t border-white/[0.06]">
+              {!replyOpen ? (
+                <Button onClick={startReply} disabled={verifiedDomains.length === 0}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>
+                  Reply
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  {error && <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/10 text-red-400 text-[13px]">{error}</div>}
+                  <Input label="From" placeholder="you@yourdomain.com" value={replyForm.from} onChange={(e) => setReplyForm({ ...replyForm, from: (e.target as HTMLInputElement).value })} />
+                  {verifiedDomains.length > 0 && <p className="text-[11px] text-zinc-600">You can send as any address on: {verifiedDomains.map((d: any) => d.name).join(", ")}</p>}
+                  <Textarea label="Reply" placeholder="Type your reply..." rows={4} value={replyForm.body} onChange={(e) => setReplyForm({ ...replyForm, body: (e.target as HTMLTextAreaElement).value })} />
+                  <div className="flex gap-2">
+                    <Button onClick={sendReply} disabled={replying || !replyForm.from || !replyForm.body}>{replying ? "Sending..." : "Send Reply"}</Button>
+                    <Button variant="secondary" onClick={() => setReplyOpen(false)}>Cancel</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // --- API DOCS page ---
 function ApiDocsPage() {
   const { user } = useAuth();
@@ -546,6 +739,7 @@ export default function Dashboard() {
           <Route path="domains" element={<DomainsPage />} />
           <Route path="api-keys" element={<ApiKeysPage />} />
           <Route path="webhooks" element={<WebhooksPage />} />
+          <Route path="inbox" element={<InboxPage />} />
           <Route path="api-docs" element={<ApiDocsPage />} />
         </Routes>
       </main>

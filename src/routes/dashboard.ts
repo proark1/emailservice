@@ -62,6 +62,45 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     return reply.status(201).send({ data: result.response });
   });
 
+  // --- Inbox (inbound emails) ---
+  app.get("/inbox", async (request) => {
+    const db = getDb();
+    const { inboundEmails } = await import("../db/schema/index.js");
+    const list = await db.select().from(inboundEmails)
+      .where(eq(inboundEmails.accountId, request.account.id))
+      .orderBy(desc(inboundEmails.createdAt))
+      .limit(100);
+    return { data: list };
+  });
+
+  app.get<{ Params: { id: string } }>("/inbox/:id", async (request) => {
+    const db = getDb();
+    const { inboundEmails } = await import("../db/schema/index.js");
+    const [email] = await db.select().from(inboundEmails)
+      .where(and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id)));
+    if (!email) throw new ForbiddenError("Email not found");
+    // Mark as read
+    if (!email.isRead) {
+      await db.update(inboundEmails).set({ isRead: true }).where(eq(inboundEmails.id, email.id));
+    }
+    return { data: { ...email, isRead: true } };
+  });
+
+  app.patch<{ Params: { id: string } }>("/inbox/:id", async (request) => {
+    const db = getDb();
+    const { inboundEmails } = await import("../db/schema/index.js");
+    const input = z.object({ isRead: z.boolean().optional(), isStarred: z.boolean().optional(), isArchived: z.boolean().optional() }).parse(request.body);
+    const [updated] = await db.update(inboundEmails).set(input).where(and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id))).returning();
+    return { data: updated };
+  });
+
+  app.delete<{ Params: { id: string } }>("/inbox/:id", async (request) => {
+    const db = getDb();
+    const { inboundEmails } = await import("../db/schema/index.js");
+    await db.delete(inboundEmails).where(and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id)));
+    return { data: { success: true } };
+  });
+
   // --- Domains ---
   app.get("/domains", async (request) => {
     const list = await domainService.listDomains(request.account.id);

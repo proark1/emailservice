@@ -8,6 +8,13 @@
       "when": 1773924101029,
       "tag": "0000_odd_luckman",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1773927551497,
+      "tag": "0001_lethal_lady_mastermind",
+      "breakpoints": true
     }
   ]
 }

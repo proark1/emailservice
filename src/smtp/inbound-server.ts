@@ -2,8 +2,8 @@ import { SMTPServer } from "smtp-server";
 import { simpleParser } from "mailparser";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/index.js";
-import { domains } from "../db/schema/index.js";
-import { getInboundEmailQueue } from "../queues/index.js";
+import { domains, inboundEmails } from "../db/schema/index.js";
+import { isRedisConfigured, getInboundEmailQueue } from "../queues/index.js";
 
 export function createInboundServer(): SMTPServer {
   const server = new SMTPServer({
@@ -19,7 +19,7 @@ export function createInboundServer(): SMTPServer {
         .from(domains)
         .where(eq(domains.name, recipientDomain))
         .then((results) => {
-          if (results.length > 0 && results[0].mxVerified) {
+          if (results.length > 0) {
             callback();
           } else {
             callback(new Error("Recipient domain not found"));
@@ -39,7 +39,7 @@ export function createInboundServer(): SMTPServer {
           const toAddress = session.envelope.rcptTo[0]?.address;
           const recipientDomain = toAddress?.split("@")[1];
 
-          if (!recipientDomain) {
+          if (!recipientDomain || !toAddress) {
             callback(new Error("No recipient"));
             return;
           }
@@ -55,15 +55,50 @@ export function createInboundServer(): SMTPServer {
             return;
           }
 
-          // Enqueue for processing
-          await getInboundEmailQueue().add("inbound", {
+          const mailFrom = session.envelope.mailFrom;
+          const fromAddress = parsed.from?.value?.[0]?.address || (mailFrom && typeof mailFrom === "object" ? mailFrom.address : "") || "unknown";
+          const fromName = parsed.from?.value?.[0]?.name || undefined;
+          const cc = parsed.cc
+            ? (Array.isArray(parsed.cc) ? parsed.cc : [parsed.cc]).flatMap((a) => a.value.map((v) => v.address)).filter(Boolean) as string[]
+            : undefined;
+
+          const emailData = {
             accountId: domain.accountId,
-            from: parsed.from?.text || "",
+            domainId: domain.id,
+            from: fromAddress,
+            fromName,
             to: toAddress,
-            subject: parsed.subject || "",
+            cc,
+            subject: parsed.subject || "(no subject)",
             text: parsed.text || "",
-            html: parsed.html || "",
-            headers: Object.fromEntries(parsed.headers),
+            html: typeof parsed.html === "string" ? parsed.html : "",
+            messageId: parsed.messageId,
+            inReplyTo: parsed.inReplyTo,
+            headers: {} as Record<string, unknown>,
+          };
+
+          // Try queue first, fall back to direct DB insert
+          if (isRedisConfigured()) {
+            try {
+              await getInboundEmailQueue().add("inbound", emailData);
+              callback();
+              return;
+            } catch {}
+          }
+
+          // Direct insert (no Redis)
+          await db.insert(inboundEmails).values({
+            accountId: emailData.accountId,
+            domainId: emailData.domainId,
+            fromAddress: emailData.from,
+            fromName: emailData.fromName,
+            toAddress: emailData.to,
+            ccAddresses: emailData.cc || null,
+            subject: emailData.subject,
+            textBody: emailData.text || null,
+            htmlBody: emailData.html || null,
+            messageId: emailData.messageId,
+            inReplyTo: emailData.inReplyTo,
           });
 
           callback();
