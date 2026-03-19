@@ -124,6 +124,33 @@ async function main() {
     app.log.info("Running without Redis — emails will be sent directly (no queue)");
   }
 
+  // Start SMTP servers in-process (inbound receiving + relay for users)
+  try {
+    const { createInboundServer } = await import("./smtp/inbound-server.js");
+    const inboundServer = createInboundServer();
+    inboundServer.listen(config.SMTP_INBOUND_PORT, "0.0.0.0", () => {
+      app.log.info(`SMTP inbound server listening on port ${config.SMTP_INBOUND_PORT}`);
+    });
+    inboundServer.on("error", (err: Error) => {
+      app.log.error({ err }, "SMTP inbound server error");
+    });
+  } catch (err) {
+    app.log.warn({ err }, "Failed to start SMTP inbound server");
+  }
+
+  try {
+    const { createRelayServer } = await import("./smtp/relay-server.js");
+    const relayServer = createRelayServer();
+    relayServer.listen(config.SMTP_RELAY_PORT, "0.0.0.0", () => {
+      app.log.info(`SMTP relay server listening on port ${config.SMTP_RELAY_PORT}`);
+    });
+    relayServer.on("error", (err: Error) => {
+      app.log.error({ err }, "SMTP relay server error");
+    });
+  } catch (err) {
+    app.log.warn({ err }, "Failed to start SMTP relay server");
+  }
+
   // Start
   await app.listen({ port: config.API_PORT, host: config.API_HOST });
   app.log.info(`Email Service API running on http://${config.API_HOST}:${config.API_PORT}`);

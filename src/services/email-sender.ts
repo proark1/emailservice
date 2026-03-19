@@ -8,6 +8,8 @@ import { getConfig } from "../config/index.js";
 
 function createTransport() {
   const config = getConfig();
+
+  // Development: use local SMTP dev server (Mailhog etc.)
   if (config.NODE_ENV === "development") {
     return nodemailer.createTransport({
       host: config.SMTP_DEV_HOST,
@@ -16,6 +18,22 @@ function createTransport() {
       tls: { rejectUnauthorized: false },
     });
   }
+
+  // Production with a configured SMTP relay (recommended for cloud deployments
+  // where outbound port 25 is blocked — set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS)
+  if (config.SMTP_HOST) {
+    return nodemailer.createTransport({
+      host: config.SMTP_HOST,
+      port: config.SMTP_PORT || 587,
+      secure: config.SMTP_SECURE === "true",
+      auth: config.SMTP_USER ? { user: config.SMTP_USER, pass: config.SMTP_PASS } : undefined,
+      tls: { rejectUnauthorized: false },
+    });
+  }
+
+  // Production direct send — connects directly to recipient's MX on port 25.
+  // Requires outbound port 25 to be open (not available on most cloud providers).
+  // Set SMTP_HOST to a relay instead if you see connection refused errors.
   return nodemailer.createTransport({
     direct: true,
     name: new URL(config.BASE_URL).hostname,

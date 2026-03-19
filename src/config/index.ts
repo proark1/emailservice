@@ -20,6 +20,12 @@ const envSchema = z.object({
   SMTP_INBOUND_PORT: z.coerce.number().default(2525),
   SMTP_DEV_HOST: z.string().default("localhost"),
   SMTP_DEV_PORT: z.coerce.number().default(1025),
+  // Production SMTP relay (optional — if set, used instead of direct send)
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_SECURE: z.string().optional(), // "true" for port 465
   ENCRYPTION_KEY: z.string().min(1).default(DEFAULT_ENCRYPTION_KEY),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),

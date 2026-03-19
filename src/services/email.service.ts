@@ -149,19 +149,14 @@ export async function getEmail(accountId: string, emailId: string) {
   return email;
 }
 
-export async function listEmails(accountId: string, options: { cursor?: string; limit: number; status?: string }) {
+export async function listEmails(accountId: string, options: { limit: number; status?: string }) {
   const db = getDb();
-  let query = db.select().from(emails).where(eq(emails.accountId, accountId));
-
-  // For simplicity, use offset-based cursor via ID comparison
-  const result = await db
+  return db
     .select()
     .from(emails)
     .where(eq(emails.accountId, accountId))
     .orderBy(desc(emails.createdAt))
-    .limit(options.limit + 1);
-
-  return result;
+    .limit(options.limit);
 }
 
 export async function cancelScheduledEmail(accountId: string, emailId: string) {

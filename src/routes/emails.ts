@@ -24,7 +24,7 @@ export default async function emailRoutes(app: FastifyInstance) {
   // GET /v1/emails
   app.get("/", async (request) => {
     const { cursor, limit } = paginationSchema.parse(request.query);
-    const emailList = await emailService.listEmails(request.account.id, { cursor, limit });
+    const emailList = await emailService.listEmails(request.account.id, { limit });
     return buildPaginatedResponse(
       emailList.map(emailService.formatEmailResponse),
       limit,
