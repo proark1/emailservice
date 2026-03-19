@@ -182,28 +182,45 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       cloudflare_zone_id: z.string().optional(),
     }).parse(request.body);
 
-    // Save provider credentials (encrypted)
-    const { encryptPrivateKey } = await import("../lib/crypto.js");
+    const { encryptPrivateKey, decryptPrivateKey } = await import("../lib/crypto.js");
     const config = getConfig();
     const db = getDb();
     const { domains: domainsTable } = await import("../db/schema/index.js");
     const encKey = (k: string) => encryptPrivateKey(k, config.ENCRYPTION_KEY);
+    const decKey = (k: string) => decryptPrivateKey(k, config.ENCRYPTION_KEY);
 
-    await db.update(domainsTable).set({
-      dnsProvider: input.provider,
-      dnsProviderKey: input.provider === "godaddy" && input.godaddy_key ? encKey(input.godaddy_key) : input.provider === "cloudflare" && input.cloudflare_token ? encKey(input.cloudflare_token) : null,
-      dnsProviderSecret: input.provider === "godaddy" && input.godaddy_secret ? encKey(input.godaddy_secret) : null,
-      dnsProviderZoneId: input.cloudflare_zone_id || null,
-      updatedAt: new Date(),
-    }).where(eq(domainsTable.id, domain.id));
+    // Resolve credentials: prefer newly submitted, fall back to saved (decrypted)
+    let apiGodaddyKey = input.godaddy_key || "";
+    let apiGodaddySecret = input.godaddy_secret || "";
+    let apiCloudflareToken = input.cloudflare_token || "";
+    let apiCloudflareZoneId = input.cloudflare_zone_id || "";
+
+    if (input.provider === "godaddy") {
+      if (!apiGodaddyKey && domain.dnsProviderKey) apiGodaddyKey = decKey(domain.dnsProviderKey);
+      if (!apiGodaddySecret && domain.dnsProviderSecret) apiGodaddySecret = decKey(domain.dnsProviderSecret);
+    } else if (input.provider === "cloudflare") {
+      if (!apiCloudflareToken && domain.dnsProviderKey) apiCloudflareToken = decKey(domain.dnsProviderKey);
+      if (!apiCloudflareZoneId && domain.dnsProviderZoneId) apiCloudflareZoneId = domain.dnsProviderZoneId;
+    }
+
+    // Only save new credentials to DB — never overwrite with empty values
+    const updateFields: Record<string, any> = { dnsProvider: input.provider, updatedAt: new Date() };
+    if (input.provider === "godaddy") {
+      if (input.godaddy_key) updateFields.dnsProviderKey = encKey(input.godaddy_key);
+      if (input.godaddy_secret) updateFields.dnsProviderSecret = encKey(input.godaddy_secret);
+    } else if (input.provider === "cloudflare") {
+      if (input.cloudflare_token) updateFields.dnsProviderKey = encKey(input.cloudflare_token);
+      if (input.cloudflare_zone_id) updateFields.dnsProviderZoneId = input.cloudflare_zone_id;
+    }
+    await db.update(domainsTable).set(updateFields).where(eq(domainsTable.id, domain.id));
 
     const { setupDnsRecords } = await import("../services/dns-providers.service.js");
     const result = await setupDnsRecords(domain.name, formatted.records, {
       provider: input.provider,
-      godaddyKey: input.godaddy_key,
-      godaddySecret: input.godaddy_secret,
-      cloudflareToken: input.cloudflare_token,
-      cloudflareZoneId: input.cloudflare_zone_id,
+      godaddyKey: apiGodaddyKey,
+      godaddySecret: apiGodaddySecret,
+      cloudflareToken: apiCloudflareToken,
+      cloudflareZoneId: apiCloudflareZoneId,
     });
 
     // Trigger verification after auto-setup

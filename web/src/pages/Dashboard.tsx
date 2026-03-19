@@ -386,9 +386,9 @@ function DomainsPage() {
             <tr key={d.id} className="hover:bg-white/[0.02]">
               <td className="px-4 py-3 text-white text-[13px] font-medium font-mono cursor-pointer hover:text-violet-400" onClick={() => setDetail(d)}>{d.name}</td>
               <td className="px-4 py-3"><Badge variant={statusVariant(d.status)}>{d.status}</Badge></td>
-              <td className="px-4 py-3"><Dot ok={d.records?.find((r:any)=>r.purpose==="SPF")?.verified} /></td>
-              <td className="px-4 py-3"><Dot ok={d.records?.find((r:any)=>r.purpose==="DKIM")?.verified} /></td>
-              <td className="px-4 py-3"><Dot ok={d.records?.find((r:any)=>r.purpose==="DMARC")?.verified} /></td>
+              <td className="px-4 py-3"><Dot ok={d.records?.find((r:any)=>r.purpose?.startsWith("SPF"))?.verified} /></td>
+              <td className="px-4 py-3"><Dot ok={d.records?.find((r:any)=>r.purpose?.startsWith("DKIM"))?.verified} /></td>
+              <td className="px-4 py-3"><Dot ok={d.records?.find((r:any)=>r.purpose?.startsWith("DMARC"))?.verified} /></td>
               <td className="px-4 py-3">
                 <div className="flex gap-1">
                   <button onClick={() => openSetup(d)} className="px-2 py-1 text-[12px] text-violet-400 hover:bg-violet-500/10 rounded-lg">Setup</button>
