@@ -3,17 +3,14 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
 FROM base AS deps
+RUN apk add --no-cache python3 make g++
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
-
-FROM base AS development
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install
-COPY tsconfig.json drizzle.config.ts ./
+COPY .npmrc* ./
+RUN pnpm config set approve-builds-by-default true && pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
-RUN pnpm tsup
+RUN pnpm build
 
 FROM node:20-alpine AS production
 WORKDIR /app
