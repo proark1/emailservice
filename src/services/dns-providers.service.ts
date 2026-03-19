@@ -2,13 +2,10 @@ export type DnsProvider = "godaddy" | "cloudflare" | "namecheap" | "manual";
 
 export interface DnsProviderCredentials {
   provider: DnsProvider;
-  // GoDaddy
   godaddyKey?: string;
   godaddySecret?: string;
-  // Cloudflare
   cloudflareToken?: string;
   cloudflareZoneId?: string;
-  // Namecheap
   namecheapApiKey?: string;
   namecheapUsername?: string;
 }
@@ -26,64 +23,85 @@ async function addGoDaddyRecord(
   domain: string,
   record: DnsRecord,
   credentials: { key: string; secret: string },
-) {
-  // Extract the record name relative to the domain
-  const recordName = record.name === domain ? "@" : record.name.replace(`.${domain}`, "");
+): Promise<string> {
+  // GoDaddy wants the record name relative to the domain root
+  // e.g., for "es1._domainkey.onepizza.io" on domain "onepizza.io" → "es1._domainkey"
+  // e.g., for "_dmarc.onepizza.io" on domain "onepizza.io" → "_dmarc"
+  // e.g., for "onepizza.io" on domain "onepizza.io" → "@"
+  let recordName = "@";
+  if (record.name !== domain) {
+    // Strip the domain suffix
+    const suffix = `.${domain}`;
+    if (record.name.endsWith(suffix)) {
+      recordName = record.name.slice(0, -suffix.length);
+    } else {
+      recordName = record.name;
+    }
+  }
 
   const body = record.type === "MX"
     ? [{ data: record.value, priority: record.priority || 10, ttl: record.ttl || 600 }]
     : [{ data: record.value, ttl: record.ttl || 600 }];
 
-  const res = await fetch(
-    `https://api.godaddy.com/v1/domains/${domain}/records/${record.type}/${recordName}`,
-    {
-      method: "PUT",
-      headers: {
-        Authorization: `sso-key ${credentials.key}:${credentials.secret}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
+  // GoDaddy PUT /v1/domains/{domain}/records/{type}/{name} replaces all records of that type+name
+  const url = `https://api.godaddy.com/v1/domains/${domain}/records/${record.type}/${recordName}`;
+
+  console.log(`[GoDaddy] PUT ${url}`);
+  console.log(`[GoDaddy] Body: ${JSON.stringify(body)}`);
+
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `sso-key ${credentials.key}:${credentials.secret}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify(body),
+  });
+
+  const responseText = await res.text();
+  console.log(`[GoDaddy] Response ${res.status}: ${responseText}`);
 
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`GoDaddy API error (${res.status}): ${err}`);
+    throw new Error(`GoDaddy API error (${res.status}): ${responseText}`);
   }
+
+  return `OK (${res.status}) recordName=${recordName}`;
 }
 
 // --- Cloudflare ---
 async function addCloudflareRecord(
   record: DnsRecord,
   credentials: { token: string; zoneId: string },
-) {
+): Promise<string> {
   const body: any = {
     type: record.type,
     name: record.name,
     content: record.value,
-    ttl: record.ttl || 3600,
+    ttl: 3600,
   };
 
   if (record.type === "MX") {
     body.priority = record.priority || 10;
   }
 
-  const res = await fetch(
-    `https://api.cloudflare.com/client/v4/zones/${credentials.zoneId}/dns_records`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${credentials.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
+  const url = `https://api.cloudflare.com/client/v4/zones/${credentials.zoneId}/dns_records`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${credentials.token}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify(body),
+  });
+
+  const responseBody = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(`Cloudflare API error (${res.status}): ${JSON.stringify(err)}`);
+    throw new Error(`Cloudflare API error (${res.status}): ${JSON.stringify(responseBody)}`);
   }
+
+  return `OK (${res.status})`;
 }
 
 // --- Main function ---
@@ -91,8 +109,10 @@ export async function setupDnsRecords(
   domain: string,
   records: Array<{ type: string; name: string; value: string; purpose: string }>,
   credentials: DnsProviderCredentials,
-): Promise<{ success: boolean; results: Array<{ purpose: string; success: boolean; error?: string }> }> {
-  const results: Array<{ purpose: string; success: boolean; error?: string }> = [];
+): Promise<{ success: boolean; results: Array<{ purpose: string; success: boolean; error?: string; detail?: string }> }> {
+  const results: Array<{ purpose: string; success: boolean; error?: string; detail?: string }> = [];
+
+  console.log(`[DNS Setup] Setting up ${records.length} records for ${domain} via ${credentials.provider}`);
 
   for (const record of records) {
     const dnsRecord: DnsRecord = {
@@ -103,13 +123,16 @@ export async function setupDnsRecords(
       ttl: 600,
     };
 
+    console.log(`[DNS Setup] Record: ${record.purpose} type=${dnsRecord.type} name=${dnsRecord.name} value=${dnsRecord.value.substring(0, 60)}...`);
+
     try {
+      let detail = "";
       switch (credentials.provider) {
         case "godaddy":
           if (!credentials.godaddyKey || !credentials.godaddySecret) {
             throw new Error("GoDaddy API key and secret required");
           }
-          await addGoDaddyRecord(domain, dnsRecord, {
+          detail = await addGoDaddyRecord(domain, dnsRecord, {
             key: credentials.godaddyKey,
             secret: credentials.godaddySecret,
           });
@@ -119,7 +142,7 @@ export async function setupDnsRecords(
           if (!credentials.cloudflareToken || !credentials.cloudflareZoneId) {
             throw new Error("Cloudflare API token and zone ID required");
           }
-          await addCloudflareRecord(dnsRecord, {
+          detail = await addCloudflareRecord(dnsRecord, {
             token: credentials.cloudflareToken,
             zoneId: credentials.cloudflareZoneId,
           });
@@ -129,20 +152,22 @@ export async function setupDnsRecords(
           throw new Error(`Provider ${credentials.provider} not supported for auto-setup`);
       }
 
-      results.push({ purpose: record.purpose, success: true });
+      results.push({ purpose: record.purpose, success: true, detail });
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[DNS Setup] Failed for ${record.purpose}: ${errorMsg}`);
       results.push({
         purpose: record.purpose,
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: errorMsg,
       });
     }
   }
 
-  return {
-    success: results.every((r) => r.success),
-    results,
-  };
+  const allSuccess = results.every((r) => r.success);
+  console.log(`[DNS Setup] Complete: ${results.filter(r => r.success).length}/${results.length} records succeeded`);
+
+  return { success: allSuccess, results };
 }
 
 // --- Detect provider from domain ---

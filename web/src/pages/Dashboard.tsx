@@ -337,7 +337,7 @@ function DomainsPage() {
                 {setupResult.results?.map((r: any) => (
                   <div key={r.purpose} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] ${r.success ? "bg-emerald-500/[0.06] text-emerald-400" : "bg-red-500/[0.06] text-red-400"}`}>
                     {r.success ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg> : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>}
-                    {r.purpose}: {r.success ? "configured" : r.error}
+                    <span className="font-medium">{r.purpose}:</span> {r.success ? (r.detail || "done") : r.error}
                   </div>
                 ))}
                 {setupResult.success && (
@@ -348,7 +348,22 @@ function DomainsPage() {
                 )}
               </div>
             )}
-            {verifyResult && (
+            {/* DNS Debug Check */}
+            {setupDomain && (
+              <div className="mt-3">
+                <button onClick={async () => {
+                  try {
+                    const res = await api(`/dashboard/domains/${setupDomain.id}/dns-check`);
+                    setVerifyResult({ ...verifyResult, dnsDebug: res.data });
+                  } catch {}
+                }} className="text-[12px] text-zinc-500 hover:text-zinc-300 underline">Debug: Check what GoDaddy & DNS actually see</button>
+                {verifyResult?.dnsDebug && (
+                  <pre className="mt-2 p-3 rounded-xl bg-black/40 text-[11px] text-zinc-400 font-mono overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">{JSON.stringify(verifyResult.dnsDebug, null, 2)}</pre>
+                )}
+              </div>
+            )}
+
+            {verifyResult && !verifyResult.dnsDebug && (
               <div className={`mt-3 p-3 rounded-xl border text-[13px] ${verifyResult.status === "verified" ? "bg-emerald-500/[0.06] border-emerald-500/10 text-emerald-400" : "bg-amber-500/[0.06] border-amber-500/10 text-amber-300"}`}>
                 <p className="font-medium mb-1">{verifyResult.status === "verified" ? "Domain verified!" : "Verification results:"}</p>
                 <p>{verifyResult.message}</p>

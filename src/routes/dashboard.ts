@@ -214,6 +214,45 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     return { data: result };
   });
 
+  // Debug: read current GoDaddy DNS records for a domain
+  app.get<{ Params: { id: string } }>("/domains/:id/dns-check", async (request) => {
+    const domain = await domainService.getDomain(request.account.id, request.params.id);
+
+    // Try to read GoDaddy records if credentials exist
+    let godaddyRecords = null;
+    let godaddyError = null;
+    if ((domain as any).dnsProviderKey && (domain as any).dnsProvider === "godaddy") {
+      try {
+        const { decryptPrivateKey } = await import("../lib/crypto.js");
+        const config = getConfig();
+        const key = decryptPrivateKey((domain as any).dnsProviderKey, config.ENCRYPTION_KEY);
+        const secret = (domain as any).dnsProviderSecret ? decryptPrivateKey((domain as any).dnsProviderSecret, config.ENCRYPTION_KEY) : "";
+
+        const res = await fetch(`https://api.godaddy.com/v1/domains/${domain.name}/records`, {
+          headers: { Authorization: `sso-key ${key}:${secret}` },
+        });
+        const body = await res.text();
+        if (res.ok) {
+          godaddyRecords = JSON.parse(body);
+        } else {
+          godaddyError = `${res.status}: ${body}`;
+        }
+      } catch (e: any) {
+        godaddyError = e.message;
+      }
+    }
+
+    // Also do a direct DNS lookup
+    const dns = await import("node:dns/promises");
+    let dnsLookup: any = {};
+    try { dnsLookup.txt = await dns.resolveTxt(domain.name); } catch (e: any) { dnsLookup.txt = e.code; }
+    try { dnsLookup.mx = await dns.resolveMx(domain.name); } catch (e: any) { dnsLookup.mx = e.code; }
+    try { dnsLookup.dkim = await dns.resolveTxt(`${domain.dkimSelector || "es1"}._domainkey.${domain.name}`); } catch (e: any) { dnsLookup.dkim = e.code; }
+    try { dnsLookup.dmarc = await dns.resolveTxt(`_dmarc.${domain.name}`); } catch (e: any) { dnsLookup.dmarc = e.code; }
+
+    return { data: { domain: domain.name, godaddyRecords, godaddyError, dnsLookup } };
+  });
+
   // --- API Keys ---
   app.get("/api-keys", async (request) => {
     const keys = await apiKeyService.listApiKeys(request.account.id);
