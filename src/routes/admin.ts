@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import * as authService from "../services/auth.service.js";
+import * as adminAnalytics from "../services/admin-analytics.service.js";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, accounts, apiKeys, webhooks } from "../db/schema/index.js";
 import { count, sql } from "drizzle-orm";
@@ -63,5 +64,52 @@ export default async function adminRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>("/:id", async (request) => {
     const deleted = await authService.deleteAccount(request.params.id);
     return { data: deleted };
+  });
+
+  // --- Analytics endpoints ---
+
+  app.get("/analytics/overview", async () => {
+    return { data: await adminAnalytics.getSystemOverview() };
+  });
+
+  app.get("/analytics/emails", async (request) => {
+    const { days } = z.object({ days: z.coerce.number().int().min(1).max(365).default(30) }).parse(request.query);
+    return { data: await adminAnalytics.getEmailTimeSeries(days) };
+  });
+
+  app.get("/analytics/events", async (request) => {
+    const { days } = z.object({ days: z.coerce.number().int().min(1).max(365).default(30) }).parse(request.query);
+    return { data: await adminAnalytics.getEventTimeSeries(days) };
+  });
+
+  app.get("/analytics/delivery-rates", async () => {
+    return { data: await adminAnalytics.getDeliveryRates() };
+  });
+
+  app.get("/analytics/top-accounts", async (request) => {
+    const { limit } = z.object({ limit: z.coerce.number().int().min(1).max(100).default(10) }).parse(request.query);
+    return { data: await adminAnalytics.getTopAccounts(limit) };
+  });
+
+  app.get("/analytics/top-domains", async (request) => {
+    const { limit } = z.object({ limit: z.coerce.number().int().min(1).max(100).default(10) }).parse(request.query);
+    return { data: await adminAnalytics.getTopDomains(limit) };
+  });
+
+  app.get("/analytics/webhooks", async () => {
+    return { data: await adminAnalytics.getWebhookHealth() };
+  });
+
+  app.get("/analytics/suppressions", async () => {
+    return { data: await adminAnalytics.getSuppressionBreakdown() };
+  });
+
+  app.get("/analytics/activity", async (request) => {
+    const { limit } = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) }).parse(request.query);
+    return { data: await adminAnalytics.getRecentActivity(limit) };
+  });
+
+  app.get("/analytics/api-keys", async () => {
+    return { data: await adminAnalytics.getApiKeyUsage() };
   });
 }
