@@ -26,11 +26,7 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-[#09090b] flex items-center justify-center px-4 antialiased">
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-violet-500/[0.07] rounded-full blur-[120px]" />
-      </div>
-
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 antialiased">
       <div className="relative w-full max-w-[380px]">
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2.5 mb-8">
@@ -39,16 +35,16 @@ export default function Register() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
               </svg>
             </div>
-            <span className="font-semibold text-white text-[15px] tracking-tight">MailStride</span>
+            <span className="font-semibold text-gray-900 text-[15px] tracking-tight">MailStride</span>
           </Link>
-          <h1 className="text-[22px] font-semibold text-white tracking-tight">Create your account</h1>
-          <p className="text-sm text-zinc-500 mt-1.5">Start sending emails in minutes</p>
+          <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Create your account</h1>
+          <p className="text-sm text-gray-500 mt-1.5">Start sending emails in minutes</p>
         </div>
 
-        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6">
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-red-500/[0.08] border border-red-500/[0.12] text-red-400 text-[13px]">
+              <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px]">
                 <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                 </svg>
@@ -57,12 +53,12 @@ export default function Register() {
             )}
 
             <div>
-              <label className="block text-[13px] font-medium text-zinc-300 mb-1.5">Name</label>
+              <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Name</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full h-10 px-3.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white text-sm placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/40 transition-all"
+                className="w-full h-10 px-3.5 bg-white border border-gray-300 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 transition-all"
                 placeholder="Your name"
                 required
                 autoFocus
@@ -70,35 +66,35 @@ export default function Register() {
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-zinc-300 mb-1.5">Email</label>
+              <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full h-10 px-3.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white text-sm placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/40 transition-all"
+                className="w-full h-10 px-3.5 bg-white border border-gray-300 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 transition-all"
                 placeholder="you@example.com"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-zinc-300 mb-1.5">Password</label>
+              <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-10 px-3.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white text-sm placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/40 transition-all"
+                className="w-full h-10 px-3.5 bg-white border border-gray-300 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 transition-all"
                 placeholder="Min. 8 characters"
                 minLength={8}
                 required
               />
-              <p className="text-[11px] text-zinc-600 mt-1.5">Must be at least 8 characters</p>
+              <p className="text-[11px] text-gray-400 mt-1.5">Must be at least 8 characters</p>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-10 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl shadow-lg shadow-violet-500/20 transition-all mt-2"
+              className="w-full h-10 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl shadow-sm transition-all mt-2"
             >
               {loading ? (
                 <span className="inline-flex items-center gap-2">
@@ -110,9 +106,9 @@ export default function Register() {
           </form>
         </div>
 
-        <p className="text-center text-[13px] text-zinc-500 mt-6">
+        <p className="text-center text-[13px] text-gray-500 mt-6">
           Already have an account?{" "}
-          <Link to="/login" className="text-violet-400 hover:text-violet-300 font-medium transition-colors">Sign in</Link>
+          <Link to="/login" className="text-violet-600 hover:text-violet-700 font-medium transition-colors">Sign in</Link>
         </p>
       </div>
     </div>

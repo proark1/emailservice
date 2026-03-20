@@ -110,4 +110,4 @@ ISC
 
 ---
 
-Version 1.1.0 — Last updated: 2026-03-20 21:15 UTC
+Version 1.2.0 — Last updated: 2026-03-20 22:00 UTC

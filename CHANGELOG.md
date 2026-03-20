@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] — 2026-03-20
+
+### Changed
+- Complete UI/UX overhaul: dark theme replaced with modern light theme
+- All pages converted: Dashboard, Admin Panel, Landing, Login, Register
+- Added Inter font for cleaner typography
+- Mobile-responsive sidebar with hamburger menu (collapses on small screens)
+- Responsive grids and tables with overflow scrolling on mobile
+- Cards now use white backgrounds with subtle shadows
+- Status badges updated for light background visibility
+- Code block on landing page kept dark for contrast
+- CTA section uses soft violet gradient background
+
 ## [1.1.0] — 2026-03-20
 
 ### Added

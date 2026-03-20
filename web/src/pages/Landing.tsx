@@ -66,10 +66,10 @@ const stats = [
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-[#09090b] text-white antialiased">
+    <div className="min-h-screen bg-white text-gray-900 antialiased">
       {/* Navbar */}
-      <nav className="fixed top-0 w-full z-50 border-b border-white/[0.06] bg-[#09090b]/80 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <nav className="fixed top-0 w-full z-50 border-b border-gray-200 bg-white/80 backdrop-blur-xl">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
               <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -79,15 +79,15 @@ export default function Landing() {
             <span className="font-semibold text-[15px] tracking-tight">MailStride</span>
           </Link>
           <div className="flex items-center gap-2">
-            <a href="/docs" className="hidden sm:inline-flex px-3 py-1.5 text-[13px] text-zinc-400 hover:text-white transition-colors">
+            <a href="/docs" className="hidden sm:inline-flex px-3 py-1.5 text-[13px] text-gray-500 hover:text-gray-900 transition-colors">
               API Docs
             </a>
-            <Link to="/login" className="px-3 py-1.5 text-[13px] text-zinc-400 hover:text-white transition-colors">
+            <Link to="/login" className="px-3 py-1.5 text-[13px] text-gray-500 hover:text-gray-900 transition-colors">
               Sign in
             </Link>
             <Link
               to="/register"
-              className="px-4 py-1.5 text-[13px] font-medium rounded-lg bg-white text-black hover:bg-zinc-200 transition-colors"
+              className="px-4 py-1.5 text-[13px] font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-colors"
             >
               Get Started
             </Link>
@@ -98,24 +98,24 @@ export default function Landing() {
       {/* Hero */}
       <section className="relative pt-32 pb-20 overflow-hidden">
         {/* Gradient orbs */}
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-violet-500/10 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute top-40 left-1/4 w-[400px] h-[400px] bg-indigo-500/8 rounded-full blur-[100px] pointer-events-none" />
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-violet-100 rounded-full blur-[120px] pointer-events-none opacity-60" />
+        <div className="absolute top-40 left-1/4 w-[400px] h-[400px] bg-indigo-100 rounded-full blur-[100px] pointer-events-none opacity-40" />
 
-        <div className="relative max-w-4xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] text-[13px] text-zinc-400 mb-8">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 text-center">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-gray-200 bg-white text-[13px] text-gray-500 mb-8 shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Self-hosted &middot; Open source &middot; Full control
           </div>
 
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight leading-[1.08] mb-6">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight leading-[1.08] mb-6">
             The email platform
             <br />
-            <span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-600 bg-clip-text text-transparent">
               built for developers
             </span>
           </h1>
 
-          <p className="text-lg sm:text-xl text-zinc-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+          <p className="text-lg sm:text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
             Send transactional emails, verify domains, track delivery — all through
             a powerful API or SMTP relay. Self-hosted, no vendor lock-in.
           </p>
@@ -123,7 +123,7 @@ export default function Landing() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               to="/register"
-              className="inline-flex items-center justify-center px-6 py-3 text-[15px] font-medium rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white shadow-lg shadow-violet-500/20 transition-all hover:shadow-violet-500/30"
+              className="inline-flex items-center justify-center px-6 py-3 text-[15px] font-medium rounded-xl bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition-all"
             >
               Start for free
               <svg className="w-4 h-4 ml-2" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -132,7 +132,7 @@ export default function Landing() {
             </Link>
             <a
               href="/docs"
-              className="inline-flex items-center justify-center px-6 py-3 text-[15px] font-medium rounded-xl border border-white/[0.08] text-zinc-300 hover:bg-white/[0.04] hover:border-white/[0.12] transition-all"
+              className="inline-flex items-center justify-center px-6 py-3 text-[15px] font-medium rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 transition-all"
             >
               View documentation
             </a>
@@ -141,17 +141,17 @@ export default function Landing() {
       </section>
 
       {/* Code block */}
-      <section className="max-w-3xl mx-auto px-6 pb-24">
-        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden shadow-2xl shadow-black/40">
-          <div className="flex items-center gap-2 px-5 py-3.5 border-b border-white/[0.06] bg-white/[0.02]">
+      <section className="max-w-3xl mx-auto px-4 sm:px-6 pb-24">
+        <div className="rounded-2xl border border-gray-200 bg-gray-900 overflow-hidden shadow-xl">
+          <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-800 bg-gray-900">
             <div className="flex gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-white/[0.06]" />
-              <div className="w-2.5 h-2.5 rounded-full bg-white/[0.06]" />
-              <div className="w-2.5 h-2.5 rounded-full bg-white/[0.06]" />
+              <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+              <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+              <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
             </div>
-            <span className="text-[11px] text-zinc-500 ml-2 font-mono">Send your first email</span>
+            <span className="text-[11px] text-gray-500 ml-2 font-mono">Send your first email</span>
           </div>
-          <pre className="p-5 text-[13px] leading-relaxed overflow-x-auto"><code>{`<span style="color:#a78bfa">curl</span> <span style="color:#67e8f9">-X POST</span> https://api.yourdomain.com/v1/emails \\
+          <pre className="p-5 text-[13px] leading-relaxed overflow-x-auto text-gray-300"><code>{`<span style="color:#a78bfa">curl</span> <span style="color:#67e8f9">-X POST</span> https://api.yourdomain.com/v1/emails \\
   <span style="color:#67e8f9">-H</span> <span style="color:#fbbf24">"Authorization: Bearer es_your_api_key"</span> \\
   <span style="color:#67e8f9">-H</span> <span style="color:#fbbf24">"Content-Type: application/json"</span> \\
   <span style="color:#67e8f9">-d</span> <span style="color:#fbbf24">'{
@@ -164,13 +164,13 @@ export default function Landing() {
       </section>
 
       {/* Stats */}
-      <section className="border-y border-white/[0.06] bg-white/[0.01] py-14">
-        <div className="max-w-6xl mx-auto px-6">
+      <section className="border-y border-gray-200 bg-gray-50 py-14">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {stats.map((s) => (
               <div key={s.label} className="text-center">
-                <div className="text-3xl sm:text-4xl font-bold bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent">{s.value}</div>
-                <div className="text-sm text-zinc-500 mt-1">{s.label}</div>
+                <div className="text-3xl sm:text-4xl font-bold bg-gradient-to-b from-gray-900 to-gray-500 bg-clip-text text-transparent">{s.value}</div>
+                <div className="text-sm text-gray-500 mt-1">{s.label}</div>
               </div>
             ))}
           </div>
@@ -178,10 +178,10 @@ export default function Landing() {
       </section>
 
       {/* Features */}
-      <section className="max-w-6xl mx-auto px-6 py-24">
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-24">
         <div className="text-center mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Everything you need to send email</h2>
-          <p className="text-zinc-400 max-w-xl mx-auto text-lg">
+          <p className="text-gray-500 max-w-xl mx-auto text-lg">
             A complete, production-ready email infrastructure you own and control.
           </p>
         </div>
@@ -189,30 +189,29 @@ export default function Landing() {
           {features.map((f) => (
             <div
               key={f.title}
-              className="group relative p-6 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.1] transition-all duration-300"
+              className="group relative p-6 rounded-2xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 shadow-sm hover:shadow-md transition-all duration-300"
             >
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/10 to-indigo-500/10 border border-violet-500/10 flex items-center justify-center text-violet-400 mb-4 group-hover:border-violet-500/20 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center text-violet-600 mb-4 group-hover:bg-violet-100 transition-colors">
                 {f.icon}
               </div>
               <h3 className="font-semibold text-[15px] mb-2">{f.title}</h3>
-              <p className="text-sm text-zinc-400 leading-relaxed">{f.desc}</p>
+              <p className="text-sm text-gray-500 leading-relaxed">{f.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* CTA */}
-      <section className="max-w-6xl mx-auto px-6 pb-24">
-        <div className="relative rounded-3xl border border-white/[0.06] bg-gradient-to-br from-violet-500/[0.07] to-indigo-500/[0.04] p-12 sm:p-16 text-center overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent pointer-events-none" />
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 pb-24">
+        <div className="relative rounded-3xl border border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-50 p-12 sm:p-16 text-center overflow-hidden">
           <div className="relative">
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Ready to start sending?</h2>
-            <p className="text-zinc-400 max-w-md mx-auto mb-8 text-lg">
+            <p className="text-gray-500 max-w-md mx-auto mb-8 text-lg">
               Create your account in seconds. No credit card required.
             </p>
             <Link
               to="/register"
-              className="inline-flex items-center px-8 py-3.5 text-[15px] font-medium rounded-xl bg-white text-black hover:bg-zinc-200 transition-colors shadow-lg"
+              className="inline-flex items-center px-8 py-3.5 text-[15px] font-medium rounded-xl bg-violet-600 text-white hover:bg-violet-700 transition-colors shadow-sm"
             >
               Create free account
               <svg className="w-4 h-4 ml-2" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -224,8 +223,8 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/[0.06] py-8">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[13px] text-zinc-500">
+      <footer className="border-t border-gray-200 py-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[13px] text-gray-500">
           <div className="flex items-center gap-2.5">
             <div className="w-5 h-5 rounded bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
               <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -235,8 +234,8 @@ export default function Landing() {
             MailStride
           </div>
           <div className="flex gap-6">
-            <a href="/docs" className="hover:text-zinc-300 transition-colors">API Docs</a>
-            <a href="/health" className="hover:text-zinc-300 transition-colors">Status</a>
+            <a href="/docs" className="hover:text-gray-900 transition-colors">API Docs</a>
+            <a href="/health" className="hover:text-gray-900 transition-colors">Status</a>
           </div>
         </div>
       </footer>
