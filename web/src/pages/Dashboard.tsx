@@ -185,7 +185,7 @@ function DomainsPage() {
       } else if (res.data.provider === "godaddy" || res.data.provider === "cloudflare") {
         setSetupProvider(res.data.provider);
       }
-    } catch {} finally { setDetecting(false); }
+    } catch (e: any) { setError(e.message || "Failed to detect DNS provider"); } finally { setDetecting(false); }
   };
 
   const [testResult, setTestResult] = useState<any>(null);
@@ -388,7 +388,7 @@ function DomainsPage() {
                   try {
                     const res = await api(`/dashboard/domains/${setupDomain.id}/dns-check`);
                     setVerifyResult({ ...verifyResult, dnsDebug: res.data });
-                  } catch {}
+                  } catch (e: any) { setError(e.message || "DNS check failed"); }
                 }} className="text-[12px] text-zinc-500 hover:text-zinc-300 underline">Debug: Check what GoDaddy & DNS actually see</button>
                 {verifyResult?.dnsDebug && (
                   <pre className="mt-2 p-3 rounded-xl bg-black/40 text-[11px] text-zinc-400 font-mono overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">{JSON.stringify(verifyResult.dnsDebug, null, 2)}</pre>
@@ -444,14 +444,15 @@ function ApiKeysPage() {
   const [name, setName] = useState("");
   const [newKey, setNewKey] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const load = () => api("/dashboard/api-keys").then((r) => setItems(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
 
   const create = async () => {
-    setLoading(true);
+    setError(""); setLoading(true);
     try { const res = await post("/dashboard/api-keys", { name }); setNewKey(res.data.key); setName(""); load(); }
-    catch {} finally { setLoading(false); }
+    catch (e: any) { setError(e.message || "Failed to create API key"); } finally { setLoading(false); }
   };
 
   const revoke = async (id: string) => {
@@ -476,6 +477,7 @@ function ApiKeysPage() {
         ) : (
           <div className="space-y-3">
             <Input label="Key name" placeholder="e.g. Production" value={name} onChange={(e) => setName((e.target as HTMLInputElement).value)} />
+            {error && <p className="text-red-400 text-[13px]">{error}</p>}
             <Button onClick={create} disabled={loading || !name}>{loading ? "Creating..." : "Create Key"}</Button>
           </div>
         )}

@@ -55,7 +55,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     }).parse(request.body);
     const result = await emailService.sendEmail(request.account.id, {
       from: input.from,
-      to: input.to.split(",").map((e) => e.trim()),
+      to: input.to.split(",").map((e) => e.trim()).filter(Boolean),
       subject: input.subject,
       html: input.html,
       text: input.text,
@@ -195,12 +195,16 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     let apiCloudflareToken = input.cloudflare_token || "";
     let apiCloudflareZoneId = input.cloudflare_zone_id || "";
 
-    if (input.provider === "godaddy") {
-      if (!apiGodaddyKey && domain.dnsProviderKey) apiGodaddyKey = decKey(domain.dnsProviderKey);
-      if (!apiGodaddySecret && domain.dnsProviderSecret) apiGodaddySecret = decKey(domain.dnsProviderSecret);
-    } else if (input.provider === "cloudflare") {
-      if (!apiCloudflareToken && domain.dnsProviderKey) apiCloudflareToken = decKey(domain.dnsProviderKey);
-      if (!apiCloudflareZoneId && domain.dnsProviderZoneId) apiCloudflareZoneId = domain.dnsProviderZoneId;
+    try {
+      if (input.provider === "godaddy") {
+        if (!apiGodaddyKey && domain.dnsProviderKey) apiGodaddyKey = decKey(domain.dnsProviderKey);
+        if (!apiGodaddySecret && domain.dnsProviderSecret) apiGodaddySecret = decKey(domain.dnsProviderSecret);
+      } else if (input.provider === "cloudflare") {
+        if (!apiCloudflareToken && domain.dnsProviderKey) apiCloudflareToken = decKey(domain.dnsProviderKey);
+        if (!apiCloudflareZoneId && domain.dnsProviderZoneId) apiCloudflareZoneId = domain.dnsProviderZoneId;
+      }
+    } catch {
+      throw new (await import("../lib/errors.js")).ValidationError("Failed to decrypt saved credentials — please re-enter them.");
     }
 
     // Only save new credentials to DB — never overwrite with empty values
@@ -246,8 +250,13 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const config = getConfig();
 
     if (input.provider === "godaddy") {
-      let key = input.godaddy_key || (domain.dnsProviderKey ? decryptPrivateKey(domain.dnsProviderKey, config.ENCRYPTION_KEY) : "");
-      let secret = input.godaddy_secret || (domain.dnsProviderSecret ? decryptPrivateKey(domain.dnsProviderSecret, config.ENCRYPTION_KEY) : "");
+      let key = "", secret = "";
+      try {
+        key = input.godaddy_key || (domain.dnsProviderKey ? decryptPrivateKey(domain.dnsProviderKey, config.ENCRYPTION_KEY) : "");
+        secret = input.godaddy_secret || (domain.dnsProviderSecret ? decryptPrivateKey(domain.dnsProviderSecret, config.ENCRYPTION_KEY) : "");
+      } catch {
+        return { data: { success: false, error: "Failed to decrypt saved credentials. They may be corrupted — please re-enter them." } };
+      }
 
       if (!key || !secret) return { data: { success: false, error: "API key and secret are required" } };
 
@@ -273,8 +282,13 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     }
 
     if (input.provider === "cloudflare") {
-      const token = input.cloudflare_token || (domain.dnsProviderKey ? decryptPrivateKey(domain.dnsProviderKey, config.ENCRYPTION_KEY) : "");
-      const zoneId = input.cloudflare_zone_id || domain.dnsProviderZoneId || "";
+      let token = "", zoneId = "";
+      try {
+        token = input.cloudflare_token || (domain.dnsProviderKey ? decryptPrivateKey(domain.dnsProviderKey, config.ENCRYPTION_KEY) : "");
+      } catch {
+        return { data: { success: false, error: "Failed to decrypt saved credentials. They may be corrupted — please re-enter them." } };
+      }
+      zoneId = input.cloudflare_zone_id || domain.dnsProviderZoneId || "";
 
       if (!token || !zoneId) return { data: { success: false, error: "API token and Zone ID are required" } };
 

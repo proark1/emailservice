@@ -13,7 +13,7 @@ export interface WebhookDeliverJobData {
   url: string;
 }
 
-const RETRY_DELAYS = [30_000, 120_000, 900_000, 3_600_000, 21_600_000]; // 30s, 2m, 15m, 1h, 6h
+export const RETRY_DELAYS = [30_000, 120_000, 900_000, 3_600_000, 21_600_000]; // 30s, 2m, 15m, 1h, 6h
 
 async function processWebhookDeliver(job: Job<WebhookDeliverJobData>) {
   const { webhookId, emailEventId, eventType, payload, signingSecret, url } = job.data;
@@ -75,7 +75,10 @@ async function processWebhookDeliver(job: Job<WebhookDeliverJobData>) {
   });
 
   if (status !== "success") {
-    throw new Error(`Webhook delivery failed with status ${responseStatus}`);
+    throw new Error(responseStatus
+      ? `Webhook delivery failed with status ${responseStatus}`
+      : `Webhook delivery failed: ${responseBody ?? "connection error"}`
+    );
   }
 }
 

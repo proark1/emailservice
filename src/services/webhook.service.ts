@@ -2,6 +2,7 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { webhooks, webhookDeliveries, emailEvents } from "../db/schema/index.js";
 import { getWebhookDeliverQueue } from "../queues/index.js";
+import { RETRY_DELAYS } from "../workers/webhook-deliver.worker.js";
 import { generateWebhookSecret } from "../lib/crypto.js";
 import { NotFoundError } from "../lib/errors.js";
 import type { CreateWebhookInput, UpdateWebhookInput } from "../schemas/webhook.schema.js";
@@ -99,6 +100,9 @@ export async function dispatchEvent(
       payload,
       signingSecret: webhook.signingSecret,
       url: webhook.url,
+    }, {
+      attempts: RETRY_DELAYS.length + 1,
+      backoff: { type: "exponential", delay: 30_000 },
     });
   }
 }

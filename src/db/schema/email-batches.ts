@@ -1,7 +1,7 @@
 import { pgTable, uuid, varchar, timestamp, integer } from "drizzle-orm/pg-core";
 import { accounts } from "./accounts.js";
 
-export const batchStatusEnum = ["processing", "completed", "partial_failure"] as const;
+export const batchStatusEnum = ["processing", "completed", "partial_failure", "failed"] as const;
 export type BatchStatus = (typeof batchStatusEnum)[number];
 
 export const emailBatches = pgTable("email_batches", {

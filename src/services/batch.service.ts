@@ -39,7 +39,7 @@ export async function sendBatch(accountId: string, emailInputs: SendEmailInput[]
   const status = failedCount === 0
     ? "completed" as const
     : sentCount === 0
-      ? "partial_failure" as const
+      ? "failed" as const
       : "partial_failure" as const;
 
   await db

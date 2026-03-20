@@ -13,13 +13,16 @@ export const sendEmailSchema = z.object({
   text: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),
   attachments: z.array(z.object({
-    filename: z.string(),
-    content: z.string(), // base64 encoded
+    filename: z.string().max(255),
+    content: z.string().max(10_485_760), // ~7.5 MB decoded
     content_type: z.string().optional(),
-  })).optional(),
+  })).max(10).optional(),
   tags: z.record(z.string(), z.string()).optional(),
   scheduled_at: z.string().datetime().optional(),
   idempotency_key: z.string().max(255).optional(),
+}).refine((d) => d.html || d.text, {
+  message: "At least one of html or text is required",
+  path: ["html"],
 });
 
 export const emailResponseSchema = z.object({

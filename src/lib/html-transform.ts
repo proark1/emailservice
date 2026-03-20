@@ -10,7 +10,7 @@ export function injectTrackingPixel(html: string, emailId: string): string {
 
   // Insert before </body> if it exists, otherwise append
   if (html.includes("</body>")) {
-    return html.replace("</body>", `${pixel}</body>`);
+    return html.replaceAll("</body>", `${pixel}</body>`);
   }
   return html + pixel;
 }
