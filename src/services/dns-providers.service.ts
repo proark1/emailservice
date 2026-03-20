@@ -46,9 +46,6 @@ async function addGoDaddyRecord(
   // GoDaddy PUT /v1/domains/{domain}/records/{type}/{name} replaces all records of that type+name
   const url = `https://api.godaddy.com/v1/domains/${domain}/records/${record.type}/${recordName}`;
 
-  console.log(`[GoDaddy] PUT ${url}`);
-  console.log(`[GoDaddy] Body: ${JSON.stringify(body)}`);
-
   const res = await fetch(url, {
     method: "PUT",
     headers: {
@@ -59,7 +56,6 @@ async function addGoDaddyRecord(
   });
 
   const responseText = await res.text();
-  console.log(`[GoDaddy] Response ${res.status}: ${responseText}`);
 
   if (!res.ok) {
     throw new Error(`GoDaddy API error (${res.status}): ${responseText}`);
@@ -112,7 +108,6 @@ export async function setupDnsRecords(
 ): Promise<{ success: boolean; results: Array<{ purpose: string; success: boolean; error?: string; detail?: string }> }> {
   const results: Array<{ purpose: string; success: boolean; error?: string; detail?: string }> = [];
 
-  console.log(`[DNS Setup] Setting up ${records.length} records for ${domain} via ${credentials.provider}`);
 
   for (const record of records) {
     const dnsRecord: DnsRecord = {
@@ -122,8 +117,6 @@ export async function setupDnsRecords(
       priority: record.type === "MX" ? parseInt(record.value) || 10 : undefined,
       ttl: 600,
     };
-
-    console.log(`[DNS Setup] Record: ${record.purpose} type=${dnsRecord.type} name=${dnsRecord.name} value=${dnsRecord.value.substring(0, 60)}...`);
 
     try {
       let detail = "";
@@ -165,7 +158,6 @@ export async function setupDnsRecords(
   }
 
   const allSuccess = results.every((r) => r.success);
-  console.log(`[DNS Setup] Complete: ${results.filter(r => r.success).length}/${results.length} records succeeded`);
 
   return { success: allSuccess, results };
 }

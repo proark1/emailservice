@@ -39,7 +39,7 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
     inReplyTo: data.inReplyTo,
   }).returning();
 
-  // Fire webhook
+  // Fire webhook (best-effort — don't fail the job if dispatch errors)
   try {
     await dispatchEvent(data.accountId, "email.received", stored.id, {
       id: stored.id,
@@ -49,7 +49,9 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
       text: data.text?.substring(0, 10_000),
       html: data.html?.substring(0, 50_000),
     });
-  } catch {}
+  } catch (err) {
+    console.error(`[inbound-email] Failed to dispatch webhook for ${stored.id}:`, err);
+  }
 }
 
 export function createInboundEmailWorker() {

@@ -111,7 +111,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.post("/domains", async (request, reply) => {
     const { name } = z.object({ name: z.string().min(1) }).parse(request.body);
     const domain = await domainService.createDomain(request.account.id, { name });
-    try { await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0 }, { delay: 60_000 }); } catch {}
+    try { await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() }, { delay: 60_000 }); } catch {}
     return reply.status(201).send({ data: domainService.formatDomainResponse(domain) });
   });
 
@@ -225,7 +225,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
     // Trigger verification after auto-setup
     if (result.success) {
-      try { await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0 }, { delay: 10_000 }); } catch {}
+      try { await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() }, { delay: 10_000 }); } catch {}
     }
 
     return { data: result };

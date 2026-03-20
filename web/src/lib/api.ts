@@ -5,7 +5,7 @@ export async function api<T = any>(path: string, options?: RequestInit): Promise
     ...options,
   });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
+  const data = text ? (() => { try { return JSON.parse(text); } catch { return {}; } })() : {};
   if (!res.ok) throw new Error(data?.error?.message || `Request failed (${res.status})`);
   return data;
 }

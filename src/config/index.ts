@@ -66,6 +66,12 @@ export function loadConfig(): Env {
       } catch {}
     }
   }
+  if (parsed.NODE_ENV === "production" && !process.env.ENCRYPTION_KEY) {
+    throw new Error(
+      "ENCRYPTION_KEY environment variable must be set in production. " +
+      "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+    );
+  }
   _config = parsed;
   return _config;
 }

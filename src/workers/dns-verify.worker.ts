@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 export interface DnsVerifyJobData {
   domainId: string;
   attempt: number;
+  startedAt: number;
 }
 
 const MAX_POLLING_HOURS = 72;
@@ -56,7 +57,7 @@ async function processDnsVerify(job: Job<DnsVerifyJobData>) {
 
   // If not yet fully verified, schedule next check
   if (!allVerified) {
-    const elapsedMs = attempt * 300_000; // rough estimate
+    const elapsedMs = Date.now() - job.data.startedAt;
     if (elapsedMs < MAX_POLLING_HOURS * 3_600_000) {
       const delayIndex = Math.min(attempt, POLL_INTERVALS_MS.length - 1);
       const delay = POLL_INTERVALS_MS[delayIndex];
@@ -64,6 +65,7 @@ async function processDnsVerify(job: Job<DnsVerifyJobData>) {
       await getDnsVerifyQueue().add("dns-verify", {
         domainId,
         attempt: attempt + 1,
+        startedAt: job.data.startedAt,
       }, { delay });
     } else {
       // Max polling exceeded — mark as failed

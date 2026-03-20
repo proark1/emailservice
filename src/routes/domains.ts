@@ -14,7 +14,7 @@ export default async function domainRoutes(app: FastifyInstance) {
     const domain = await domainService.createDomain(request.account.id, input);
 
     // Queue initial DNS verification with 60s delay
-    await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0 }, { delay: 60_000 });
+    await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() }, { delay: 60_000 });
 
     return reply.status(201).send({
       data: domainService.formatDomainResponse(domain),
@@ -42,7 +42,7 @@ export default async function domainRoutes(app: FastifyInstance) {
   // POST /v1/domains/:id/verify
   app.post<{ Params: { id: string } }>("/:id/verify", async (request) => {
     const domain = await domainService.getDomain(request.account.id, request.params.id);
-    await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0 });
+    await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() });
     return { data: { message: "Verification initiated" } };
   });
 }

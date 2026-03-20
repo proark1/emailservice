@@ -25,6 +25,10 @@ export default async function trackingRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: { type: "bad_request", message: "Invalid tracking link" } });
     }
 
+    if (!data.url.startsWith("http://") && !data.url.startsWith("https://")) {
+      return reply.status(400).send({ error: { type: "bad_request", message: "Invalid redirect URL" } });
+    }
+
     // Record the click (fire and forget)
     trackingService.recordClick(data.emailId, data.url).catch(() => {});
 

@@ -1,4 +1,4 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, suppressions } from "../db/schema/index.js";
 import { isRedisConfigured, getEmailSendQueue } from "../queues/index.js";
@@ -44,17 +44,15 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
     throw new ValidationError(`Domain ${fromDomain} is not verified yet`);
   }
 
-  // Check suppression list
-  const allRecipients = [...input.to, ...(input.cc || []), ...(input.bcc || [])];
-  const suppressedAddresses = await db
-    .select()
+  // Check suppression list — only query addresses actually in the recipient list
+  const allRecipients = [...input.to, ...(input.cc || []), ...(input.bcc || [])].map((r) => r.toLowerCase());
+  const suppressedRows = await db
+    .select({ email: suppressions.email })
     .from(suppressions)
-    .where(eq(suppressions.accountId, accountId));
+    .where(and(eq(suppressions.accountId, accountId), inArray(suppressions.email, allRecipients)));
 
-  const suppressedSet = new Set(suppressedAddresses.map((s) => s.email.toLowerCase()));
-  const activeSuppressed = allRecipients.filter((r) => suppressedSet.has(r.toLowerCase()));
-  if (activeSuppressed.length > 0) {
-    throw new ValidationError(`Suppressed addresses: ${activeSuppressed.join(", ")}`);
+  if (suppressedRows.length > 0) {
+    throw new ValidationError(`Suppressed addresses: ${suppressedRows.map((r) => r.email).join(", ")}`);
   }
 
   // Validate scheduling

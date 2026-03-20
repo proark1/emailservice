@@ -707,7 +707,13 @@ function InboxPage() {
             {/* Email body */}
             <div className="flex-1 overflow-y-auto px-6 py-5">
               {selected.htmlBody ? (
-                <div className="prose prose-invert prose-sm max-w-none [&_*]:text-zinc-300" dangerouslySetInnerHTML={{ __html: selected.htmlBody }} />
+                <iframe
+                  srcDoc={selected.htmlBody}
+                  sandbox=""
+                  title="Email preview"
+                  className="w-full border-0 rounded bg-white"
+                  style={{ minHeight: "400px", height: "100%", colorScheme: "light" }}
+                />
               ) : (
                 <pre className="text-[13px] text-zinc-300 whitespace-pre-wrap font-sans leading-relaxed">{selected.textBody || "(empty)"}</pre>
               )}

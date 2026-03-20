@@ -6,6 +6,13 @@ import { getDkimPrivateKey } from "./dkim.service.js";
 import { transformHtml } from "../lib/html-transform.js";
 import { getConfig } from "../config/index.js";
 
+let _transport: nodemailer.Transporter | null = null;
+
+function getOrCreateTransport(): nodemailer.Transporter {
+  if (!_transport) _transport = createTransport();
+  return _transport;
+}
+
 function createTransport() {
   const config = getConfig();
 
@@ -63,7 +70,9 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
         try {
           const privateKey = getDkimPrivateKey(domain.dkimPrivateKey);
           dkimConfig = { domainName: domain.name, keySelector: domain.dkimSelector, privateKey };
-        } catch {}
+        } catch (err) {
+          console.error(`[email-sender] Failed to load DKIM key for domain ${domain.name}:`, err);
+        }
       }
     }
 
@@ -73,7 +82,7 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       html = transformHtml(html, email.id);
     }
 
-    const transport = createTransport();
+    const transport = getOrCreateTransport();
     const info = await transport.sendMail({
       from: email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress,
       to: email.toAddresses,
@@ -121,5 +130,7 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       type: "failed",
       data: { error: errorMessage },
     });
+
+    throw error;
   }
 }

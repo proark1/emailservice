@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { lte, eq, and } from "drizzle-orm";
+import { lte, eq, and, isNotNull } from "drizzle-orm";
 import { getRedisConnection, getEmailSendQueue, getScheduledEmailQueue } from "../queues/index.js";
 import { getDb } from "../db/index.js";
 import { emails } from "../db/schema/index.js";
@@ -7,17 +7,18 @@ import { emails } from "../db/schema/index.js";
 async function processScheduledEmails(_job: Job) {
   const db = getDb();
 
-  // Find all queued emails whose scheduled_at has passed
+  // Atomically claim due scheduled emails — prevents duplicate sends across concurrent workers
   const dueEmails = await db
-    .select()
-    .from(emails)
+    .update(emails)
+    .set({ status: "sending", updatedAt: new Date() })
     .where(
       and(
         eq(emails.status, "queued"),
+        isNotNull(emails.scheduledAt),
         lte(emails.scheduledAt, new Date()),
       ),
     )
-    .limit(100);
+    .returning();
 
   for (const email of dueEmails) {
     await getEmailSendQueue().add("send", {
