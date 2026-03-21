@@ -1,0 +1,52 @@
+# Postfix main configuration for emailservice VPS deployment
+# Replace MAIL_HOSTNAME and DOMAIN with your actual values
+
+# Identity
+myhostname = MAIL_HOSTNAME
+mydomain = DOMAIN
+myorigin = $mydomain
+
+# Network
+inet_interfaces = all
+inet_protocols = ipv4
+mynetworks = 127.0.0.0/8 [::1]/128 172.16.0.0/12
+
+# Accept mail for these domains (inbound)
+mydestination =
+virtual_transport = smtp:[127.0.0.1]:2525
+virtual_mailbox_domains = DOMAIN
+
+# Relay — only allow localhost (the app) to send outbound
+smtpd_relay_restrictions = permit_mynetworks, reject_unauth_destination
+relay_domains =
+
+# TLS (outbound — when sending to other servers)
+smtp_tls_security_level = may
+smtp_tls_loglevel = 1
+
+# TLS (inbound — when receiving from other servers)
+smtpd_tls_security_level = may
+smtpd_tls_cert_file = /etc/caddy/certificates/acme-v02.api.letsencrypt.org-directory/DOMAIN/DOMAIN.crt
+smtpd_tls_key_file = /etc/caddy/certificates/acme-v02.api.letsencrypt.org-directory/DOMAIN/DOMAIN.key
+smtpd_tls_loglevel = 1
+
+# Size limits
+message_size_limit = 26214400
+mailbox_size_limit = 0
+
+# Queue
+maximal_queue_lifetime = 3d
+bounce_queue_lifetime = 1d
+queue_run_delay = 300s
+minimal_backoff_time = 300s
+maximal_backoff_time = 4000s
+
+# Logging
+maillog_file = /var/log/postfix.log
+
+# Misc
+smtpd_banner = $myhostname ESMTP
+biff = no
+append_dot_mydomain = no
+readme_directory = no
+compatibility_level = 3.6

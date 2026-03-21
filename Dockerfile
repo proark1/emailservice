@@ -30,5 +30,12 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=frontend /app/web/dist ./web/dist
 COPY package.json ./
+RUN mkdir -p certs
+EXPOSE 3000 2525 587 465
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD node -e "fetch('http://localhost:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))" || exit 1
 USER node
+# Default: API server. Override in docker-compose for worker/smtp-relay:
+#   worker:     ["node", "dist/worker.js"]
+#   smtp-relay: ["node", "dist/smtp-relay.js"]
 CMD ["node", "dist/index.js"]

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] — 2026-03-21
+
+### Added
+- Full self-hosted VPS deployment stack (`deploy/` directory)
+- Production Docker Compose with separate API, worker, and SMTP relay containers
+- Postfix configuration for outbound delivery (port 25) and inbound receive
+- Caddy reverse proxy with automatic Let's Encrypt HTTPS
+- One-command server setup script (`deploy/setup.sh`)
+- Deployment guide with DNS, Hetzner setup, and troubleshooting (`deploy/README.md`)
+- Dockerfile healthcheck and multi-process support via CMD override
+
 ## [1.2.0] — 2026-03-20
 
 ### Changed
