@@ -8,9 +8,10 @@ export function injectTrackingPixel(html: string, emailId: string): string {
   const pixelUrl = `${config.TRACKING_URL}/t/${emailId}`;
   const pixel = `<img src="${pixelUrl}" width="1" height="1" style="display:none" alt="" />`;
 
-  // Insert before </body> if it exists, otherwise append
+  // Insert before the last </body> if it exists, otherwise append
   if (html.includes("</body>")) {
-    return html.replaceAll("</body>", `${pixel}</body>`);
+    const lastIndex = html.lastIndexOf("</body>");
+    return html.slice(0, lastIndex) + pixel + html.slice(lastIndex);
   }
   return html + pixel;
 }

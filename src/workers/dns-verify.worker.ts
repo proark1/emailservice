@@ -45,7 +45,7 @@ async function processDnsVerify(job: Job<DnsVerifyJobData>) {
   );
 
   const allVerified = result.spfVerified && result.dkimVerified && result.dmarcVerified;
-  const newStatus = allVerified ? "verified" as const : domain.status as "pending" | "verified" | "failed";
+  const newStatus = allVerified ? "verified" as const : "pending" as const;
 
   await updateDomainVerification(domainId, {
     spfVerified: result.spfVerified,

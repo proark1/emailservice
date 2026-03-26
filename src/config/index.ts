@@ -26,6 +26,7 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_SECURE: z.string().optional(), // "true" for port 465
+  JWT_SECRET: z.string().min(1).optional(),
   ENCRYPTION_KEY: z.string().min(1).default(DEFAULT_ENCRYPTION_KEY),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),

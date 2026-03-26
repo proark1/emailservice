@@ -78,7 +78,7 @@ export async function deleteDomain(accountId: string, domainId: string) {
   // Now delete
   const [deleted] = await db
     .delete(domains)
-    .where(eq(domains.id, domainId))
+    .where(and(eq(domains.id, domainId), eq(domains.accountId, accountId)))
     .returning();
 
   return deleted!;

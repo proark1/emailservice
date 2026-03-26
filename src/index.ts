@@ -35,7 +35,7 @@ async function main() {
   // Cookie + JWT for web auth
   await app.register(fastifyCookie);
   await app.register(fastifyJwt, {
-    secret: config.ENCRYPTION_KEY,
+    secret: config.JWT_SECRET || config.ENCRYPTION_KEY,
     cookie: { cookieName: "token", signed: false },
   });
 

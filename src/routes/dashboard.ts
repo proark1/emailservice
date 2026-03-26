@@ -53,9 +53,19 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       html: z.string().optional(),
       text: z.string().optional(),
     }).parse(request.body);
+    const toAddresses = input.to.split(",").map((e) => e.trim()).filter(Boolean);
+    // Validate each email address
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const invalidAddresses = toAddresses.filter((addr) => !emailRegex.test(addr));
+    if (invalidAddresses.length > 0) {
+      throw new (await import("../lib/errors.js")).ValidationError(`Invalid email address(es): ${invalidAddresses.join(", ")}`);
+    }
+    if (toAddresses.length === 0) {
+      throw new (await import("../lib/errors.js")).ValidationError("At least one recipient is required");
+    }
     const result = await emailService.sendEmail(request.account.id, {
       from: input.from,
-      to: input.to.split(",").map((e) => e.trim()).filter(Boolean),
+      to: toAddresses,
       subject: input.subject,
       html: input.html,
       text: input.text,
