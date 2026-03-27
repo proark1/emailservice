@@ -120,7 +120,7 @@ export default function InboxPage() {
 
   /* ---- data fetching ---- */
   const fetchEmails = useCallback(
-    async (p: number, s: string, f: FilterTab) => {
+    async (p: number, s: string, f: FilterTab, append = false) => {
       setLoading(true);
       try {
         const params = new URLSearchParams();
@@ -129,10 +129,14 @@ export default function InboxPage() {
         params.set("page", String(p));
         params.set("limit", "50");
         const res = await api(`/dashboard/inbox?${params}`);
-        setItems(res.data ?? []);
+        if (append) {
+          setItems((prev) => [...prev, ...(res.data ?? [])]);
+        } else {
+          setItems(res.data ?? []);
+        }
         if (res.pagination) setPagination(res.pagination);
       } catch {
-        setItems([]);
+        if (!append) setItems([]);
       } finally {
         setLoading(false);
       }
@@ -244,7 +248,7 @@ export default function InboxPage() {
   const loadMore = () => {
     const next = page + 1;
     setPage(next);
-    fetchEmails(next, search, filter);
+    fetchEmails(next, search, filter, true);
   };
 
   /* ---- iframe auto-height ---- */

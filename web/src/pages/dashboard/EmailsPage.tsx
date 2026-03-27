@@ -19,23 +19,22 @@ import {
 
 type Email = {
   id: string;
-  from: string;
+  fromAddress: string;
+  fromName?: string;
   toAddresses: string[];
   ccAddresses?: string[];
   bccAddresses?: string[];
   subject: string;
   status: string;
-  html?: string;
-  text?: string;
+  htmlBody?: string;
+  textBody?: string;
   openCount?: number;
   clickCount?: number;
-  tags?: string[];
+  tags?: Record<string, string>;
   createdAt: string;
   sentAt?: string;
   deliveredAt?: string;
-  bouncedAt?: string;
   scheduledAt?: string;
-  events?: { type: string; timestamp: string; metadata?: Record<string, any> }[];
 };
 
 type Pagination = {
@@ -79,14 +78,6 @@ function formatFullDate(dateStr: string | undefined): string {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function eventDotColor(type: string): string {
-  if (type.includes("delivered")) return "bg-emerald-500";
-  if (type.includes("bounce") || type.includes("fail")) return "bg-red-500";
-  if (type.includes("open") || type.includes("click")) return "bg-violet-500";
-  if (type.includes("sent") || type.includes("send")) return "bg-blue-500";
-  return "bg-gray-400";
 }
 
 /* ---------- main component ---------- */
@@ -201,15 +192,15 @@ export default function EmailsPage() {
     setComposeError("");
     setSending(true);
     try {
-      const toArr = form.to.split(",").map((s) => s.trim()).filter(Boolean);
       const body: Record<string, any> = {
         from: form.from,
-        to: toArr,
+        to: form.to,
         subject: form.subject,
-        html: form.html,
+        html: form.html || undefined,
+        text: form.html ? undefined : " ",
       };
-      if (form.cc.trim()) body.cc = form.cc.split(",").map((s) => s.trim()).filter(Boolean);
-      if (form.bcc.trim()) body.bcc = form.bcc.split(",").map((s) => s.trim()).filter(Boolean);
+      if (form.cc.trim()) body.cc = form.cc;
+      if (form.bcc.trim()) body.bcc = form.bcc;
       if (form.scheduledAt) body.scheduled_at = new Date(form.scheduledAt).toISOString();
       await post("/dashboard/emails", body);
       setComposeOpen(false);
@@ -416,7 +407,7 @@ export default function EmailsPage() {
 
             {/* Address fields */}
             <div className="space-y-2.5 rounded-xl bg-gray-50 border border-gray-100 p-3.5">
-              <DetailRow label="From" value={detailEmail.from} />
+              <DetailRow label="From" value={detailEmail.fromName ? `${detailEmail.fromName} <${detailEmail.fromAddress}>` : detailEmail.fromAddress} />
               <DetailRow label="To" value={detailEmail.toAddresses?.join(", ") ?? "\u2014"} />
               {detailEmail.ccAddresses && detailEmail.ccAddresses.length > 0 && (
                 <DetailRow label="CC" value={detailEmail.ccAddresses.join(", ")} />
@@ -427,24 +418,14 @@ export default function EmailsPage() {
               <DetailRow label="Subject" value={detailEmail.subject || "\u2014"} />
             </div>
 
-            {/* Timestamps */}
-            <div className="space-y-1.5">
-              <p className="text-[12px] font-medium text-gray-500 uppercase tracking-wider mb-2">Timestamps</p>
-              <DetailRow label="Created" value={formatFullDate(detailEmail.createdAt)} />
-              {detailEmail.sentAt && <DetailRow label="Sent" value={formatFullDate(detailEmail.sentAt)} />}
-              {detailEmail.deliveredAt && <DetailRow label="Delivered" value={formatFullDate(detailEmail.deliveredAt)} />}
-              {detailEmail.bouncedAt && <DetailRow label="Bounced" value={formatFullDate(detailEmail.bouncedAt)} />}
-              {detailEmail.scheduledAt && <DetailRow label="Scheduled" value={formatFullDate(detailEmail.scheduledAt)} />}
-            </div>
-
             {/* Tags */}
-            {detailEmail.tags && detailEmail.tags.length > 0 && (
+            {detailEmail.tags && Object.keys(detailEmail.tags).length > 0 && (
               <div className="border-t border-gray-100 pt-3">
                 <p className="text-[12px] font-medium text-gray-500 uppercase tracking-wider mb-2">Tags</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {detailEmail.tags.map((tag) => (
-                    <span key={tag} className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                      {tag}
+                  {Object.entries(detailEmail.tags).map(([key, val]) => (
+                    <span key={key} className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                      {key}: {val}
                     </span>
                   ))}
                 </div>
@@ -452,13 +433,13 @@ export default function EmailsPage() {
             )}
 
             {/* HTML preview */}
-            {detailEmail.html && (
+            {detailEmail.htmlBody && (
               <div className="border-t border-gray-100 pt-3">
                 <p className="text-[12px] font-medium text-gray-500 uppercase tracking-wider mb-2">Preview</p>
                 <div className="rounded-xl border border-gray-200 overflow-hidden bg-white">
                   <iframe
                     sandbox=""
-                    srcDoc={detailEmail.html}
+                    srcDoc={detailEmail.htmlBody}
                     title="Email preview"
                     className="w-full h-56 border-0"
                   />
@@ -466,34 +447,14 @@ export default function EmailsPage() {
               </div>
             )}
 
-            {/* Event timeline */}
-            {detailEmail.events && detailEmail.events.length > 0 && (
-              <div className="border-t border-gray-100 pt-3">
-                <p className="text-[12px] font-medium text-gray-500 uppercase tracking-wider mb-2">Events</p>
-                <div className="relative ml-1">
-                  {/* vertical line */}
-                  <div className="absolute left-[3px] top-2 bottom-2 w-px bg-gray-200" />
-                  <div className="space-y-3">
-                    {detailEmail.events.map((evt, i) => (
-                      <div key={i} className="flex items-start gap-3 relative">
-                        <div className="mt-1.5 z-10">
-                          <div className={`w-2 h-2 rounded-full ring-2 ring-white ${eventDotColor(evt.type)}`} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13px] text-gray-900 font-medium capitalize">{evt.type.replace(/[._]/g, " ")}</p>
-                          <p className="text-[11px] text-gray-400">{formatFullDate(evt.timestamp)}</p>
-                          {evt.metadata && Object.keys(evt.metadata).length > 0 && (
-                            <p className="text-[11px] text-gray-400 mt-0.5 truncate">
-                              {Object.entries(evt.metadata).map(([k, v]) => `${k}: ${v}`).join(", ")}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* Timestamps */}
+            <div className="border-t border-gray-100 pt-3">
+              <p className="text-[12px] font-medium text-gray-500 uppercase tracking-wider mb-2">Timeline</p>
+              <DetailRow label="Created" value={formatFullDate(detailEmail.createdAt)} />
+              {detailEmail.sentAt && <DetailRow label="Sent" value={formatFullDate(detailEmail.sentAt)} />}
+              {detailEmail.deliveredAt && <DetailRow label="Delivered" value={formatFullDate(detailEmail.deliveredAt)} />}
+              {detailEmail.scheduledAt && <DetailRow label="Scheduled" value={formatFullDate(detailEmail.scheduledAt)} />}
+            </div>
           </div>
         )}
       </Modal>

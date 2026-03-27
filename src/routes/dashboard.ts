@@ -171,7 +171,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const { inboundEmails } = await import("../db/schema/index.js");
     const [email] = await db.select().from(inboundEmails)
       .where(and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id)));
-    if (!email) throw new ForbiddenError("Email not found");
+    if (!email) throw new (await import("../lib/errors.js")).NotFoundError("Email");
     // Mark as read
     if (!email.isRead) {
       await db.update(inboundEmails).set({ isRead: true }).where(eq(inboundEmails.id, email.id));
@@ -184,13 +184,15 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const { inboundEmails } = await import("../db/schema/index.js");
     const input = z.object({ isRead: z.boolean().optional(), isStarred: z.boolean().optional(), isArchived: z.boolean().optional() }).parse(request.body);
     const [updated] = await db.update(inboundEmails).set(input).where(and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id))).returning();
+    if (!updated) throw new (await import("../lib/errors.js")).NotFoundError("Email");
     return { data: updated };
   });
 
   app.delete<{ Params: { id: string } }>("/inbox/:id", async (request) => {
     const db = getDb();
     const { inboundEmails } = await import("../db/schema/index.js");
-    await db.delete(inboundEmails).where(and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id)));
+    const [deleted] = await db.delete(inboundEmails).where(and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id))).returning();
+    if (!deleted) throw new (await import("../lib/errors.js")).NotFoundError("Email");
     return { data: { success: true } };
   });
 
@@ -533,7 +535,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
   app.post("/broadcasts", async (request, reply) => {
     const input = z.object({
-      audience_id: z.string().min(1),
+      audience_id: z.string().uuid(),
       name: z.string().min(1),
       from: z.string().min(1),
       subject: z.string().min(1),

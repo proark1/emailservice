@@ -47,10 +47,11 @@ async function api(
   });
 
   let parsed: unknown;
+  const text = await res.text();
   try {
-    parsed = await res.json();
+    parsed = JSON.parse(text);
   } catch {
-    parsed = { message: await res.text() };
+    parsed = { message: text };
   }
 
   return { ok: res.ok, status: res.status, body: parsed };

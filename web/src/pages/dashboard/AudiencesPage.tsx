@@ -5,17 +5,16 @@ import { Badge, EmptyState, Table, PageHeader, Button, Input, Modal } from "../.
 interface Audience {
   id: string;
   name: string;
-  contactCount?: number;
-  createdAt: string;
+  created_at: string;
 }
 
 interface Contact {
   id: string;
   email: string;
-  firstName?: string;
-  lastName?: string;
+  first_name?: string;
+  last_name?: string;
   subscribed: boolean;
-  createdAt: string;
+  created_at: string;
 }
 
 export default function AudiencesPage() {
@@ -87,8 +86,7 @@ export default function AudiencesPage() {
                 </button>
               </div>
               <div className="flex items-center gap-3 text-[12px] text-gray-500 mb-4">
-                <span>{a.contactCount ?? 0} contacts</span>
-                <span>Created {new Date(a.createdAt).toLocaleDateString()}</span>
+                <span>Created {new Date(a.created_at).toLocaleDateString()}</span>
               </div>
               <div className="mt-auto">
                 <Button variant="secondary" onClick={() => setSelectedAudience(a)}>View Contacts</Button>
@@ -125,8 +123,8 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
     return contacts.filter(
       (c) =>
         c.email.toLowerCase().includes(q) ||
-        (c.firstName && c.firstName.toLowerCase().includes(q)) ||
-        (c.lastName && c.lastName.toLowerCase().includes(q))
+        (c.first_name && c.first_name.toLowerCase().includes(q)) ||
+        (c.last_name && c.last_name.toLowerCase().includes(q))
     );
   }, [contacts, search]);
 
@@ -143,7 +141,7 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
 
   const openEdit = (c: Contact) => {
     setEditContact(c);
-    setEditForm({ first_name: c.firstName || "", last_name: c.lastName || "", subscribed: c.subscribed });
+    setEditForm({ first_name: c.first_name || "", last_name: c.last_name || "", subscribed: c.subscribed });
     setEditError("");
   };
 
@@ -237,8 +235,8 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
           {filteredContacts.map((c) => (
             <tr key={c.id} className="hover:bg-gray-50">
               <td className="px-4 py-3 text-gray-900 text-[13px] font-medium">{c.email}</td>
-              <td className="px-4 py-3 text-gray-500 text-[13px]">{c.firstName || "—"}</td>
-              <td className="px-4 py-3 text-gray-500 text-[13px]">{c.lastName || "—"}</td>
+              <td className="px-4 py-3 text-gray-500 text-[13px]">{c.first_name || "—"}</td>
+              <td className="px-4 py-3 text-gray-500 text-[13px]">{c.last_name || "—"}</td>
               <td className="px-4 py-3">
                 <Badge variant={c.subscribed ? "success" : "default"}>{c.subscribed ? "Subscribed" : "Unsubscribed"}</Badge>
               </td>

@@ -5,25 +5,23 @@ import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Tex
 interface Broadcast {
   id: string;
   name: string;
-  audienceId: string;
-  audienceName?: string;
+  audience_id: string;
   from: string;
   subject: string;
   status: string;
-  totalCount?: number;
-  sentCount?: number;
-  failedCount?: number;
+  total_count?: number;
+  sent_count?: number;
+  failed_count?: number;
   html?: string;
   text?: string;
-  sentAt?: string;
-  completedAt?: string;
-  createdAt: string;
+  sent_at?: string;
+  completed_at?: string;
+  created_at: string;
 }
 
 interface Audience {
   id: string;
   name: string;
-  contactCount?: number;
 }
 
 interface Domain {
@@ -97,9 +95,9 @@ export default function BroadcastsPage() {
   };
 
   const progressPercent = (b: Broadcast) => {
-    const total = b.totalCount || 0;
+    const total = b.total_count || 0;
     if (total === 0) return 0;
-    return Math.round(((b.sentCount || 0) / total) * 100);
+    return Math.round(((b.sent_count || 0) / total) * 100);
   };
 
   const audienceNameById = (id: string) => {
@@ -150,7 +148,7 @@ export default function BroadcastsPage() {
             >
               <option value="">Select an audience</option>
               {audiences.map((a) => (
-                <option key={a.id} value={a.id}>{a.name} ({a.contactCount ?? 0} contacts)</option>
+                <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
           </div>
@@ -176,7 +174,7 @@ export default function BroadcastsPage() {
 
           <Button
             onClick={createBroadcast}
-            disabled={creating || !form.name.trim() || !form.audience_id || !form.from.trim() || !form.subject.trim()}
+            disabled={creating || !form.name.trim() || !form.audience_id || !form.from.trim() || !form.subject.trim() || (!form.html.trim() && !form.text.trim())}
           >
             {creating ? "Sending..." : "Send Broadcast"}
           </Button>
@@ -206,11 +204,11 @@ export default function BroadcastsPage() {
               </div>
               <div>
                 <p className="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Audience</p>
-                <p className="text-[13px] text-gray-900 mt-0.5">{detailBroadcast.audienceName || audienceNameById(detailBroadcast.audienceId)}</p>
+                <p className="text-[13px] text-gray-900 mt-0.5">{audienceNameById(detailBroadcast.audience_id)}</p>
               </div>
               <div>
                 <p className="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Created</p>
-                <p className="text-[13px] text-gray-900 mt-0.5">{new Date(detailBroadcast.createdAt).toLocaleString()}</p>
+                <p className="text-[13px] text-gray-900 mt-0.5">{new Date(detailBroadcast.created_at).toLocaleString()}</p>
               </div>
             </div>
 
@@ -219,15 +217,15 @@ export default function BroadcastsPage() {
               <p className="text-[12px] font-medium text-gray-500 uppercase tracking-wider mb-3">Delivery Stats</p>
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div className="text-center">
-                  <p className="text-lg font-bold text-gray-900">{detailBroadcast.totalCount ?? 0}</p>
+                  <p className="text-lg font-bold text-gray-900">{detailBroadcast.total_count ?? 0}</p>
                   <p className="text-[11px] text-gray-500">Total</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-bold text-emerald-600">{detailBroadcast.sentCount ?? 0}</p>
+                  <p className="text-lg font-bold text-emerald-600">{detailBroadcast.sent_count ?? 0}</p>
                   <p className="text-[11px] text-gray-500">Sent</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-bold text-red-600">{detailBroadcast.failedCount ?? 0}</p>
+                  <p className="text-lg font-bold text-red-600">{detailBroadcast.failed_count ?? 0}</p>
                   <p className="text-[11px] text-gray-500">Failed</p>
                 </div>
               </div>
@@ -242,10 +240,10 @@ export default function BroadcastsPage() {
             </div>
 
             {/* Timestamps */}
-            {(detailBroadcast.sentAt || detailBroadcast.completedAt) && (
+            {(detailBroadcast.sent_at || detailBroadcast.completed_at) && (
               <div className="flex gap-4 text-[12px] text-gray-500">
-                {detailBroadcast.sentAt && <span>Sent: {new Date(detailBroadcast.sentAt).toLocaleString()}</span>}
-                {detailBroadcast.completedAt && <span>Completed: {new Date(detailBroadcast.completedAt).toLocaleString()}</span>}
+                {detailBroadcast.sent_at && <span>Sent: {new Date(detailBroadcast.sent_at).toLocaleString()}</span>}
+                {detailBroadcast.completed_at && <span>Completed: {new Date(detailBroadcast.completed_at).toLocaleString()}</span>}
               </div>
             )}
 
@@ -264,10 +262,10 @@ export default function BroadcastsPage() {
           {broadcasts.map((b) => (
             <tr key={b.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => openDetail(b)}>
               <td className="px-4 py-3 text-gray-900 text-[13px] font-medium">{b.name}</td>
-              <td className="px-4 py-3 text-gray-500 text-[13px]">{b.audienceName || audienceNameById(b.audienceId)}</td>
+              <td className="px-4 py-3 text-gray-500 text-[13px]">{audienceNameById(b.audience_id)}</td>
               <td className="px-4 py-3"><Badge variant={statusVariant(b.status)}>{b.status}</Badge></td>
-              <td className="px-4 py-3 text-gray-500 text-[13px]">{b.sentCount ?? 0} / {b.totalCount ?? 0}</td>
-              <td className="px-4 py-3 text-gray-500 text-[13px]">{new Date(b.createdAt).toLocaleString()}</td>
+              <td className="px-4 py-3 text-gray-500 text-[13px]">{b.sent_count ?? 0} / {b.total_count ?? 0}</td>
+              <td className="px-4 py-3 text-gray-500 text-[13px]">{new Date(b.created_at).toLocaleString()}</td>
             </tr>
           ))}
         </Table>

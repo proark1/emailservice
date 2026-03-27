@@ -77,7 +77,6 @@ export async function createBroadcast(accountId: string, input: CreateBroadcastI
       status: "sending",
       totalCount: subscribedContacts.length,
       scheduledAt: input.scheduled_at ? new Date(input.scheduled_at) : null,
-      sentAt: new Date(),
     })
     .returning();
 
@@ -96,7 +95,6 @@ export async function createBroadcast(accountId: string, input: CreateBroadcastI
         reply_to: input.reply_to,
         headers: input.headers,
         tags: input.tags,
-        scheduled_at: input.scheduled_at,
       });
       sentCount++;
     } catch {
@@ -117,6 +115,7 @@ export async function createBroadcast(accountId: string, input: CreateBroadcastI
       sentCount,
       failedCount,
       status: finalStatus,
+      sentAt: new Date(),
       completedAt: new Date(),
       updatedAt: new Date(),
     })
