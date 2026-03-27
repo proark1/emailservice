@@ -37,6 +37,7 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
     htmlBody: data.html || null,
     messageId: data.messageId,
     inReplyTo: data.inReplyTo,
+    headers: (data.headers as Record<string, string>) || null,
   }).returning();
 
   // Fire webhook (best-effort — don't fail the job if dispatch errors)

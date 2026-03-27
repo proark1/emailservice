@@ -50,8 +50,8 @@ export async function getAccountAnalytics(
     total_complained: totalComplained,
     total_opened: totalOpened,
     total_clicked: totalClicked,
-    open_rate: totalSent > 0 ? totalOpened / totalSent : 0,
-    click_rate: totalSent > 0 ? totalClicked / totalSent : 0,
-    bounce_rate: totalSent > 0 ? totalBounced / totalSent : 0,
+    open_rate: totalSent > 0 ? Math.min(totalOpened / totalSent, 1) : 0,
+    click_rate: totalSent > 0 ? Math.min(totalClicked / totalSent, 1) : 0,
+    bounce_rate: totalSent > 0 ? Math.min(totalBounced / totalSent, 1) : 0,
   };
 }

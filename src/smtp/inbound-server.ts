@@ -62,6 +62,16 @@ export function createInboundServer(): SMTPServer {
             ? (Array.isArray(parsed.cc) ? parsed.cc : [parsed.cc]).flatMap((a) => a.value.map((v) => v.address)).filter(Boolean) as string[]
             : undefined;
 
+          // Extract useful headers from parsed email
+          const headerMap: Record<string, string> = {};
+          if (parsed.headers) {
+            for (const [key, value] of parsed.headers) {
+              if (typeof value === "string") {
+                headerMap[key] = value;
+              }
+            }
+          }
+
           const emailData = {
             accountId: domain.accountId,
             domainId: domain.id,
@@ -74,7 +84,7 @@ export function createInboundServer(): SMTPServer {
             html: typeof parsed.html === "string" ? parsed.html : "",
             messageId: parsed.messageId,
             inReplyTo: parsed.inReplyTo,
-            headers: {} as Record<string, unknown>,
+            headers: headerMap as Record<string, unknown>,
           };
 
           // Try queue first, fall back to direct DB insert
@@ -99,6 +109,7 @@ export function createInboundServer(): SMTPServer {
             htmlBody: emailData.html || null,
             messageId: emailData.messageId,
             inReplyTo: emailData.inReplyTo,
+            headers: (emailData.headers as Record<string, string>) || null,
           });
 
           callback();

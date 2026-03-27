@@ -147,14 +147,22 @@ export async function getEmail(accountId: string, emailId: string) {
   return email;
 }
 
-export async function listEmails(accountId: string, options: { limit: number; status?: string }) {
+export async function listEmails(accountId: string, options: { limit: number; cursor?: string; status?: string }) {
   const db = getDb();
+  const conditions = [eq(emails.accountId, accountId)];
+
+  // Cursor-based pagination: fetch items with id < cursor (older items)
+  if (options.cursor) {
+    const { lt } = await import("drizzle-orm");
+    conditions.push(lt(emails.id, options.cursor));
+  }
+
   return db
     .select()
     .from(emails)
-    .where(eq(emails.accountId, accountId))
+    .where(and(...conditions))
     .orderBy(desc(emails.createdAt))
-    .limit(options.limit);
+    .limit(options.limit + 1);
 }
 
 export async function cancelScheduledEmail(accountId: string, emailId: string) {
