@@ -56,7 +56,7 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
 }
 
 export function createInboundEmailWorker() {
-  return new Worker("email:inbound", processInboundEmail, {
+  return new Worker("email.inbound", processInboundEmail, {
     connection: getRedisConnection(),
     concurrency: 5,
   });

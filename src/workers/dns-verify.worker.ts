@@ -75,7 +75,7 @@ async function processDnsVerify(job: Job<DnsVerifyJobData>) {
 }
 
 export function createDnsVerifyWorker() {
-  return new Worker("dns:verify", processDnsVerify, {
+  return new Worker("dns.verify", processDnsVerify, {
     connection: getRedisConnection(),
     concurrency: 3,
   });

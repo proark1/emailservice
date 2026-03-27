@@ -67,9 +67,9 @@ systemctl enable postfix
 echo "==> Configuring Caddy..."
 mkdir -p /var/log/caddy
 cp "$SCRIPT_DIR/Caddyfile" /etc/caddy/Caddyfile
-sed -i "s/\$DOMAIN/$DOMAIN/g" /etc/caddy/Caddyfile
-# Note: replace {$DOMAIN} placeholder
+# Replace {$DOMAIN} placeholder first (before the generic $DOMAIN replacement)
 sed -i "s/{\\\$DOMAIN}/$DOMAIN/g" /etc/caddy/Caddyfile
+sed -i "s/\$DOMAIN/$DOMAIN/g" /etc/caddy/Caddyfile
 
 systemctl restart caddy
 systemctl enable caddy

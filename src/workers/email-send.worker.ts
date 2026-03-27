@@ -12,7 +12,7 @@ async function processEmailSend(job: Job<EmailSendJobData>) {
 }
 
 export function createEmailSendWorker() {
-  return new Worker("email:send", processEmailSend, {
+  return new Worker("email.send", processEmailSend, {
     connection: getRedisConnection(),
     concurrency: 10,
   });

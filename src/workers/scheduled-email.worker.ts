@@ -44,7 +44,7 @@ export function createScheduledEmailWorker() {
     console.error("[scheduled-email] Failed to register repeating job:", err);
   });
 
-  return new Worker("email:scheduled", processScheduledEmails, {
+  return new Worker("email.scheduled", processScheduledEmails, {
     connection: getRedisConnection(),
     concurrency: 1,
   });

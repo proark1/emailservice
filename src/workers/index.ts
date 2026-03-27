@@ -14,11 +14,11 @@ export function startAllWorkers() {
   ];
 
   console.log(`Started ${workers.length} workers:`);
-  console.log("  - email:send (concurrency: 10)");
-  console.log("  - dns:verify (concurrency: 3)");
-  console.log("  - webhook:deliver (concurrency: 5)");
-  console.log("  - email:inbound (concurrency: 5)");
-  console.log("  - email:scheduled (concurrency: 1)");
+  console.log("  - email.send (concurrency: 10)");
+  console.log("  - dns.verify (concurrency: 3)");
+  console.log("  - webhook.deliver (concurrency: 5)");
+  console.log("  - email.inbound (concurrency: 5)");
+  console.log("  - email.scheduled (concurrency: 1)");
 
   return workers;
 }

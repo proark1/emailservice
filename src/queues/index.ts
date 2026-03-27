@@ -36,11 +36,11 @@ function getQueue(name: string, opts?: Partial<QueueOptions>): Queue {
   return queue;
 }
 
-export function getEmailSendQueue() { return getQueue("email:send"); }
-export function getWebhookDeliverQueue() { return getQueue("webhook:deliver"); }
-export function getDnsVerifyQueue() { return getQueue("dns:verify"); }
-export function getScheduledEmailQueue() { return getQueue("email:scheduled"); }
-export function getInboundEmailQueue() { return getQueue("email:inbound"); }
+export function getEmailSendQueue() { return getQueue("email.send"); }
+export function getWebhookDeliverQueue() { return getQueue("webhook.deliver"); }
+export function getDnsVerifyQueue() { return getQueue("dns.verify"); }
+export function getScheduledEmailQueue() { return getQueue("email.scheduled"); }
+export function getInboundEmailQueue() { return getQueue("email.inbound"); }
 
 export async function closeQueues() {
   const closePromises = Array.from(_queues.values()).map((q) => q.close());
