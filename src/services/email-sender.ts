@@ -29,12 +29,14 @@ function createTransport() {
   // Production with a configured SMTP relay (recommended for cloud deployments
   // where outbound port 25 is blocked — set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS)
   if (config.SMTP_HOST) {
+    const isLocalRelay = !config.SMTP_USER;
     return nodemailer.createTransport({
       host: config.SMTP_HOST,
       port: config.SMTP_PORT || 587,
       secure: config.SMTP_SECURE === "true",
       auth: config.SMTP_USER ? { user: config.SMTP_USER, pass: config.SMTP_PASS } : undefined,
-      tls: { rejectUnauthorized: false },
+      tls: isLocalRelay ? false as any : { rejectUnauthorized: false },
+      ignoreTLS: isLocalRelay,
     });
   }
 
