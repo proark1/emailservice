@@ -100,7 +100,11 @@ export async function updateContact(
   if (input.metadata !== undefined) updateData.metadata = input.metadata;
   if (input.subscribed !== undefined) {
     updateData.subscribed = input.subscribed;
-    if (!input.subscribed) updateData.unsubscribedAt = new Date();
+    if (!input.subscribed) {
+      updateData.unsubscribedAt = new Date();
+    } else {
+      updateData.unsubscribedAt = null;
+    }
   }
 
   const [updated] = await db

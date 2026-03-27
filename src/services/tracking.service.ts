@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents } from "../db/schema/index.js";
+import { isRedisConfigured } from "../queues/index.js";
 
 // 1x1 transparent GIF
 const TRACKING_PIXEL = Buffer.from(
@@ -29,12 +30,23 @@ export async function recordOpen(emailId: string) {
   const [email] = await db.select().from(emails).where(eq(emails.id, emailId));
   if (!email) return;
 
-  await db.insert(emailEvents).values({
+  const [event] = await db.insert(emailEvents).values({
     emailId,
     accountId: email.accountId,
     type: "opened",
     data: { timestamp: new Date().toISOString() },
-  });
+  }).returning();
+
+  // Dispatch webhook for open event
+  if (isRedisConfigured()) {
+    try {
+      const { dispatchEvent } = await import("./webhook.service.js");
+      await dispatchEvent(email.accountId, "email.opened", event.id, {
+        email_id: emailId,
+        timestamp: new Date().toISOString(),
+      });
+    } catch {}
+  }
 }
 
 export async function recordClick(emailId: string, url: string) {
@@ -52,12 +64,24 @@ export async function recordClick(emailId: string, url: string) {
   const [email] = await db.select().from(emails).where(eq(emails.id, emailId));
   if (!email) return;
 
-  await db.insert(emailEvents).values({
+  const [event] = await db.insert(emailEvents).values({
     emailId,
     accountId: email.accountId,
     type: "clicked",
     data: { url, timestamp: new Date().toISOString() },
-  });
+  }).returning();
+
+  // Dispatch webhook for click event
+  if (isRedisConfigured()) {
+    try {
+      const { dispatchEvent } = await import("./webhook.service.js");
+      await dispatchEvent(email.accountId, "email.clicked", event.id, {
+        email_id: emailId,
+        url,
+        timestamp: new Date().toISOString(),
+      });
+    } catch {}
+  }
 }
 
 export function decodeClickTrackingData(encoded: string): { emailId: string; url: string } | null {

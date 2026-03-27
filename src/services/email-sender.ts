@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains } from "../db/schema/index.js";
 import { getDkimPrivateKey } from "./dkim.service.js";
@@ -54,12 +54,14 @@ function createTransport() {
 export async function sendEmailDirect(emailId: string, accountId: string): Promise<void> {
   const db = getDb();
 
-  const [email] = await db.select().from(emails).where(eq(emails.id, emailId));
-  if (!email) return;
-  if (email.status !== "queued" && email.status !== "sending") return;
+  // Atomically claim the email for sending — prevents duplicate sends from concurrent workers
+  const [email] = await db
+    .update(emails)
+    .set({ status: "sending", updatedAt: new Date() })
+    .where(and(eq(emails.id, emailId), inArray(emails.status, ["queued", "sending"])))
+    .returning();
 
-  // Mark as sending
-  await db.update(emails).set({ status: "sending", updatedAt: new Date() }).where(eq(emails.id, emailId));
+  if (!email) return;
 
   try {
     // Load domain for DKIM
