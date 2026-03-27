@@ -73,6 +73,12 @@ export function loadConfig(): Env {
       "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
     );
   }
+  if (parsed.NODE_ENV === "production" && !process.env.JWT_SECRET) {
+    throw new Error(
+      "JWT_SECRET environment variable must be set in production. " +
+      "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+    );
+  }
   _config = parsed;
   return _config;
 }

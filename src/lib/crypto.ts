@@ -72,7 +72,13 @@ export function decryptPrivateKey(encrypted: string, encryptionKey: string): str
   }
   const [ivB64, authTagB64, data] = parts;
   const iv = Buffer.from(ivB64, "base64");
+  if (iv.length !== 16) {
+    throw new Error("Invalid encrypted data: bad IV length");
+  }
   const authTag = Buffer.from(authTagB64, "base64");
+  if (authTag.length !== 16) {
+    throw new Error("Invalid encrypted data: bad auth tag length");
+  }
   const key = Buffer.from(encryptionKey, "hex");
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(authTag);
