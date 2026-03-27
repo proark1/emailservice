@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api, post, del } from "../../lib/api";
 import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Textarea, Modal } from "../../components/ui";
+import { RichEditor, wrapEmailHtml } from "../../components/RichEditor";
 
 interface Broadcast {
   id: string;
@@ -70,7 +71,7 @@ export default function BroadcastsPage() {
         from: form.from,
         subject: form.subject,
       };
-      if (form.html.trim()) body.html = form.html;
+      if (form.html.trim()) body.html = wrapEmailHtml(form.html);
       if (form.text.trim()) body.text = form.text;
       await post("/dashboard/broadcasts", body);
       setCreateOpen(false);
@@ -162,7 +163,10 @@ export default function BroadcastsPage() {
 
           <Input label="Subject line" placeholder="Your weekly update" value={form.subject} onChange={(e) => setForm({ ...form, subject: (e.target as HTMLInputElement).value })} />
 
-          <Textarea label="HTML body" placeholder="<h1>Hello {{first_name}}!</h1>" rows={5} value={form.html} onChange={(e) => setForm({ ...form, html: (e.target as HTMLTextAreaElement).value })} />
+          <div>
+            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">HTML body</label>
+            <RichEditor value={form.html} onChange={(html) => setForm({ ...form, html })} placeholder="Write your broadcast content..." minHeight="160px" />
+          </div>
 
           {!showText ? (
             <button onClick={() => setShowText(true)} className="text-[12px] text-violet-600 hover:text-violet-700 font-medium transition-colors">

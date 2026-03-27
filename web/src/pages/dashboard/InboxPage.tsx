@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api, post, patch, del } from "../../lib/api";
 import { Badge, Button, Input, Textarea } from "../../components/ui";
+import { RichEditor, wrapEmailHtml } from "../../components/RichEditor";
 
 type InboxEmail = {
   id: string;
@@ -233,7 +234,7 @@ export default function InboxPage() {
         from: replyForm.from,
         to: selected.fromAddress,
         subject: `Re: ${selected.subject}`,
-        html: replyForm.body,
+        html: wrapEmailHtml(replyForm.body),
       });
       setReplyOpen(false);
       setReplyForm({ from: "", body: "" });
@@ -593,15 +594,15 @@ export default function InboxPage() {
                     </select>
                   </div>
 
-                  <Textarea
-                    label="Message"
-                    placeholder="Type your reply..."
-                    rows={4}
-                    value={replyForm.body}
-                    onChange={(e) =>
-                      setReplyForm({ ...replyForm, body: (e.target as HTMLTextAreaElement).value })
-                    }
-                  />
+                  <div>
+                    <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Message</label>
+                    <RichEditor
+                      value={replyForm.body}
+                      onChange={(html) => setReplyForm({ ...replyForm, body: html })}
+                      placeholder="Type your reply..."
+                      minHeight="120px"
+                    />
+                  </div>
 
                   <div className="flex items-center gap-2">
                     <Button

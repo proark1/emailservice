@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { api, post } from "../../lib/api";
+import { RichEditor, wrapEmailHtml } from "../../components/RichEditor";
 import {
   Badge,
   statusVariant,
@@ -192,12 +193,13 @@ export default function EmailsPage() {
     setComposeError("");
     setSending(true);
     try {
+      const htmlContent = form.html ? wrapEmailHtml(form.html) : undefined;
       const body: Record<string, any> = {
         from: form.from,
         to: form.to,
         subject: form.subject,
-        html: form.html || undefined,
-        text: form.html ? undefined : " ",
+        html: htmlContent,
+        text: htmlContent ? undefined : " ",
       };
       if (form.cc.trim()) body.cc = form.cc;
       if (form.bcc.trim()) body.bcc = form.bcc;
@@ -550,13 +552,15 @@ export default function EmailsPage() {
             onChange={(e) => setForm({ ...form, subject: (e.target as HTMLInputElement).value })}
           />
 
-          <Textarea
-            label="HTML Body"
-            placeholder="<h1>Hello!</h1><p>Write your email content here...</p>"
-            rows={10}
-            value={form.html}
-            onChange={(e) => setForm({ ...form, html: (e.target as HTMLTextAreaElement).value })}
-          />
+          <div>
+            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Body</label>
+            <RichEditor
+              value={form.html}
+              onChange={(html) => setForm({ ...form, html })}
+              placeholder="Write your email content..."
+              minHeight="180px"
+            />
+          </div>
 
           <div>
             <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Schedule (optional)</label>
