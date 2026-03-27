@@ -500,6 +500,63 @@ server.tool(
   },
 );
 
+// ---- Broadcasts ------------------------------------------------------------
+
+server.tool(
+  "create_broadcast",
+  "Send an email to all subscribed contacts in an audience (bulk/campaign send).",
+  {
+    audience_id: z.string().describe("Audience UUID to send to"),
+    name: z.string().describe("Campaign/broadcast name"),
+    from: z.string().describe("Sender address, e.g. 'Name <email@domain.com>'"),
+    subject: z.string().describe("Email subject line"),
+    html: z.string().optional().describe("HTML body"),
+    text: z.string().optional().describe("Plain text body"),
+    reply_to: z.array(z.string()).optional().describe("Reply-to addresses"),
+    headers: z.record(z.string(), z.string()).optional().describe("Custom headers"),
+    tags: z.record(z.string(), z.string()).optional().describe("Tags for categorization"),
+    scheduled_at: z.string().optional().describe("ISO 8601 datetime to schedule (max 72h ahead)"),
+  },
+  async (params) => {
+    const res = await api("POST", "/v1/broadcasts", params);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "list_broadcasts",
+  "List all broadcasts/campaigns sent from this account.",
+  {},
+  async () => {
+    const res = await api("GET", "/v1/broadcasts");
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "get_broadcast",
+  "Get details and delivery stats for a specific broadcast.",
+  {
+    broadcast_id: z.string().describe("Broadcast UUID"),
+  },
+  async ({ broadcast_id }) => {
+    const res = await api("GET", `/v1/broadcasts/${broadcast_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "delete_broadcast",
+  "Delete a broadcast (only if not currently sending).",
+  {
+    broadcast_id: z.string().describe("Broadcast UUID to delete"),
+  },
+  async ({ broadcast_id }) => {
+    const res = await api("DELETE", `/v1/broadcasts/${broadcast_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
 // ---- Analytics -------------------------------------------------------------
 
 server.tool(

@@ -11,3 +11,4 @@ export { contacts } from "./contacts.js";
 export { suppressions } from "./suppressions.js";
 export { idempotencyKeys } from "./idempotency-keys.js";
 export { inboundEmails } from "./inbound-emails.js";
+export { broadcasts } from "./broadcasts.js";

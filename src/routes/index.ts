@@ -6,6 +6,7 @@ import emailRoutes from "./emails.js";
 import batchRoutes from "./batch.js";
 import webhookRoutes from "./webhooks.js";
 import audienceRoutes from "./audiences.js";
+import broadcastRoutes from "./broadcasts.js";
 import trackingRoutes from "./tracking.js";
 import authRoutes from "./auth.js";
 import adminRoutes from "./admin.js";
@@ -49,6 +50,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(batchRoutes, { prefix: "/v1/emails/batch" });
   await app.register(webhookRoutes, { prefix: "/v1/webhooks" });
   await app.register(audienceRoutes, { prefix: "/v1/audiences" });
+  await app.register(broadcastRoutes, { prefix: "/v1/broadcasts" });
 
   // Suppression routes
   await app.register(async (suppApp) => {

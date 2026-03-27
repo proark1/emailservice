@@ -1,13 +1,15 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { eq, count, desc, and, isNull } from "drizzle-orm";
+import { eq, count, desc, and, isNull, or, ilike, sql } from "drizzle-orm";
 import * as authService from "../services/auth.service.js";
 import * as domainService from "../services/domain.service.js";
 import * as apiKeyService from "../services/api-key.service.js";
 import * as webhookService from "../services/webhook.service.js";
 import * as emailService from "../services/email.service.js";
+import * as audienceService from "../services/audience.service.js";
+import * as broadcastService from "../services/broadcast.service.js";
 import { getDb } from "../db/index.js";
-import { emails, domains, apiKeys, webhooks, audiences } from "../db/schema/index.js";
+import { emails, domains, apiKeys, webhooks, audiences, inboundEmails } from "../db/schema/index.js";
 import { ForbiddenError } from "../lib/errors.js";
 import { getDnsVerifyQueue } from "../queues/index.js";
 import { getConfig } from "../config/index.js";
@@ -42,7 +44,46 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   // --- Emails ---
   app.get("/emails", async (request) => {
     const db = getDb();
-    return { data: await db.select().from(emails).where(eq(emails.accountId, request.account.id)).orderBy(desc(emails.createdAt)).limit(50) };
+    const query = z.object({
+      search: z.string().optional(),
+      status: z.string().optional(),
+      page: z.coerce.number().int().min(1).optional().default(1),
+      limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+    }).parse(request.query);
+
+    const conditions: any[] = [eq(emails.accountId, request.account.id)];
+
+    if (query.search) {
+      const pattern = `%${query.search}%`;
+      conditions.push(
+        or(
+          ilike(emails.fromAddress, pattern),
+          ilike(emails.subject, pattern),
+          sql`${emails.toAddresses}::text ILIKE ${pattern}`,
+        ),
+      );
+    }
+
+    if (query.status) {
+      conditions.push(eq(emails.status, query.status as any));
+    }
+
+    const whereClause = and(...conditions);
+    const offset = (query.page - 1) * query.limit;
+
+    const [totalResult] = await db.select({ count: count() }).from(emails).where(whereClause);
+    const total = Number(totalResult.count);
+    const data = await db.select().from(emails).where(whereClause).orderBy(desc(emails.createdAt)).limit(query.limit).offset(offset);
+
+    return {
+      data,
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total,
+        pages: Math.ceil(total / query.limit),
+      },
+    };
   });
 
   app.post("/emails", async (request, reply) => {
@@ -79,12 +120,50 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   // --- Inbox (inbound emails) ---
   app.get("/inbox", async (request) => {
     const db = getDb();
-    const { inboundEmails } = await import("../db/schema/index.js");
-    const list = await db.select().from(inboundEmails)
-      .where(eq(inboundEmails.accountId, request.account.id))
-      .orderBy(desc(inboundEmails.createdAt))
-      .limit(100);
-    return { data: list };
+    const query = z.object({
+      search: z.string().optional(),
+      filter: z.enum(["all", "unread", "starred", "archived"]).optional().default("all"),
+      page: z.coerce.number().int().min(1).optional().default(1),
+      limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+    }).parse(request.query);
+
+    const conditions: any[] = [eq(inboundEmails.accountId, request.account.id)];
+
+    if (query.search) {
+      const pattern = `%${query.search}%`;
+      conditions.push(
+        or(
+          ilike(inboundEmails.fromAddress, pattern),
+          ilike(inboundEmails.fromName, pattern),
+          ilike(inboundEmails.subject, pattern),
+        ),
+      );
+    }
+
+    if (query.filter === "unread") {
+      conditions.push(eq(inboundEmails.isRead, false));
+    } else if (query.filter === "starred") {
+      conditions.push(eq(inboundEmails.isStarred, true));
+    } else if (query.filter === "archived") {
+      conditions.push(eq(inboundEmails.isArchived, true));
+    }
+
+    const whereClause = and(...conditions);
+    const offset = (query.page - 1) * query.limit;
+
+    const [totalResult] = await db.select({ count: count() }).from(inboundEmails).where(whereClause);
+    const total = Number(totalResult.count);
+    const list = await db.select().from(inboundEmails).where(whereClause).orderBy(desc(inboundEmails.createdAt)).limit(query.limit).offset(offset);
+
+    return {
+      data: list,
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total,
+        pages: Math.ceil(total / query.limit),
+      },
+    };
   });
 
   app.get<{ Params: { id: string } }>("/inbox/:id", async (request) => {
@@ -394,6 +473,88 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>("/webhooks/:id", async (request) => {
     const deleted = await webhookService.deleteWebhook(request.account.id, request.params.id);
     return { data: webhookService.formatWebhookResponse(deleted) };
+  });
+
+  // --- Audiences ---
+  app.get("/audiences", async (request) => {
+    const list = await audienceService.listAudiences(request.account.id);
+    return { data: list.map(audienceService.formatAudienceResponse) };
+  });
+
+  app.post("/audiences", async (request, reply) => {
+    const input = z.object({ name: z.string().min(1) }).parse(request.body);
+    const audience = await audienceService.createAudience(request.account.id, input);
+    return reply.status(201).send({ data: audienceService.formatAudienceResponse(audience) });
+  });
+
+  app.delete<{ Params: { id: string } }>("/audiences/:id", async (request) => {
+    const deleted = await audienceService.deleteAudience(request.account.id, request.params.id);
+    return { data: audienceService.formatAudienceResponse(deleted) };
+  });
+
+  app.get<{ Params: { id: string } }>("/audiences/:id/contacts", async (request) => {
+    const list = await audienceService.listContacts(request.account.id, request.params.id);
+    return { data: list.map(audienceService.formatContactResponse) };
+  });
+
+  app.post<{ Params: { id: string } }>("/audiences/:id/contacts", async (request, reply) => {
+    const input = z.object({
+      email: z.string().email(),
+      first_name: z.string().optional(),
+      last_name: z.string().optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+      subscribed: z.boolean().optional().default(true),
+    }).parse(request.body);
+    const contact = await audienceService.createContact(request.account.id, request.params.id, input);
+    return reply.status(201).send({ data: audienceService.formatContactResponse(contact) });
+  });
+
+  app.patch<{ Params: { id: string; contactId: string } }>("/audiences/:id/contacts/:contactId", async (request) => {
+    const input = z.object({
+      first_name: z.string().optional(),
+      last_name: z.string().optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+      subscribed: z.boolean().optional(),
+    }).parse(request.body);
+    const updated = await audienceService.updateContact(request.account.id, request.params.id, request.params.contactId, input);
+    return { data: audienceService.formatContactResponse(updated) };
+  });
+
+  app.delete<{ Params: { id: string; contactId: string } }>("/audiences/:id/contacts/:contactId", async (request) => {
+    const deleted = await audienceService.deleteContact(request.account.id, request.params.id, request.params.contactId);
+    return { data: audienceService.formatContactResponse(deleted) };
+  });
+
+  // --- Broadcasts ---
+  app.get("/broadcasts", async (request) => {
+    const list = await broadcastService.listBroadcasts(request.account.id);
+    return { data: list.map(broadcastService.formatBroadcastResponse) };
+  });
+
+  app.post("/broadcasts", async (request, reply) => {
+    const input = z.object({
+      audience_id: z.string().min(1),
+      name: z.string().min(1),
+      from: z.string().min(1),
+      subject: z.string().min(1),
+      html: z.string().optional(),
+      text: z.string().optional(),
+    }).refine((d) => d.html || d.text, {
+      message: "At least one of html or text is required",
+      path: ["html"],
+    }).parse(request.body);
+    const broadcast = await broadcastService.createBroadcast(request.account.id, input);
+    return reply.status(201).send({ data: broadcastService.formatBroadcastResponse(broadcast) });
+  });
+
+  app.get<{ Params: { id: string } }>("/broadcasts/:id", async (request) => {
+    const broadcast = await broadcastService.getBroadcast(request.account.id, request.params.id);
+    return { data: broadcastService.formatBroadcastResponse(broadcast) };
+  });
+
+  app.delete<{ Params: { id: string } }>("/broadcasts/:id", async (request) => {
+    const deleted = await broadcastService.deleteBroadcast(request.account.id, request.params.id);
+    return { data: broadcastService.formatBroadcastResponse(deleted) };
   });
 
   // --- API Docs metadata ---
