@@ -284,7 +284,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         const hints: Record<number, string> = {
           401: "Invalid API key or secret. Make sure you're using Production keys (not OTE/test keys) from developer.godaddy.com/keys.",
           403: "Access denied — the domain may be in a different GoDaddy account, or your API key needs 'Domain - Edit DNS' permission.",
-          404: "Domain not found. Is onepizza.io registered in the same GoDaddy account that issued this API key?",
+          404: `Domain not found. Is ${domain.name} registered in the same GoDaddy account that issued this API key?`,
         };
         return { data: { success: false, status: res.status, error: msg, hint: hints[res.status] || "" } };
       }
@@ -385,7 +385,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.post("/webhooks", async (request, reply) => {
     const input = z.object({
       url: z.string().url().refine((u) => u.startsWith("http://") || u.startsWith("https://"), { message: "Webhook URL must use http:// or https://" }),
-      events: z.array(z.string()).min(1),
+      events: z.array(z.enum(WEBHOOK_EVENT_TYPES)).min(1),
     }).parse(request.body);
     const webhook = await webhookService.createWebhook(request.account.id, { url: input.url, events: input.events as any });
     return reply.status(201).send({ data: webhookService.formatWebhookResponse(webhook) });

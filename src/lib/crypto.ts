@@ -66,7 +66,11 @@ export function encryptPrivateKey(privateKey: string, encryptionKey: string): st
 }
 
 export function decryptPrivateKey(encrypted: string, encryptionKey: string): string {
-  const [ivB64, authTagB64, data] = encrypted.split(":");
+  const parts = encrypted.split(":");
+  if (parts.length !== 3) {
+    throw new Error("Invalid encrypted data format");
+  }
+  const [ivB64, authTagB64, data] = parts;
   const iv = Buffer.from(ivB64, "base64");
   const authTag = Buffer.from(authTagB64, "base64");
   const key = Buffer.from(encryptionKey, "hex");

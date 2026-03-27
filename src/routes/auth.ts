@@ -12,7 +12,7 @@ export default async function authRoutes(app: FastifyInstance) {
     }).parse(request.body);
 
     const account = await authService.register(body.name, body.email, body.password);
-    const token = app.jwt.sign({ id: account.id, role: account.role });
+    const token = app.jwt.sign({ id: account.id, role: account.role }, { expiresIn: "7d" });
 
     return reply
       .setCookie("token", token, {
@@ -41,7 +41,7 @@ export default async function authRoutes(app: FastifyInstance) {
     }).parse(request.body);
 
     const account = await authService.login(body.email, body.password);
-    const token = app.jwt.sign({ id: account.id, role: account.role });
+    const token = app.jwt.sign({ id: account.id, role: account.role }, { expiresIn: "7d" });
 
     return reply
       .setCookie("token", token, {
