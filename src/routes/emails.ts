@@ -40,6 +40,6 @@ export default async function emailRoutes(app: FastifyInstance) {
   // DELETE /v1/emails/:id (cancel scheduled)
   app.delete<{ Params: { id: string } }>("/:id", async (request) => {
     const cancelled = await emailService.cancelScheduledEmail(request.account.id, request.params.id);
-    return { data: emailService.formatEmailResponse(cancelled!) };
+    return { data: emailService.formatEmailResponse(cancelled) };
   });
 }

@@ -190,6 +190,8 @@ export async function cancelScheduledEmail(accountId: string, emailId: string) {
     .where(and(eq(emails.id, emailId), eq(emails.accountId, accountId)))
     .returning();
 
+  if (!updated) throw new NotFoundError("Email");
+
   await db.insert(emailEvents).values({
     emailId: email.id,
     accountId,

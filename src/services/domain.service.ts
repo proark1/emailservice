@@ -81,7 +81,8 @@ export async function deleteDomain(accountId: string, domainId: string) {
     .where(and(eq(domains.id, domainId), eq(domains.accountId, accountId)))
     .returning();
 
-  return deleted!;
+  if (!deleted) throw new NotFoundError("Domain");
+  return deleted;
 }
 
 export async function updateDomainVerification(
