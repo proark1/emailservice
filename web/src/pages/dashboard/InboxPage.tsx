@@ -351,7 +351,7 @@ export default function InboxPage() {
               </svg>
               <p className="text-[13px] text-gray-500">{search ? "No emails match your search" : "No emails yet"}</p>
               <p className="text-[12px] text-gray-400 mt-1">
-                {search ? "Try a different search term" : "Emails sent to your verified domains will appear here"}
+                {search ? "Try a different search term" : "Emails sent to your verified domains will appear here. After domain verification, receiving is active within 5-10 minutes."}
               </p>
             </div>
           ) : (

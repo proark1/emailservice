@@ -264,7 +264,7 @@ export default function EmailsPage() {
             <div>
               <h3 className="text-[14px] font-semibold text-amber-600">Connect a domain to start sending and receiving</h3>
               <p className="text-[13px] text-gray-500 mt-1 leading-relaxed">
-                Add a domain and complete DNS verification (SPF, DKIM, DMARC for sending + MX for receiving). Emails sent to your domain will appear in your Inbox.
+                Add a domain and complete DNS verification (SPF, DKIM, DMARC for sending + MX for receiving). After verification, it takes about 5-10 minutes for the email service to become fully active.
               </p>
               <Link
                 to="/dashboard/domains"

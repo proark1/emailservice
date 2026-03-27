@@ -196,9 +196,9 @@ function DomainsPage() {
               ))}
             </div>
             <p className="text-[11px] text-gray-400 mt-1.5">
-              {mode === "both" && "DNS records for SPF, DKIM, DMARC (sending) + MX (receiving) will be required."}
-              {mode === "send" && "Only SPF, DKIM, DMARC records required. No MX needed."}
-              {mode === "receive" && "Only MX record required. Emails to this domain will appear in your inbox."}
+              {mode === "both" && "DNS records for SPF, DKIM, DMARC (sending) + MX (receiving) will be required. After verification, the service is fully active within 5-10 minutes."}
+              {mode === "send" && "Only SPF, DKIM, DMARC records required. No MX needed. Sending is active within 5-10 minutes after verification."}
+              {mode === "receive" && "Only MX record required. Receiving is active within 5-10 minutes after verification."}
             </p>
           </div>
           <Button onClick={add} disabled={loading}>{loading ? "Adding..." : "Add Domain"}</Button>
@@ -335,7 +335,7 @@ function DomainsPage() {
                 ))}
                 {setupResult.success && (
                   <div className="mt-2 space-y-2">
-                    <p className="text-[12px] text-emerald-600">DNS records configured successfully.</p>
+                    <p className="text-[12px] text-emerald-600">DNS records configured successfully. After verification, it takes about 5-10 minutes for sending and receiving to become fully active.</p>
                     <Button onClick={() => verify(setupDomain.id)} disabled={verifying}>{verifying ? "Verifying..." : "Verify DNS Now"}</Button>
                   </div>
                 )}
@@ -360,6 +360,9 @@ function DomainsPage() {
               <div className={`mt-3 p-3 rounded-xl border text-[13px] ${verifyResult.status === "verified" ? "bg-emerald-50 border-emerald-200 text-emerald-600" : "bg-amber-50 border-amber-200 text-amber-600"}`}>
                 <p className="font-medium mb-1">{verifyResult.status === "verified" ? "Domain verified!" : "Verification results:"}</p>
                 <p>{verifyResult.message}</p>
+                {verifyResult.status === "verified" && (
+                  <p className="text-[12px] mt-1 opacity-80">Sending and receiving will be fully active within 5-10 minutes.</p>
+                )}
                 {verifyResult.status !== "verified" && (
                   <div className="flex gap-3 mt-2 text-[12px]">
                     <span>SPF: {verifyResult.spf ? "OK" : "pending"}</span>
