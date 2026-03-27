@@ -1,9 +1,28 @@
 import { SMTPServer } from "smtp-server";
 import { simpleParser } from "mailparser";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { domains, inboundEmails } from "../db/schema/index.js";
 import { isRedisConfigured, getInboundEmailQueue } from "../queues/index.js";
+
+/**
+ * Check that a domain is verified and configured for receiving.
+ * Returns the domain row if valid, null otherwise.
+ */
+async function lookupReceiveDomain(recipientDomain: string) {
+  const db = getDb();
+  const [domain] = await db
+    .select()
+    .from(domains)
+    .where(
+      and(
+        eq(domains.name, recipientDomain),
+        eq(domains.status, "verified"),
+        inArray(domains.mode, ["receive", "both"]),
+      ),
+    );
+  return domain ?? null;
+}
 
 export function createInboundServer(): SMTPServer {
   const server = new SMTPServer({
@@ -13,16 +32,17 @@ export function createInboundServer(): SMTPServer {
 
     onRcptTo(address, session, callback) {
       const recipientDomain = address.address.split("@")[1];
-      const db = getDb();
+      if (!recipientDomain) {
+        callback(new Error("Invalid recipient"));
+        return;
+      }
 
-      db.select()
-        .from(domains)
-        .where(eq(domains.name, recipientDomain))
-        .then((results) => {
-          if (results.length > 0) {
+      lookupReceiveDomain(recipientDomain)
+        .then((domain) => {
+          if (domain) {
             callback();
           } else {
-            callback(new Error("Recipient domain not found"));
+            callback(new Error("Recipient domain not found or not configured for receiving"));
           }
         })
         .catch((err) => callback(err));
@@ -36,25 +56,6 @@ export function createInboundServer(): SMTPServer {
           const raw = Buffer.concat(chunks).toString("utf8");
           const parsed = await simpleParser(raw);
 
-          const toAddress = session.envelope.rcptTo[0]?.address;
-          const recipientDomain = toAddress?.split("@")[1];
-
-          if (!recipientDomain || !toAddress) {
-            callback(new Error("No recipient"));
-            return;
-          }
-
-          const db = getDb();
-          const [domain] = await db
-            .select()
-            .from(domains)
-            .where(eq(domains.name, recipientDomain));
-
-          if (!domain) {
-            callback(new Error("Domain not found"));
-            return;
-          }
-
           const mailFrom = session.envelope.mailFrom;
           const fromAddress = parsed.from?.value?.[0]?.address || (mailFrom && typeof mailFrom === "object" ? mailFrom.address : "") || "unknown";
           const fromName = parsed.from?.value?.[0]?.name || undefined;
@@ -62,7 +63,7 @@ export function createInboundServer(): SMTPServer {
             ? (Array.isArray(parsed.cc) ? parsed.cc : [parsed.cc]).flatMap((a) => a.value.map((v) => v.address)).filter(Boolean) as string[]
             : undefined;
 
-          // Extract useful headers from parsed email
+          // Extract useful headers
           const headerMap: Record<string, string> = {};
           if (parsed.headers) {
             for (const [key, value] of parsed.headers) {
@@ -72,45 +73,55 @@ export function createInboundServer(): SMTPServer {
             }
           }
 
-          const emailData = {
-            accountId: domain.accountId,
-            domainId: domain.id,
-            from: fromAddress,
-            fromName,
-            to: toAddress,
-            cc,
-            subject: parsed.subject || "(no subject)",
-            text: parsed.text || "",
-            html: typeof parsed.html === "string" ? parsed.html : "",
-            messageId: parsed.messageId,
-            inReplyTo: parsed.inReplyTo,
-            headers: headerMap as Record<string, unknown>,
-          };
+          // Process ALL recipients, not just the first one
+          for (const rcpt of session.envelope.rcptTo) {
+            const toAddress = rcpt.address;
+            const recipientDomain = toAddress?.split("@")[1];
+            if (!recipientDomain || !toAddress) continue;
 
-          // Try queue first, fall back to direct DB insert
-          if (isRedisConfigured()) {
-            try {
-              await getInboundEmailQueue().add("inbound", emailData);
-              callback();
-              return;
-            } catch {}
+            const domain = await lookupReceiveDomain(recipientDomain);
+            if (!domain) continue;
+
+            const emailData = {
+              accountId: domain.accountId,
+              domainId: domain.id,
+              from: fromAddress,
+              fromName,
+              to: toAddress,
+              cc,
+              subject: parsed.subject || "(no subject)",
+              text: parsed.text || "",
+              html: typeof parsed.html === "string" ? parsed.html : "",
+              messageId: parsed.messageId,
+              inReplyTo: parsed.inReplyTo,
+              headers: headerMap as Record<string, unknown>,
+            };
+
+            // Try queue first, fall back to direct DB insert
+            if (isRedisConfigured()) {
+              try {
+                await getInboundEmailQueue().add("inbound", emailData);
+                continue;
+              } catch {}
+            }
+
+            // Direct insert (no Redis)
+            const db = getDb();
+            await db.insert(inboundEmails).values({
+              accountId: emailData.accountId,
+              domainId: emailData.domainId,
+              fromAddress: emailData.from,
+              fromName: emailData.fromName,
+              toAddress: emailData.to,
+              ccAddresses: emailData.cc || null,
+              subject: emailData.subject,
+              textBody: emailData.text || null,
+              htmlBody: emailData.html || null,
+              messageId: emailData.messageId,
+              inReplyTo: emailData.inReplyTo,
+              headers: (emailData.headers as Record<string, string>) || null,
+            });
           }
-
-          // Direct insert (no Redis)
-          await db.insert(inboundEmails).values({
-            accountId: emailData.accountId,
-            domainId: emailData.domainId,
-            fromAddress: emailData.from,
-            fromName: emailData.fromName,
-            toAddress: emailData.to,
-            ccAddresses: emailData.cc || null,
-            subject: emailData.subject,
-            textBody: emailData.text || null,
-            htmlBody: emailData.html || null,
-            messageId: emailData.messageId,
-            inReplyTo: emailData.inReplyTo,
-            headers: (emailData.headers as Record<string, string>) || null,
-          });
 
           callback();
         } catch (err) {

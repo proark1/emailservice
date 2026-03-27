@@ -203,8 +203,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   });
 
   app.post("/domains", async (request, reply) => {
-    const { name } = z.object({ name: z.string().min(1) }).parse(request.body);
-    const domain = await domainService.createDomain(request.account.id, { name });
+    const { name, mode } = z.object({ name: z.string().min(1), mode: z.enum(["send", "receive", "both"]).optional().default("both") }).parse(request.body);
+    const domain = await domainService.createDomain(request.account.id, { name, mode });
     try { await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() }, { delay: 60_000 }); } catch {}
     return reply.status(201).send({ data: domainService.formatDomainResponse(domain) });
   });

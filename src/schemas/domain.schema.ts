@@ -5,6 +5,7 @@ export const createDomainSchema = z.object({
     /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/,
     "Invalid domain name",
   ),
+  mode: z.enum(["send", "receive", "both"]).optional().default("both"),
 });
 
 export const domainResponseSchema = z.object({

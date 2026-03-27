@@ -92,10 +92,18 @@ export async function verifyDnsRecords(
     result.dmarcVerified = flat.some((r) => r.startsWith("v=DMARC1"));
   } catch {}
 
-  // Check MX
+  // Check MX — verify at least one MX record points to our mail host
   try {
     const mxRecords = await dns.resolveMx(domain);
-    result.mxVerified = mxRecords.length > 0;
+    const mailHost = getMailHost().toLowerCase();
+    if (mailHost && mailHost !== "your-server-hostname.com") {
+      result.mxVerified = mxRecords.some(
+        (mx) => mx.exchange.toLowerCase().replace(/\.$/, "") === mailHost,
+      );
+    } else {
+      // No mail host configured — accept any MX record
+      result.mxVerified = mxRecords.length > 0;
+    }
   } catch {}
 
   return result;

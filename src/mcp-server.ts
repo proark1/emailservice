@@ -168,9 +168,10 @@ server.tool(
 
 server.tool(
   "create_domain",
-  "Register a new sending domain. Returns DNS records (SPF, DKIM, DMARC, MX) to configure.",
+  "Register a domain for sending and/or receiving email. Returns DNS records needed based on mode.",
   {
     name: z.string().describe("Domain name, e.g. 'example.com'"),
+    mode: z.enum(["send", "receive", "both"]).optional().describe("Domain mode: 'send' (outbound only), 'receive' (inbound only), or 'both' (default)"),
   },
   async (params) => {
     const res = await api("POST", "/v1/domains", params);

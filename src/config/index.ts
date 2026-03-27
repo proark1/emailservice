@@ -1,7 +1,7 @@
-import crypto from "node:crypto";
 import { z } from "zod";
 
-const DEFAULT_ENCRYPTION_KEY = crypto.randomBytes(32).toString("hex");
+// Stable default for development only — production MUST set ENCRYPTION_KEY
+const DEFAULT_ENCRYPTION_KEY = "0".repeat(64);
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1).optional(),

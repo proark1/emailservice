@@ -44,7 +44,14 @@ async function processDnsVerify(job: Job<DnsVerifyJobData>) {
     domain.dkimDnsValue || "",
   );
 
-  const allVerified = result.spfVerified && result.dkimVerified && result.dmarcVerified;
+  // Determine what needs to pass based on domain mode
+  const mode = (domain as any).mode || "both";
+  const needsSend = mode === "send" || mode === "both";
+  const needsReceive = mode === "receive" || mode === "both";
+
+  const sendVerified = !needsSend || (result.spfVerified && result.dkimVerified && result.dmarcVerified);
+  const receiveVerified = !needsReceive || result.mxVerified;
+  const allVerified = sendVerified && receiveVerified;
   const newStatus = allVerified ? "verified" as const : "pending" as const;
 
   await updateDomainVerification(domainId, {

@@ -22,18 +22,22 @@ export async function createDomain(accountId: string, input: CreateDomainInput) 
   const dkim = generateDkimForDomain();
   const dnsRecords = generateDnsRecords(input.name);
 
+  const mode = input.mode || "both";
+  const needsSend = mode === "send" || mode === "both";
+
   const [domain] = await db
     .insert(domains)
     .values({
       accountId,
       name: input.name,
+      mode,
       status: "pending",
-      spfRecord: dnsRecords.spfRecord,
-      dkimSelector: dkim.selector,
-      dkimPublicKey: dkim.publicKey,
-      dkimPrivateKey: dkim.privateKey,
-      dkimDnsValue: dkim.dnsValue,
-      dmarcRecord: dnsRecords.dmarcRecord,
+      spfRecord: needsSend ? dnsRecords.spfRecord : null,
+      dkimSelector: needsSend ? dkim.selector : null,
+      dkimPublicKey: needsSend ? dkim.publicKey : null,
+      dkimPrivateKey: needsSend ? dkim.privateKey : null,
+      dkimDnsValue: needsSend ? dkim.dnsValue : null,
+      dmarcRecord: needsSend ? dnsRecords.dmarcRecord : null,
     })
     .returning();
 
@@ -107,19 +111,19 @@ export async function updateDomainVerification(
 export function formatDomainResponse(domain: typeof domains.$inferSelect) {
   const mxHost = getMailHost();
   const isHostConfigured = mxHost !== "your-server-hostname.com";
+  const mode = domain.mode || "both";
+  const needsSend = mode === "send" || mode === "both";
+  const needsReceive = mode === "receive" || mode === "both";
 
   // Build SPF value — regenerate with current config if the stored one is stale
   const currentSpf = domain.spfRecord && !domain.spfRecord.includes("localhost")
     ? domain.spfRecord
     : (isHostConfigured ? `v=spf1 a mx include:${mxHost} ~all` : `v=spf1 a mx ~all`);
 
-  return {
-    id: domain.id,
-    name: domain.name,
-    status: domain.status,
-    mailHost: mxHost,
-    mailHostConfigured: isHostConfigured,
-    records: [
+  const records: Array<{ type: string; name: string; value: string; purpose: string; verified: boolean }> = [];
+
+  if (needsSend) {
+    records.push(
       {
         type: "TXT",
         name: domain.name,
@@ -129,7 +133,7 @@ export function formatDomainResponse(domain: typeof domains.$inferSelect) {
       },
       {
         type: "TXT",
-        name: `${domain.dkimSelector}._domainkey.${domain.name}`,
+        name: `${domain.dkimSelector || "es1"}._domainkey.${domain.name}`,
         value: domain.dkimDnsValue || "",
         purpose: "DKIM (Sending)",
         verified: domain.dkimVerified,
@@ -141,14 +145,27 @@ export function formatDomainResponse(domain: typeof domains.$inferSelect) {
         purpose: "DMARC (Sending)",
         verified: domain.dmarcVerified,
       },
-      {
-        type: "MX",
-        name: domain.name,
-        value: `10 ${mxHost}`,
-        purpose: "MX (Receiving)",
-        verified: domain.mxVerified,
-      },
-    ],
+    );
+  }
+
+  if (needsReceive) {
+    records.push({
+      type: "MX",
+      name: domain.name,
+      value: `10 ${mxHost}`,
+      purpose: "MX (Receiving)",
+      verified: domain.mxVerified,
+    });
+  }
+
+  return {
+    id: domain.id,
+    name: domain.name,
+    mode,
+    status: domain.status,
+    mailHost: mxHost,
+    mailHostConfigured: isHostConfigured,
+    records,
     provider: (domain as any).dnsProvider || null,
     providerConfigured: !!(domain as any).dnsProviderKey,
     created_at: domain.createdAt.toISOString(),

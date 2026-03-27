@@ -47,6 +47,12 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
     throw new ValidationError(`Domain ${fromDomain} is not verified yet`);
   }
 
+  // Check domain is configured for sending
+  const mode = (domain as any).mode || "both";
+  if (mode === "receive") {
+    throw new ValidationError(`Domain ${fromDomain} is configured for receiving only. Update domain mode to "send" or "both" to send emails.`);
+  }
+
   // Check suppression list — only query addresses actually in the recipient list
   const allRecipients = [...input.to, ...(input.cc || []), ...(input.bcc || [])].map((r) => r.toLowerCase());
   const suppressedRows = await db

@@ -1,6 +1,9 @@
 import { pgTable, uuid, varchar, timestamp, boolean, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { accounts } from "./accounts.js";
 
+export const domainModeEnum = ["send", "receive", "both"] as const;
+export type DomainMode = (typeof domainModeEnum)[number];
+
 export const domainStatusEnum = ["pending", "verified", "failed"] as const;
 export type DomainStatus = (typeof domainStatusEnum)[number];
 
@@ -8,6 +11,7 @@ export const domains = pgTable("domains", {
   id: uuid("id").primaryKey().defaultRandom(),
   accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
+  mode: varchar("mode", { length: 10 }).notNull().$type<DomainMode>().default("both"),
   status: varchar("status", { length: 20 }).notNull().$type<DomainStatus>().default("pending"),
   spfRecord: text("spf_record"),
   spfVerified: boolean("spf_verified").notNull().default(false),

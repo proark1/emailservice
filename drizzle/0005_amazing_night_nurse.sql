@@ -1,0 +1,1 @@
+ALTER TABLE "domains" ADD COLUMN "mode" varchar(10) DEFAULT 'both' NOT NULL;

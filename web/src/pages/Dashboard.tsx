@@ -79,6 +79,7 @@ function DomainsPage() {
   const [items, setItems] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [mode, setMode] = useState<"send" | "receive" | "both">("both");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<any>(null);
@@ -97,8 +98,8 @@ function DomainsPage() {
   const add = async () => {
     setError(""); setLoading(true);
     try {
-      const res = await post("/dashboard/domains", { name });
-      setOpen(false); setName(""); load();
+      const res = await post("/dashboard/domains", { name, mode });
+      setOpen(false); setName(""); setMode("both"); load();
       // Immediately open setup for the new domain
       openSetup(res.data);
     }
@@ -183,6 +184,21 @@ function DomainsPage() {
         {error && <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[13px]">{error}</div>}
         <div className="space-y-3">
           <Input label="Domain name" placeholder="mail.example.com" value={name} onChange={(e) => setName((e.target as HTMLInputElement).value)} />
+          <div>
+            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Mode</label>
+            <div className="grid grid-cols-3 gap-2">
+              {([["both", "Send & Receive"], ["send", "Send Only"], ["receive", "Receive Only"]] as const).map(([m, label]) => (
+                <button key={m} onClick={() => setMode(m)} className={`px-3 py-2.5 rounded-xl text-[13px] font-medium border transition-all ${mode === m ? "border-violet-500/40 bg-violet-50 text-gray-900" : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1.5">
+              {mode === "both" && "DNS records for SPF, DKIM, DMARC (sending) + MX (receiving) will be required."}
+              {mode === "send" && "Only SPF, DKIM, DMARC records required. No MX needed."}
+              {mode === "receive" && "Only MX record required. Emails to this domain will appear in your inbox."}
+            </p>
+          </div>
           <Button onClick={add} disabled={loading}>{loading ? "Adding..." : "Add Domain"}</Button>
         </div>
       </Modal>
@@ -355,16 +371,15 @@ function DomainsPage() {
         )}
       </Modal>
 
-      {items.length === 0 ? <EmptyState title="No domains" desc="Add a domain to start sending emails" /> : (
-        <Table headers={["Domain", "Status", "SPF", "DKIM", "DMARC", "Actions"]}>
+      {items.length === 0 ? <EmptyState title="No domains" desc="Add a domain to start sending and receiving emails" /> : (
+        <Table headers={["Domain", "Mode", "Status", "DNS Records", "Actions"]}>
           {items.map((d) => (
             <tr key={d.id} className="hover:bg-gray-50">
               <td className="px-4 py-3 text-gray-900 text-[13px] font-medium font-mono cursor-pointer hover:text-violet-600" onClick={() => setDetail(d)}>{d.name}</td>
+              <td className="px-4 py-3"><Badge variant="default">{d.mode || "both"}</Badge></td>
               <td className="px-4 py-3"><Badge variant={statusVariant(d.status)}>{d.status}</Badge></td>
-              <td className="px-4 py-3"><Dot ok={d.records?.find((r:any)=>r.purpose?.startsWith("SPF"))?.verified} /></td>
-              <td className="px-4 py-3"><Dot ok={d.records?.find((r:any)=>r.purpose?.startsWith("DKIM"))?.verified} /></td>
-              <td className="px-4 py-3"><Dot ok={d.records?.find((r:any)=>r.purpose?.startsWith("DMARC"))?.verified} /></td>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3"><div className="flex gap-2">{d.records?.map((r:any) => <span key={r.purpose} className="flex items-center gap-1 text-[11px] text-gray-500"><Dot ok={r.verified} />{r.purpose.split(" ")[0]}</span>)}</div></td>
+              <td className="px-4 py-3 text-right">
                 <div className="flex gap-1">
                   <button onClick={() => openSetup(d)} className="px-2 py-1 text-[12px] text-violet-600 hover:bg-violet-50 rounded-lg">Setup</button>
                   <button onClick={() => verify(d.id)} className="px-2 py-1 text-[12px] text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg">Verify</button>
