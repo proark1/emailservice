@@ -34,7 +34,7 @@ function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => void }) {
         <div className="px-4 h-14 flex items-center border-b border-gray-200">
           <Link to="/" className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center"><svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg></div>
-            <span className="font-semibold text-[14px] text-gray-900 tracking-tight">MailStride</span>
+            <span className="font-semibold text-[14px] text-gray-900 tracking-tight">MailNowAPI</span>
           </Link>
           {/* Close button on mobile */}
           <button onClick={onToggle} className="ml-auto p-1 rounded-lg text-gray-500 hover:text-gray-900 lg:hidden">
@@ -176,7 +176,7 @@ function DomainsPage() {
 
   return (
     <div>
-      <PageHeader title="Domains" desc="Manage sender domains and DNS records" action={<Button onClick={() => setOpen(true)}>+ Add Domain</Button>} />
+      <PageHeader title="Domains" desc="Manage domains for sending and receiving emails" action={<Button onClick={() => setOpen(true)}>+ Add Domain</Button>} />
 
       {/* Add Domain Modal */}
       <Modal open={open} onClose={() => setOpen(false)} title="Add Domain">
@@ -584,7 +584,7 @@ export default function Dashboard() {
         <div className="flex-1 flex justify-center">
           <Link to="/" className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center"><svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg></div>
-            <span className="font-semibold text-[14px] text-gray-900 tracking-tight">MailStride</span>
+            <span className="font-semibold text-[14px] text-gray-900 tracking-tight">MailNowAPI</span>
           </Link>
         </div>
         <div className="w-8" /> {/* Spacer for centering */}

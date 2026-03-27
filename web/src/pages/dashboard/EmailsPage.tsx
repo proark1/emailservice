@@ -262,9 +262,9 @@ export default function EmailsPage() {
               </svg>
             </div>
             <div>
-              <h3 className="text-[14px] font-semibold text-amber-600">Connect a domain to start sending</h3>
+              <h3 className="text-[14px] font-semibold text-amber-600">Connect a domain to start sending and receiving</h3>
               <p className="text-[13px] text-gray-500 mt-1 leading-relaxed">
-                You need at least one verified domain before you can send emails. Add a domain in the Domains page and complete DNS verification.
+                Add a domain and complete DNS verification (SPF, DKIM, DMARC for sending + MX for receiving). Emails sent to your domain will appear in your Inbox.
               </p>
               <Link
                 to="/dashboard/domains"

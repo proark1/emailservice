@@ -47,6 +47,24 @@ const features = [
     ),
   },
   {
+    title: "Inbound Email & Inbox",
+    desc: "Receive emails on your domains with a built-in inbox. Star, archive, reply — all from the dashboard or API.",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Broadcasts & Campaigns",
+    desc: "Send to entire audiences with one click. Track delivery stats, open rates, and failures per campaign.",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 010 3.46" />
+      </svg>
+    ),
+  },
+  {
     title: "Audience Management",
     desc: "Contact lists, audience segments, and automatic suppression handling for bounces and complaints.",
     icon: (
@@ -76,7 +94,7 @@ export default function Landing() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
               </svg>
             </div>
-            <span className="font-semibold text-[15px] tracking-tight">MailStride</span>
+            <span className="font-semibold text-[15px] tracking-tight">MailNowAPI</span>
           </Link>
           <div className="flex items-center gap-2">
             <a href="/docs" className="hidden sm:inline-flex px-3 py-1.5 text-[13px] text-gray-500 hover:text-gray-900 transition-colors">
@@ -116,8 +134,8 @@ export default function Landing() {
           </h1>
 
           <p className="text-lg sm:text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Send transactional emails, verify domains, track delivery — all through
-            a powerful API or SMTP relay. Self-hosted, no vendor lock-in.
+            Send and receive emails through your own domains. Transactional API,
+            SMTP relay, inbound inbox — self-hosted, no vendor lock-in.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -231,7 +249,7 @@ export default function Landing() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
               </svg>
             </div>
-            MailStride
+            MailNowAPI
           </div>
           <div className="flex gap-6">
             <a href="/docs" className="hover:text-gray-900 transition-colors">API Docs</a>

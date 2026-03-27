@@ -1,6 +1,6 @@
 # Self-Hosted VPS Deployment Guide
 
-Deploy MailStride on your own server with full email send/receive capability.
+Deploy MailNowAPI on your own server with full email send/receive capability.
 
 ## Requirements
 
@@ -92,7 +92,7 @@ curl -X POST https://yourdomain.com/v1/emails \
   -d '{
     "from": "hello@yourdomain.com",
     "to": ["your@gmail.com"],
-    "subject": "Test from MailStride",
+    "subject": "Test from MailNowAPI",
     "html": "<h1>It works!</h1>"
   }'
 ```

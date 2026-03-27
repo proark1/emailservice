@@ -69,7 +69,7 @@ function formatResult(res: ApiResponse): string {
 // ---------------------------------------------------------------------------
 
 const server = new McpServer({
-  name: "emailservice",
+  name: "mailnowapi",
   version: "1.0.0",
 });
 

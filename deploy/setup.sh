@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# MailStride VPS Setup Script
+# MailNowAPI VPS Setup Script
 # Run on a fresh Ubuntu 24.04 server (e.g., Hetzner CX22)
 # Usage: sudo bash setup.sh yourdomain.com mail.yourdomain.com
 # ============================================================
@@ -10,7 +10,7 @@ set -euo pipefail
 DOMAIN="${1:?Usage: sudo bash setup.sh DOMAIN MAIL_HOSTNAME}"
 MAIL_HOSTNAME="${2:?Usage: sudo bash setup.sh DOMAIN MAIL_HOSTNAME}"
 
-echo "==> Setting up MailStride on $DOMAIN (mail host: $MAIL_HOSTNAME)"
+echo "==> Setting up MailNowAPI on $DOMAIN (mail host: $MAIL_HOSTNAME)"
 
 # --- System updates ---
 echo "==> Updating system packages..."

@@ -1,6 +1,6 @@
-# CLAUDE.md — emailservice
+# CLAUDE.md — MailNowAPI (mailnowapi.com)
 
-Self-hosted email service platform (Resend.com-style API). Handles sending, receiving, domain verification, webhooks, audiences, and analytics.
+Self-hosted email service platform. Send and receive emails through your own domains. Handles transactional email, broadcasts, inbound inbox, domain verification, webhooks, audiences, and analytics.
 
 ---
 
