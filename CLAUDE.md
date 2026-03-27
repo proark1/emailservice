@@ -63,7 +63,7 @@ A fourth process — **MCP server** (`src/mcp-server.ts`) — exposes all email 
 - `EMAIL_SERVICE_URL` — Base URL of the API server (default: `http://localhost:3000`)
 - `EMAIL_SERVICE_API_KEY` — API key for authentication (e.g. `es_xxxx`)
 
-**Available MCP tools (30 tools):**
+**Available MCP tools (43 tools):**
 - **Emails:** `send_email`, `send_batch_emails`, `list_emails`, `get_email`, `cancel_scheduled_email`
 - **Domains:** `create_domain`, `list_domains`, `get_domain`, `verify_domain`, `delete_domain`
 - **API Keys:** `create_api_key`, `list_api_keys`, `revoke_api_key`
@@ -71,6 +71,8 @@ A fourth process — **MCP server** (`src/mcp-server.ts`) — exposes all email 
 - **Audiences:** `create_audience`, `list_audiences`, `get_audience`, `delete_audience`
 - **Contacts:** `add_contact`, `list_contacts`, `get_contact`, `update_contact`, `delete_contact`
 - **Suppressions:** `list_suppressions`, `add_suppression`, `remove_suppression`
+- **Broadcasts:** `create_broadcast`, `list_broadcasts`, `get_broadcast`, `delete_broadcast`
+- **Warmup:** `start_warmup`, `list_warmups`, `get_warmup`, `get_warmup_stats`, `pause_warmup`, `resume_warmup`, `cancel_warmup`
 - **Analytics:** `get_analytics`
 
 **Integration:** Copy `mcp-config.example.json` and update with your API key. See that file for Claude Desktop / Claude Code / Cursor configuration format.
@@ -87,6 +89,7 @@ All queues are lazy-initialized (won't crash if Redis is unavailable):
 - `webhook:deliver` — POSTs webhook events with HMAC signature + retry
 - `email:scheduled` — polling job (every 30s) to move due scheduled emails to `email:send`
 - `email:inbound` — processes received SMTP messages, fires webhooks
+- `email:warmup` — runs hourly warmup rounds for active domain warmup schedules
 
 Workers live in `src/workers/`. Queues declared in `src/queues/index.ts`.
 
