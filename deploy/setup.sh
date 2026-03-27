@@ -118,6 +118,23 @@ else
     echo "==> .env already exists, skipping."
 fi
 
+# --- Setup domain sync cron ---
+echo "==> Setting up automatic domain sync for Postfix..."
+SYNC_SCRIPT="$SCRIPT_DIR/sync-domains.sh"
+chmod +x "$SYNC_SCRIPT"
+
+# Switch Postfix to use hash file for virtual domains
+touch /etc/postfix/virtual_domains
+postmap /etc/postfix/virtual_domains
+postconf -e "virtual_mailbox_domains = hash:/etc/postfix/virtual_domains"
+systemctl restart postfix
+
+# Install cron job (every minute)
+CRON_LINE="* * * * * /opt/emailservice/deploy/sync-domains.sh >> /var/log/domain-sync.log 2>&1"
+(crontab -l 2>/dev/null | grep -v "sync-domains.sh"; echo "$CRON_LINE") | crontab -
+
+echo "==> Domain sync cron installed (runs every minute)"
+
 echo ""
 echo "============================================================"
 echo "  Setup complete!"
