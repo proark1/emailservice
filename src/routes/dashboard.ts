@@ -381,7 +381,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
   app.post("/webhooks", async (request, reply) => {
     const input = z.object({
-      url: z.string().url(),
+      url: z.string().url().refine((u) => u.startsWith("http://") || u.startsWith("https://"), { message: "Webhook URL must use http:// or https://" }),
       events: z.array(z.string()).min(1),
     }).parse(request.body);
     const webhook = await webhookService.createWebhook(request.account.id, { url: input.url, events: input.events as any });

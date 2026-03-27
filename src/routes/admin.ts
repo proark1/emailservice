@@ -62,6 +62,9 @@ export default async function adminRoutes(app: FastifyInstance) {
 
   // DELETE /admin/accounts/:id
   app.delete<{ Params: { id: string } }>("/:id", async (request) => {
+    if (request.params.id === request.account.id) {
+      throw new ForbiddenError("Cannot delete your own account");
+    }
     const deleted = await authService.deleteAccount(request.params.id);
     return { data: deleted };
   });

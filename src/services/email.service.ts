@@ -29,6 +29,9 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
   // Parse "from" address
   const from = parseFromAddress(input.from);
   const fromDomain = from.address.split("@")[1];
+  if (!fromDomain) {
+    throw new ValidationError("Invalid 'from' address — must contain a valid email (e.g., user@example.com)");
+  }
 
   // Validate sender domain belongs to account and is verified
   const [domain] = await db
@@ -151,10 +154,14 @@ export async function listEmails(accountId: string, options: { limit: number; cu
   const db = getDb();
   const conditions = [eq(emails.accountId, accountId)];
 
-  // Cursor-based pagination: fetch items with id < cursor (older items)
+  // Cursor-based pagination: cursor is an email ID, fetch items created before it
   if (options.cursor) {
     const { lt } = await import("drizzle-orm");
-    conditions.push(lt(emails.id, options.cursor));
+    // Look up the cursor email's createdAt to use for keyset pagination
+    const [cursorEmail] = await db.select({ createdAt: emails.createdAt }).from(emails).where(eq(emails.id, options.cursor));
+    if (cursorEmail) {
+      conditions.push(lt(emails.createdAt, cursorEmail.createdAt));
+    }
   }
 
   return db
