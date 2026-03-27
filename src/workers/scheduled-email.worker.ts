@@ -40,7 +40,9 @@ export function createScheduledEmailWorker() {
       removeOnComplete: true,
       removeOnFail: true,
     },
-  );
+  ).catch((err) => {
+    console.error("[scheduled-email] Failed to register repeating job:", err);
+  });
 
   return new Worker("email:scheduled", processScheduledEmails, {
     connection: getRedisConnection(),

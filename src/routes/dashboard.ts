@@ -52,6 +52,9 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       subject: z.string().min(1),
       html: z.string().optional(),
       text: z.string().optional(),
+    }).refine((d) => d.html || d.text, {
+      message: "At least one of html or text is required",
+      path: ["html"],
     }).parse(request.body);
     const toAddresses = input.to.split(",").map((e) => e.trim()).filter(Boolean);
     // Validate each email address

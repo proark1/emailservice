@@ -158,7 +158,7 @@ export async function listEmails(accountId: string, options: { limit: number; cu
   if (options.cursor) {
     const { lt } = await import("drizzle-orm");
     // Look up the cursor email's createdAt to use for keyset pagination
-    const [cursorEmail] = await db.select({ createdAt: emails.createdAt }).from(emails).where(eq(emails.id, options.cursor));
+    const [cursorEmail] = await db.select({ createdAt: emails.createdAt }).from(emails).where(and(eq(emails.id, options.cursor), eq(emails.accountId, accountId)));
     if (cursorEmail) {
       conditions.push(lt(emails.createdAt, cursorEmail.createdAt));
     }
@@ -187,7 +187,7 @@ export async function cancelScheduledEmail(accountId: string, emailId: string) {
   const [updated] = await db
     .update(emails)
     .set({ status: "failed", updatedAt: new Date() })
-    .where(eq(emails.id, emailId))
+    .where(and(eq(emails.id, emailId), eq(emails.accountId, accountId)))
     .returning();
 
   await db.insert(emailEvents).values({
