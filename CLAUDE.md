@@ -19,6 +19,9 @@ pnpm dev:worker
 # SMTP relay server (port 587/465 — for clients sending through the service)
 pnpm dev:smtp
 
+# MCP server for AI agents (requires running API server + API key)
+EMAIL_SERVICE_API_KEY=es_xxxx pnpm mcp
+
 # Frontend dashboard (port 5173, proxied to API in dev)
 cd web && pnpm dev
 
@@ -52,6 +55,25 @@ Three separate Node processes in production:
 - **SMTP relay** (`src/smtp-relay.ts`) — SMTP server on 587/465 for clients sending through the service
 
 In development all three run separately via `pnpm dev`, `pnpm dev:worker`, `pnpm dev:smtp`.
+
+### MCP Server
+A fourth process — **MCP server** (`src/mcp-server.ts`) — exposes all email service features as MCP tools for AI agents. It communicates with the running API server over HTTP using an API key (Bearer token).
+
+**Environment variables:**
+- `EMAIL_SERVICE_URL` — Base URL of the API server (default: `http://localhost:3000`)
+- `EMAIL_SERVICE_API_KEY` — API key for authentication (e.g. `es_xxxx`)
+
+**Available MCP tools (30 tools):**
+- **Emails:** `send_email`, `send_batch_emails`, `list_emails`, `get_email`, `cancel_scheduled_email`
+- **Domains:** `create_domain`, `list_domains`, `get_domain`, `verify_domain`, `delete_domain`
+- **API Keys:** `create_api_key`, `list_api_keys`, `revoke_api_key`
+- **Webhooks:** `create_webhook`, `list_webhooks`, `get_webhook`, `update_webhook`, `delete_webhook`, `list_webhook_deliveries`
+- **Audiences:** `create_audience`, `list_audiences`, `get_audience`, `delete_audience`
+- **Contacts:** `add_contact`, `list_contacts`, `get_contact`, `update_contact`, `delete_contact`
+- **Suppressions:** `list_suppressions`, `add_suppression`, `remove_suppression`
+- **Analytics:** `get_analytics`
+
+**Integration:** Copy `mcp-config.example.json` and update with your API key. See that file for Claude Desktop / Claude Code / Cursor configuration format.
 
 ### Auth
 Two auth systems:
@@ -90,6 +112,7 @@ src/
   worker.ts             # Worker process entry
   smtp-relay.ts         # SMTP relay entry (port 587/465)
   smtp-inbound.ts       # SMTP inbound entry (port 2525)
+  mcp-server.ts         # MCP server entry (stdio transport, wraps REST API)
   config/index.ts       # Env var loading (Zod-validated). Use getConfig() everywhere.
   db/
     index.ts            # Drizzle client (getDb())

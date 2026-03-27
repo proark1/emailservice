@@ -6,6 +6,7 @@ export default defineConfig({
     "src/worker.ts",
     "src/smtp-relay.ts",
     "src/smtp-inbound.ts",
+    "src/mcp-server.ts",
   ],
   format: ["esm"],
   target: "node20",

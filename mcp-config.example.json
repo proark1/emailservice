@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "emailservice": {
+      "command": "npx",
+      "args": ["tsx", "src/mcp-server.ts"],
+      "cwd": "/path/to/emailservice",
+      "env": {
+        "EMAIL_SERVICE_URL": "http://localhost:3000",
+        "EMAIL_SERVICE_API_KEY": "es_YOUR_API_KEY_HERE"
+      }
+    }
+  }
+}

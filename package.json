@@ -18,7 +18,9 @@
     "test": "vitest",
     "lint": "eslint src/",
     "format": "prettier --write 'src/**/*.ts'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "mcp": "tsx src/mcp-server.ts",
+    "mcp:build": "node dist/mcp-server.js"
   },
   "keywords": [
     "email",
@@ -38,6 +40,7 @@
     "@fastify/static": "^9.0.0",
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^5.2.5",
+    "@modelcontextprotocol/sdk": "^1.28.0",
     "argon2": "^0.44.0",
     "bullmq": "^5.71.0",
     "drizzle-orm": "^0.45.1",
