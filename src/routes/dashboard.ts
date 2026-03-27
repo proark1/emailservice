@@ -8,6 +8,7 @@ import * as webhookService from "../services/webhook.service.js";
 import * as emailService from "../services/email.service.js";
 import * as audienceService from "../services/audience.service.js";
 import * as broadcastService from "../services/broadcast.service.js";
+import * as warmupService from "../services/warmup.service.js";
 import { getDb } from "../db/index.js";
 import { emails, domains, apiKeys, webhooks, audiences, inboundEmails } from "../db/schema/index.js";
 import { ForbiddenError } from "../lib/errors.js";
@@ -557,6 +558,47 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>("/broadcasts/:id", async (request) => {
     const deleted = await broadcastService.deleteBroadcast(request.account.id, request.params.id);
     return { data: broadcastService.formatBroadcastResponse(deleted) };
+  });
+
+  // --- Warmup ---
+  app.get("/warmup", async (request) => {
+    const list = await warmupService.listWarmups(request.account.id);
+    return { data: list.map(warmupService.formatWarmupResponse) };
+  });
+
+  app.post("/warmup", async (request, reply) => {
+    const input = z.object({
+      domain_id: z.string().uuid(),
+      total_days: z.number().int().min(7).max(90).optional(),
+      from_address: z.string().optional(),
+    }).parse(request.body);
+    const schedule = await warmupService.startWarmup(request.account.id, input.domain_id, { totalDays: input.total_days, fromAddress: input.from_address });
+    return reply.status(201).send({ data: warmupService.formatWarmupResponse(schedule) });
+  });
+
+  app.get<{ Params: { id: string } }>("/warmup/:id", async (request) => {
+    const schedule = await warmupService.getWarmup(request.account.id, request.params.id);
+    return { data: warmupService.formatWarmupResponse(schedule) };
+  });
+
+  app.get<{ Params: { id: string } }>("/warmup/:id/stats", async (request) => {
+    const stats = await warmupService.getWarmupStats(request.account.id, request.params.id);
+    return { data: stats };
+  });
+
+  app.post<{ Params: { id: string } }>("/warmup/:id/pause", async (request) => {
+    const schedule = await warmupService.pauseWarmup(request.account.id, request.params.id);
+    return { data: warmupService.formatWarmupResponse(schedule) };
+  });
+
+  app.post<{ Params: { id: string } }>("/warmup/:id/resume", async (request) => {
+    const schedule = await warmupService.resumeWarmup(request.account.id, request.params.id);
+    return { data: warmupService.formatWarmupResponse(schedule) };
+  });
+
+  app.delete<{ Params: { id: string } }>("/warmup/:id", async (request) => {
+    const schedule = await warmupService.cancelWarmup(request.account.id, request.params.id);
+    return { data: warmupService.formatWarmupResponse(schedule) };
   });
 
   // --- API Docs metadata ---

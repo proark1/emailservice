@@ -41,6 +41,7 @@ export function getWebhookDeliverQueue() { return getQueue("webhook.deliver"); }
 export function getDnsVerifyQueue() { return getQueue("dns.verify"); }
 export function getScheduledEmailQueue() { return getQueue("email.scheduled"); }
 export function getInboundEmailQueue() { return getQueue("email.inbound"); }
+export function getWarmupQueue() { return getQueue("email.warmup"); }
 
 export async function closeQueues() {
   const closePromises = Array.from(_queues.values()).map((q) => q.close());

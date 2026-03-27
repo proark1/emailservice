@@ -559,6 +559,92 @@ server.tool(
   },
 );
 
+// ---- Warmup ----------------------------------------------------------------
+
+server.tool(
+  "start_warmup",
+  "Start email warmup for a domain to build sender reputation. Gradually ramps up sending volume over the specified duration.",
+  {
+    domain_id: z.string().describe("Domain UUID to warm up"),
+    total_days: z.number().optional().describe("Warmup duration in days (7-90, default 30)"),
+    from_address: z.string().optional().describe("From address for warmup emails (default: warmup@yourdomain.com)"),
+  },
+  async (params) => {
+    const res = await api("POST", "/v1/warmup", params);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "list_warmups",
+  "List all warmup schedules for the account.",
+  {},
+  async () => {
+    const res = await api("GET", "/v1/warmup");
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "get_warmup",
+  "Get details of a specific warmup schedule.",
+  {
+    warmup_id: z.string().describe("Warmup schedule UUID"),
+  },
+  async ({ warmup_id }) => {
+    const res = await api("GET", `/v1/warmup/${warmup_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "get_warmup_stats",
+  "Get detailed warmup statistics with daily breakdown of sends, opens, replies, and inbox placement.",
+  {
+    warmup_id: z.string().describe("Warmup schedule UUID"),
+  },
+  async ({ warmup_id }) => {
+    const res = await api("GET", `/v1/warmup/${warmup_id}/stats`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "pause_warmup",
+  "Pause an active warmup schedule.",
+  {
+    warmup_id: z.string().describe("Warmup schedule UUID to pause"),
+  },
+  async ({ warmup_id }) => {
+    const res = await api("POST", `/v1/warmup/${warmup_id}/pause`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "resume_warmup",
+  "Resume a paused warmup schedule.",
+  {
+    warmup_id: z.string().describe("Warmup schedule UUID to resume"),
+  },
+  async ({ warmup_id }) => {
+    const res = await api("POST", `/v1/warmup/${warmup_id}/resume`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "cancel_warmup",
+  "Cancel a warmup schedule permanently.",
+  {
+    warmup_id: z.string().describe("Warmup schedule UUID to cancel"),
+  },
+  async ({ warmup_id }) => {
+    const res = await api("DELETE", `/v1/warmup/${warmup_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
 // ---- Analytics -------------------------------------------------------------
 
 server.tool(

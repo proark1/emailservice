@@ -3,6 +3,7 @@ import { createDnsVerifyWorker } from "./dns-verify.worker.js";
 import { createWebhookDeliverWorker } from "./webhook-deliver.worker.js";
 import { createInboundEmailWorker } from "./inbound-email.worker.js";
 import { createScheduledEmailWorker } from "./scheduled-email.worker.js";
+import { createWarmupWorker } from "./warmup.worker.js";
 
 export function startAllWorkers() {
   const workers = [
@@ -11,6 +12,7 @@ export function startAllWorkers() {
     createWebhookDeliverWorker(),
     createInboundEmailWorker(),
     createScheduledEmailWorker(),
+    createWarmupWorker(),
   ];
 
   console.log(`Started ${workers.length} workers:`);
@@ -19,6 +21,7 @@ export function startAllWorkers() {
   console.log("  - webhook.deliver (concurrency: 5)");
   console.log("  - email.inbound (concurrency: 5)");
   console.log("  - email.scheduled (concurrency: 1)");
+  console.log("  - email.warmup (concurrency: 1, recurring: 60m)");
 
   return workers;
 }

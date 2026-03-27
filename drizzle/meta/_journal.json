@@ -43,6 +43,13 @@
       "when": 1774638080781,
       "tag": "0005_amazing_night_nurse",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1774645910141,
+      "tag": "0006_natural_calypso",
+      "breakpoints": true
     }
   ]
 }
