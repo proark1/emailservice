@@ -106,10 +106,60 @@ curl -X POST https://yourdomain.com/v1/emails \
    - SPF TXT record is correct
    - DKIM record is published (check in dashboard → Domains)
 
-## Updating
+## Auto-Deploy (CI/CD)
+
+Every push to `main` automatically deploys to your Hetzner server via GitHub Actions.
+
+### One-time setup
+
+1. **Generate an SSH key** for deployments (on your local machine):
 
 ```bash
-cd emailservice
+ssh-keygen -t ed25519 -f ~/.ssh/deploy_mailnowapi -N "" -C "deploy@mailnowapi"
+```
+
+2. **Add the public key** to your server's authorized_keys:
+
+```bash
+# Copy the public key to your server
+ssh-copy-id -i ~/.ssh/deploy_mailnowapi.pub root@YOUR_SERVER_IP
+```
+
+3. **Add GitHub Secrets** in your repo (Settings → Secrets → Actions):
+
+| Secret | Value |
+|--------|-------|
+| `DEPLOY_HOST` | Your server IP (e.g., `1.2.3.4`) |
+| `DEPLOY_USER` | `root` (or your deploy user) |
+| `DEPLOY_SSH_KEY` | Contents of `~/.ssh/deploy_mailnowapi` (the private key) |
+| `DEPLOY_PORT` | `22` (optional, default 22) |
+| `DEPLOY_PATH` | `/opt/emailservice` (optional, default `/opt/emailservice`) |
+
+4. **Clone repo on the server** (first time only):
+
+```bash
+ssh root@YOUR_SERVER_IP
+git clone https://github.com/proark1/emailservice.git /opt/emailservice
+cd /opt/emailservice
+sudo bash deploy/setup.sh yourdomain.com mail.yourdomain.com
+docker compose -f deploy/docker-compose.prod.yml up -d --build
+```
+
+Now every push to `main` will automatically pull, rebuild, and restart.
+
+### Manual deploy
+
+If you need to deploy manually from the server:
+
+```bash
+cd /opt/emailservice
+bash deploy/deploy.sh
+```
+
+## Updating (without CI/CD)
+
+```bash
+cd /opt/emailservice
 git pull
 docker compose -f deploy/docker-compose.prod.yml up -d --build
 ```
