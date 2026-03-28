@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { api, post, patch, del } from "../lib/api";
+import { useConfirmDialog, useToast } from "../components/ui";
 
 // ---- Sidebar nav items ----
 const adminNav = [
@@ -228,6 +229,8 @@ function AdminAccounts() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const { showError, toast } = useToast();
   useEffect(() => {
     api("/admin/accounts")
       .then((r) => setAccounts(r.data))
@@ -237,13 +240,23 @@ function AdminAccounts() {
 
   const toggleRole = async (id: string, currentRole: string) => {
     const newRole = currentRole === "admin" ? "user" : "admin";
-    await patch(`/admin/${id}/role`, { role: newRole });
-    setAccounts((prev) => prev.map((a) => a.id === id ? { ...a, role: newRole } : a));
+    try {
+      await patch(`/admin/${id}/role`, { role: newRole });
+      setAccounts((prev) => prev.map((a) => a.id === id ? { ...a, role: newRole } : a));
+    } catch (e: any) { showError(e.message || "Failed to update role"); }
   };
-  const removeAccount = async (id: string) => {
-    if (!confirm("Delete this account and all its data? This cannot be undone.")) return;
-    await del(`/admin/${id}`);
-    setAccounts((prev) => prev.filter((a) => a.id !== id));
+  const removeAccount = (id: string) => {
+    confirm({
+      title: "Delete this account?",
+      message: "This will permanently delete the account and all its data. This cannot be undone.",
+      confirmLabel: "Delete Account",
+      onConfirm: async () => {
+        try {
+          await del(`/admin/${id}`);
+          setAccounts((prev) => prev.filter((a) => a.id !== id));
+        } catch (e: any) { showError(e.message || "Failed to delete account"); }
+      },
+    });
   };
 
   if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /></div>;
@@ -264,6 +277,8 @@ function AdminAccounts() {
           </div></td>
         </tr>
       ))}</tbody></table></div></div>
+      {confirmDialog}
+      {toast}
     </div>
   );
 }
@@ -364,12 +379,22 @@ function AdminWarmups() {
   const [warmups, setWarmups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const { showError, toast } = useToast();
   useEffect(() => { api("/admin/warmups").then((r) => setWarmups(r.data)).catch((e: any) => setError(e.message || "Failed to load")).finally(() => setLoading(false)); }, []);
 
-  const cancelWarmup = async (id: string) => {
-    if (!confirm("Cancel this warmup schedule?")) return;
-    await post(`/admin/warmups/${id}/cancel`, {});
-    setWarmups((prev) => prev.map((w) => w.id === id ? { ...w, status: "cancelled" } : w));
+  const cancelWarmup = (id: string) => {
+    confirm({
+      title: "Cancel this warmup schedule?",
+      message: "The warmup will be stopped and cannot be resumed.",
+      confirmLabel: "Cancel Warmup",
+      onConfirm: async () => {
+        try {
+          await post(`/admin/warmups/${id}/cancel`, {});
+          setWarmups((prev) => prev.map((w) => w.id === id ? { ...w, status: "cancelled" } : w));
+        } catch (e: any) { showError(e.message || "Failed to cancel warmup"); }
+      },
+    });
   };
 
   if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /></div>;
@@ -418,6 +443,8 @@ function AdminWarmups() {
           </tr>
         ))}</tbody></table></div></div>
       )}
+      {confirmDialog}
+      {toast}
     </div>
   );
 }

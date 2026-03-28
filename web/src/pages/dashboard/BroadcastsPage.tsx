@@ -143,7 +143,7 @@ export default function BroadcastsPage() {
       )}
 
       {/* Create Broadcast Modal */}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New Broadcast">
+      <Modal open={createOpen} onClose={() => { setCreateOpen(false); setError(""); }} title="New Broadcast">
         {error && <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[13px]">{error}</div>}
         <div className="space-y-3">
           <Input label="Campaign name" placeholder="March newsletter" value={form.name} onChange={(e) => setForm({ ...form, name: (e.target as HTMLInputElement).value })} />

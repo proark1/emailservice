@@ -185,7 +185,7 @@ export default function WarmupPage() {
       )}
 
       {/* Start Warmup Modal */}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Start Email Warmup">
+      <Modal open={createOpen} onClose={() => { setCreateOpen(false); setError(""); }} title="Start Email Warmup">
         {error && <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[13px]">{error}</div>}
         <div className="space-y-3">
           <div>

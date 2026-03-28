@@ -29,6 +29,7 @@ export function createInboundServer(): SMTPServer {
     secure: false,
     authOptional: true,
     disabledCommands: ["AUTH", "STARTTLS"],
+    size: 25 * 1024 * 1024, // 25 MB max message size
 
     onRcptTo(address, session, callback) {
       const recipientDomain = address.address.split("@")[1];

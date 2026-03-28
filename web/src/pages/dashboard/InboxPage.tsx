@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api, post, patch, del } from "../../lib/api";
-import { Badge, Button, Input, Textarea } from "../../components/ui";
+import { Badge, Button, Input, Textarea, useConfirmDialog, useToast } from "../../components/ui";
 import { RichEditor, wrapEmailHtml } from "../../components/RichEditor";
 
 type InboxEmail = {
@@ -116,6 +116,8 @@ export default function InboxPage() {
   const [replyForm, setReplyForm] = useState({ from: "", body: "" });
   const [replying, setReplying] = useState(false);
   const [error, setError] = useState("");
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const { showError, toast } = useToast();
 
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -206,7 +208,7 @@ export default function InboxPage() {
       await patch(`/dashboard/inbox/${id}`, { isStarred: !current });
       setItems((prev) => prev.map((e) => (e.id === id ? { ...e, isStarred: !current } : e)));
       if (selected?.id === id) setSelected({ ...selected, isStarred: !current });
-    } catch {}
+    } catch (e: any) { showError(e.message || "Failed to update star"); }
   };
 
   const archiveEmail = async (id: string) => {
@@ -214,15 +216,22 @@ export default function InboxPage() {
       await patch(`/dashboard/inbox/${id}`, { isArchived: true });
       setItems((prev) => prev.filter((e) => e.id !== id));
       if (selected?.id === id) setSelected(null);
-    } catch {}
+    } catch (e: any) { showError(e.message || "Failed to archive"); }
   };
 
-  const deleteEmail = async (id: string) => {
-    try {
-      await del(`/dashboard/inbox/${id}`);
-      setItems((prev) => prev.filter((e) => e.id !== id));
-      if (selected?.id === id) setSelected(null);
-    } catch {}
+  const deleteEmail = (id: string) => {
+    confirm({
+      title: "Delete this email?",
+      message: "This email will be permanently removed from your inbox.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        try {
+          await del(`/dashboard/inbox/${id}`);
+          setItems((prev) => prev.filter((e) => e.id !== id));
+          if (selected?.id === id) setSelected(null);
+        } catch (e: any) { showError(e.message || "Failed to delete"); }
+      },
+    });
   };
 
   /* ---- reply ---- */
@@ -653,6 +662,8 @@ export default function InboxPage() {
           </div>
         )}
       </div>
+      {confirmDialog}
+      {toast}
     </div>
   );
 }
