@@ -731,6 +731,44 @@ server.tool(
   },
 );
 
+// ---- Email Validation ------------------------------------------------------
+
+import dns from "node:dns";
+
+server.tool(
+  "validate_email",
+  "Validate an email address by checking syntax and verifying MX records exist for the domain.",
+  {
+    email: z.string().describe("Email address to validate"),
+  },
+  async ({ email }) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const syntaxOk = emailRegex.test(email);
+    const domain = email.includes("@") ? email.split("@")[1] : "";
+
+    let mxFound = false;
+    if (syntaxOk && domain) {
+      try {
+        const records = await dns.promises.resolveMx(domain);
+        mxFound = records.length > 0;
+      } catch {
+        // DNS resolution failed — no MX records
+      }
+    }
+
+    const result = {
+      valid: syntaxOk && mxFound,
+      syntax_ok: syntaxOk,
+      mx_found: mxFound,
+      domain,
+    };
+
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------

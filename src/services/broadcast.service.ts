@@ -1,4 +1,4 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, lte } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { broadcasts } from "../db/schema/index.js";
 import { contacts } from "../db/schema/index.js";
@@ -59,6 +59,9 @@ export async function createBroadcast(accountId: string, input: CreateBroadcastI
     throw new ValidationError("No subscribed contacts in this audience");
   }
 
+  // If scheduled_at is in the future, save as "scheduled" and don't send yet
+  const isScheduled = input.scheduled_at && new Date(input.scheduled_at) > new Date();
+
   // Create broadcast record
   const [broadcast] = await db
     .insert(broadcasts)
@@ -74,27 +77,66 @@ export async function createBroadcast(accountId: string, input: CreateBroadcastI
       replyTo: input.reply_to,
       headers: input.headers,
       tags: input.tags,
-      status: "sending",
+      status: isScheduled ? "scheduled" : "sending",
       totalCount: subscribedContacts.length,
       scheduledAt: input.scheduled_at ? new Date(input.scheduled_at) : null,
     })
     .returning();
 
-  // Send to each contact
+  // If scheduled for the future, return without sending
+  if (isScheduled) {
+    return broadcast;
+  }
+
+  // Send immediately
+  return executeBroadcast(broadcast.id);
+}
+
+/**
+ * Execute a broadcast by sending emails to all subscribed contacts.
+ * Used both for immediate sends and when scheduled broadcasts become due.
+ */
+export async function executeBroadcast(broadcastId: string) {
+  const db = getDb();
+
+  const [broadcast] = await db
+    .select()
+    .from(broadcasts)
+    .where(eq(broadcasts.id, broadcastId));
+
+  if (!broadcast) throw new NotFoundError("Broadcast");
+
+  // Mark as sending
+  await db
+    .update(broadcasts)
+    .set({ status: "sending", updatedAt: new Date() })
+    .where(eq(broadcasts.id, broadcastId));
+
+  // Get all subscribed contacts in the audience
+  const subscribedContacts = await db
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.audienceId, broadcast.audienceId), eq(contacts.subscribed, true)));
+
+  // Reconstruct the "from" string
+  const fromString = broadcast.fromName
+    ? `${broadcast.fromName} <${broadcast.fromAddress}>`
+    : broadcast.fromAddress;
+
   let sentCount = 0;
   let failedCount = 0;
 
   for (const contact of subscribedContacts) {
     try {
-      await sendEmail(accountId, {
-        from: input.from,
+      await sendEmail(broadcast.accountId, {
+        from: fromString,
         to: [contact.email],
-        subject: input.subject,
-        html: input.html,
-        text: input.text,
-        reply_to: input.reply_to,
-        headers: input.headers,
-        tags: input.tags,
+        subject: broadcast.subject,
+        html: broadcast.htmlBody ?? undefined,
+        text: broadcast.textBody ?? undefined,
+        reply_to: broadcast.replyTo ?? undefined,
+        headers: broadcast.headers ?? undefined,
+        tags: broadcast.tags ?? undefined,
       });
       sentCount++;
     } catch {
@@ -115,14 +157,46 @@ export async function createBroadcast(accountId: string, input: CreateBroadcastI
       sentCount,
       failedCount,
       status: finalStatus,
+      totalCount: subscribedContacts.length,
       sentAt: new Date(),
       completedAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(broadcasts.id, broadcast.id))
+    .where(eq(broadcasts.id, broadcastId))
     .returning();
 
   return updated;
+}
+
+/**
+ * Process scheduled broadcasts that are due.
+ * Called periodically by the scheduled-email worker.
+ */
+export async function processScheduledBroadcasts() {
+  const db = getDb();
+
+  // Find all broadcasts with status "scheduled" and scheduledAt <= now
+  const dueBroadcasts = await db
+    .select()
+    .from(broadcasts)
+    .where(
+      and(
+        eq(broadcasts.status, "scheduled"),
+        lte(broadcasts.scheduledAt, new Date()),
+      ),
+    );
+
+  let processed = 0;
+  for (const broadcast of dueBroadcasts) {
+    try {
+      await executeBroadcast(broadcast.id);
+      processed++;
+    } catch (err) {
+      console.error(`Failed to execute scheduled broadcast ${broadcast.id}:`, err);
+    }
+  }
+
+  return { processed };
 }
 
 export async function getBroadcast(accountId: string, id: string) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { api, post, del } from "../lib/api";
@@ -25,6 +25,115 @@ const navItems = [
   { to: "/dashboard/api-docs", label: "API Docs", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg> },
 ];
 
+function SearchBar() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<any>(null);
+  const [open, setOpen] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  const search = useCallback((q: string) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!q.trim()) { setResults(null); setOpen(false); return; }
+    timerRef.current = setTimeout(async () => {
+      try {
+        const res = await api(`/dashboard/search?q=${encodeURIComponent(q.trim())}`);
+        setResults(res.data);
+        setOpen(true);
+      } catch { setResults(null); }
+    }, 300);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const hasResults = results && (results.emails?.length || results.inbox?.length || results.domains?.length || results.contacts?.length || results.templates?.length);
+
+  const go = (path: string) => { navigate(path); setOpen(false); setQuery(""); setResults(null); };
+
+  return (
+    <div ref={wrapperRef} className="relative px-2.5 pt-3 pb-1">
+      <div className="relative">
+        <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); search(e.target.value); }}
+          onFocus={() => { if (results) setOpen(true); }}
+          placeholder="Search..."
+          className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-[13px] text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition-colors"
+        />
+      </div>
+      {open && results && (
+        <div className="absolute left-2.5 right-2.5 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-50 max-h-80 overflow-y-auto">
+          {!hasResults && <p className="px-3 py-4 text-[13px] text-gray-400 text-center">No results found</p>}
+          {results.emails?.length > 0 && (
+            <div>
+              <p className="px-3 pt-2.5 pb-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Emails</p>
+              {results.emails.map((e: any) => (
+                <button key={e.id} onClick={() => go("/dashboard/emails")} className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors">
+                  <span className="text-[13px] text-gray-900 dark:text-gray-100 truncate">{e.subject || "(no subject)"}</span>
+                  <span className="text-[11px] text-gray-400 ml-auto shrink-0">{e.fromAddress}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {results.inbox?.length > 0 && (
+            <div>
+              <p className="px-3 pt-2.5 pb-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Inbox</p>
+              {results.inbox.map((e: any) => (
+                <button key={e.id} onClick={() => go("/dashboard/inbox")} className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors">
+                  <span className="text-[13px] text-gray-900 dark:text-gray-100 truncate">{e.subject || "(no subject)"}</span>
+                  <span className="text-[11px] text-gray-400 ml-auto shrink-0">{e.fromAddress}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {results.domains?.length > 0 && (
+            <div>
+              <p className="px-3 pt-2.5 pb-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Domains</p>
+              {results.domains.map((d: any) => (
+                <button key={d.id} onClick={() => go("/dashboard/domains")} className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors">
+                  <span className="text-[13px] text-gray-900 dark:text-gray-100 font-mono">{d.name}</span>
+                  <span className="text-[11px] text-gray-400 ml-auto">{d.status}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {results.contacts?.length > 0 && (
+            <div>
+              <p className="px-3 pt-2.5 pb-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Contacts</p>
+              {results.contacts.map((c: any) => (
+                <button key={c.id} onClick={() => go("/dashboard/audiences")} className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors">
+                  <span className="text-[13px] text-gray-900 dark:text-gray-100">{c.email}</span>
+                  {(c.firstName || c.lastName) && <span className="text-[11px] text-gray-400 ml-auto">{[c.firstName, c.lastName].filter(Boolean).join(" ")}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+          {results.templates?.length > 0 && (
+            <div>
+              <p className="px-3 pt-2.5 pb-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Templates</p>
+              {results.templates.map((t: any) => (
+                <button key={t.id} onClick={() => go("/dashboard/templates")} className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors">
+                  <span className="text-[13px] text-gray-900 dark:text-gray-100">{t.name}</span>
+                  {t.subject && <span className="text-[11px] text-gray-400 ml-auto truncate">{t.subject}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -45,6 +154,7 @@ function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => void }) {
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
+        <SearchBar />
         <nav className="flex-1 px-2.5 py-3 space-y-0.5">
           {navItems.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} onClick={onToggle} className={({ isActive }) => `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-colors ${isActive ? "bg-violet-50 text-violet-700" : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"}`}>
@@ -53,8 +163,22 @@ function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => void }) {
           ))}
           {user?.role === "admin" && (<><div className="pt-3 pb-1 px-2.5"><div className="border-t border-gray-200" /></div><NavLink to="/admin" className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium text-amber-600 hover:text-amber-600 hover:bg-amber-50 transition-colors"><svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>Admin</NavLink></>)}
         </nav>
-        <div className="px-2.5 py-3 border-t border-gray-200">
-          <div className="px-2.5 mb-2"><p className="text-[13px] text-gray-900 font-medium truncate">{user?.name}</p><p className="text-[11px] text-gray-400 truncate">{user?.email}</p></div>
+        <div className="px-2.5 py-2">
+          <button
+            onClick={() => {
+              const isDark = document.documentElement.classList.toggle("dark");
+              localStorage.setItem("mailnowapi-theme", isDark ? "dark" : "light");
+            }}
+            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            <svg className="w-[18px] h-[18px] dark:hidden" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" /></svg>
+            <svg className="w-[18px] h-[18px] hidden dark:block" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
+            <span className="dark:hidden">Dark Mode</span>
+            <span className="hidden dark:block">Light Mode</span>
+          </button>
+        </div>
+        <div className="px-2.5 py-3 border-t border-gray-200 dark:border-gray-700">
+          <div className="px-2.5 mb-2"><p className="text-[13px] text-gray-900 dark:text-gray-100 font-medium truncate">{user?.name}</p><p className="text-[11px] text-gray-400 truncate">{user?.email}</p></div>
           <button onClick={async () => { await logout(); navigate("/"); }} className="w-full flex items-center gap-2 px-2.5 py-2 text-[13px] text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" /></svg>Sign out
           </button>
@@ -595,6 +719,14 @@ function ApiDocsPage() {
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("mailnowapi-theme");
+    if (saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+      document.documentElement.classList.add("dark");
+    }
+  }, []);
+
   return (
     <div className="flex min-h-screen bg-gray-50 antialiased">
       <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />

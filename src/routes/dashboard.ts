@@ -510,6 +510,60 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     return { data: webhookService.formatWebhookResponse(deleted) };
   });
 
+  // POST /dashboard/webhooks/:id/test — send a test event to the webhook URL
+  app.post<{ Params: { id: string } }>("/webhooks/:id/test", async (request) => {
+    const webhook = await webhookService.getWebhook(request.account.id, request.params.id);
+
+    const testPayload = {
+      type: "email.sent",
+      created_at: new Date().toISOString(),
+      data: {
+        email_id: "00000000-0000-0000-0000-000000000000",
+        from: "test@example.com",
+        to: ["recipient@example.com"],
+        subject: "Test webhook event",
+        status: "sent",
+        created_at: new Date().toISOString(),
+      },
+    };
+
+    const body = JSON.stringify(testPayload);
+    let responseStatus: number | null = null;
+    let responseBody: string | null = null;
+    let success = false;
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+
+      const response = await fetch(webhook.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "EmailService-Webhook/1.0 (test)",
+        },
+        body,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+      responseStatus = response.status;
+      responseBody = (await response.text()).substring(0, 1000);
+      success = response.ok;
+    } catch (error) {
+      responseBody = error instanceof Error ? error.message : "Unknown error";
+    }
+
+    return {
+      data: {
+        success,
+        url: webhook.url,
+        response_status: responseStatus,
+        response_body: responseBody,
+      },
+    };
+  });
+
   // --- Audiences ---
   app.get("/audiences", async (request) => {
     const list = await audienceService.listAudiences(request.account.id);
@@ -709,6 +763,95 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>("/templates/:id", async (request) => {
     const deleted = await templateService.deleteTemplate(request.account.id, request.params.id);
     return { data: templateService.formatTemplateResponse(deleted) };
+  });
+
+  // --- Global Search ---
+  app.get("/search", async (request) => {
+    const { q } = z.object({ q: z.string().min(1).max(200) }).parse(request.query);
+    const db = getDb();
+    const accountId = request.account.id;
+    const pattern = `%${q}%`;
+    const limit = 5;
+
+    // Search emails
+    const emailResults = await db.select({
+      id: emails.id,
+      fromAddress: emails.fromAddress,
+      subject: emails.subject,
+      status: emails.status,
+      createdAt: emails.createdAt,
+    }).from(emails).where(
+      and(
+        eq(emails.accountId, accountId),
+        or(ilike(emails.fromAddress, pattern), ilike(emails.subject, pattern)),
+      ),
+    ).orderBy(desc(emails.createdAt)).limit(limit);
+
+    // Search inbound emails
+    const inboxResults = await db.select({
+      id: inboundEmails.id,
+      fromAddress: inboundEmails.fromAddress,
+      subject: inboundEmails.subject,
+      createdAt: inboundEmails.createdAt,
+    }).from(inboundEmails).where(
+      and(
+        eq(inboundEmails.accountId, accountId),
+        or(ilike(inboundEmails.fromAddress, pattern), ilike(inboundEmails.subject, pattern)),
+      ),
+    ).orderBy(desc(inboundEmails.createdAt)).limit(limit);
+
+    // Search domains
+    const domainResults = await db.select({
+      id: domains.id,
+      name: domains.name,
+      status: domains.status,
+    }).from(domains).where(
+      and(eq(domains.accountId, accountId), ilike(domains.name, pattern)),
+    ).limit(limit);
+
+    // Search contacts across all audiences
+    const { contacts } = await import("../db/schema/index.js");
+    const contactResults = await db.select({
+      id: contacts.id,
+      email: contacts.email,
+      firstName: contacts.firstName,
+      lastName: contacts.lastName,
+      audienceId: contacts.audienceId,
+    }).from(contacts)
+      .innerJoin(audiences, eq(contacts.audienceId, audiences.id))
+      .where(
+        and(
+          eq(audiences.accountId, accountId),
+          or(
+            ilike(contacts.email, pattern),
+            ilike(contacts.firstName, pattern),
+            ilike(contacts.lastName, pattern),
+          ),
+        ),
+      ).limit(limit);
+
+    // Search templates
+    const { templates } = await import("../db/schema/index.js");
+    const templateResults = await db.select({
+      id: templates.id,
+      name: templates.name,
+      subject: templates.subject,
+    }).from(templates).where(
+      and(
+        eq(templates.accountId, accountId),
+        or(ilike(templates.name, pattern), ilike(templates.subject, pattern)),
+      ),
+    ).limit(limit);
+
+    return {
+      data: {
+        emails: emailResults,
+        inbox: inboxResults,
+        domains: domainResults,
+        contacts: contactResults,
+        templates: templateResults,
+      },
+    };
   });
 
   // --- API Docs metadata ---

@@ -3,6 +3,7 @@ import { lte, eq, and, isNotNull } from "drizzle-orm";
 import { getRedisConnection, getEmailSendQueue, getScheduledEmailQueue } from "../queues/index.js";
 import { getDb } from "../db/index.js";
 import { emails } from "../db/schema/index.js";
+import { processScheduledBroadcasts } from "../services/broadcast.service.js";
 
 async function processScheduledEmails(_job: Job) {
   const db = getDb();
@@ -27,7 +28,13 @@ async function processScheduledEmails(_job: Job) {
     });
   }
 
-  return { processed: dueEmails.length };
+  // Also process any scheduled broadcasts that are due
+  const broadcastResult = await processScheduledBroadcasts();
+
+  return {
+    processed: dueEmails.length,
+    broadcasts_processed: broadcastResult.processed,
+  };
 }
 
 export function createScheduledEmailWorker() {

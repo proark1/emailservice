@@ -2,7 +2,7 @@ import { pgTable, uuid, varchar, timestamp, text, jsonb, integer, index } from "
 import { accounts } from "./accounts.js";
 import { audiences } from "./audiences.js";
 
-export const broadcastStatusEnum = ["draft", "sending", "sent", "partial_failure", "failed"] as const;
+export const broadcastStatusEnum = ["draft", "scheduled", "sending", "sent", "partial_failure", "failed"] as const;
 export type BroadcastStatus = (typeof broadcastStatusEnum)[number];
 
 export const broadcasts = pgTable("broadcasts", {

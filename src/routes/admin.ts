@@ -3,9 +3,11 @@ import { z } from "zod";
 import * as authService from "../services/auth.service.js";
 import * as adminAnalytics from "../services/admin-analytics.service.js";
 import { getDb } from "../db/index.js";
-import { emails, emailEvents, domains, accounts, apiKeys, webhooks, apiLogs } from "../db/schema/index.js";
+import { emails, emailEvents, domains, accounts, apiKeys, webhooks, webhookDeliveries, apiLogs } from "../db/schema/index.js";
 import { count, sql, desc, eq, and, ilike } from "drizzle-orm";
-import { ForbiddenError } from "../lib/errors.js";
+import { ForbiddenError, NotFoundError } from "../lib/errors.js";
+import { getWebhookDeliverQueue } from "../queues/index.js";
+import { RETRY_DELAYS } from "../workers/webhook-deliver.worker.js";
 
 export default async function adminRoutes(app: FastifyInstance) {
   // Admin auth check on all routes
@@ -182,6 +184,48 @@ export default async function adminRoutes(app: FastifyInstance) {
   });
 
   // --- API Request Logs ---
+
+  // POST /admin/webhooks/deliveries/:id/retry — re-dispatch a failed webhook delivery
+  app.post<{ Params: { id: string } }>("/webhooks/deliveries/:id/retry", async (request) => {
+    const db = getDb();
+
+    const [delivery] = await db
+      .select()
+      .from(webhookDeliveries)
+      .where(eq(webhookDeliveries.id, request.params.id));
+
+    if (!delivery) throw new NotFoundError("Webhook delivery");
+
+    if (delivery.status === "success") {
+      throw new (await import("../lib/errors.js")).ValidationError(
+        "Cannot retry a successful delivery"
+      );
+    }
+
+    // Look up the webhook to get the signing secret
+    const [webhook] = await db
+      .select()
+      .from(webhooks)
+      .where(eq(webhooks.id, delivery.webhookId));
+
+    if (!webhook) throw new NotFoundError("Webhook");
+
+    const requestBody = delivery.requestBody as { type?: string; data?: Record<string, unknown> } | null;
+
+    await getWebhookDeliverQueue().add("deliver", {
+      webhookId: delivery.webhookId,
+      emailEventId: delivery.emailEventId,
+      eventType: requestBody?.type ?? "email.sent",
+      payload: (requestBody?.data ?? {}) as Record<string, unknown>,
+      signingSecret: webhook.signingSecret,
+      url: delivery.url,
+    }, {
+      attempts: RETRY_DELAYS.length + 1,
+      backoff: { type: "exponential", delay: 30_000 },
+    });
+
+    return { data: { success: true, delivery_id: delivery.id } };
+  });
 
   app.get("/analytics/api-logs", async (request) => {
     const query = z.object({
