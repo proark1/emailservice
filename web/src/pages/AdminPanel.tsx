@@ -54,7 +54,14 @@ function AdminSidebar({ open, onToggle }: { open: boolean; onToggle: () => void 
 // ---- Overview ----
 function AdminOverview() {
   const [stats, setStats] = useState<any>(null);
-  useEffect(() => { api("/admin/stats").then((r) => setStats(r.data)).catch(() => {}); }, []);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api("/admin/stats")
+      .then((r) => setStats(r.data))
+      .catch((e) => setError(e.message || "Failed to load stats"))
+      .finally(() => setLoading(false));
+  }, []);
   const cards = stats ? [
     { label: "Accounts", value: stats.accounts, color: "from-violet-500 to-indigo-500" },
     { label: "Domains", value: stats.domains, color: "from-cyan-500 to-blue-500" },
@@ -62,6 +69,8 @@ function AdminOverview() {
     { label: "API Keys", value: stats.api_keys, color: "from-amber-500 to-orange-500" },
     { label: "Webhooks", value: stats.webhooks, color: "from-pink-500 to-rose-500" },
   ] : [];
+  if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /></div>;
+  if (error) return <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px]">{error}</div>;
   return (
     <div>
       <div className="mb-6"><h1 className="text-xl font-semibold text-gray-900 tracking-tight">System Overview</h1><p className="text-sm text-gray-500 mt-1">Platform health at a glance</p></div>
@@ -87,9 +96,11 @@ function AdminAnalytics() {
   const [suppressions, setSuppressions] = useState<any>(null);
   const [activity, setActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([
+    // Use allSettled so one failing endpoint doesn't blank the entire page
+    Promise.allSettled([
       api("/admin/analytics/overview").then((r) => setOverview(r.data)),
       api("/admin/analytics/delivery-rates").then((r) => setRates(r.data)),
       api("/admin/analytics/emails?days=30").then((r) => setEmailTS(r.data)),
@@ -99,12 +110,16 @@ function AdminAnalytics() {
       api("/admin/analytics/webhooks").then((r) => setWebhookHealth(r.data)),
       api("/admin/analytics/suppressions").then((r) => setSuppressions(r.data)),
       api("/admin/analytics/activity").then((r) => setActivity(r.data)),
-    ]).catch(() => {}).finally(() => setLoading(false));
+    ]).then((results) => {
+      const failed = results.filter((r) => r.status === "rejected");
+      if (failed.length === results.length) setError("Failed to load analytics. Check admin access.");
+    }).finally(() => setLoading(false));
   }, []);
 
   const eventColors: Record<string, string> = { sent: "text-emerald-600 bg-emerald-50 border-emerald-200", delivered: "text-green-600 bg-green-50 border-green-200", opened: "text-blue-600 bg-blue-50 border-blue-200", clicked: "text-cyan-600 bg-cyan-50 border-cyan-200", bounced: "text-amber-600 bg-amber-50 border-amber-200", failed: "text-red-600 bg-rose-50 border-rose-200", complained: "text-rose-600 bg-rose-50 border-rose-200" };
 
   if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /></div>;
+  if (error) return <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px]">{error}</div>;
 
   return (
     <div className="space-y-6">
@@ -211,7 +226,14 @@ function AdminAnalytics() {
 function AdminAccounts() {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<any[]>([]);
-  useEffect(() => { api("/admin/accounts").then((r) => setAccounts(r.data)).catch(() => {}); }, []);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api("/admin/accounts")
+      .then((r) => setAccounts(r.data))
+      .catch((e) => setError(e.message || "Failed to load accounts"))
+      .finally(() => setLoading(false));
+  }, []);
 
   const toggleRole = async (id: string, currentRole: string) => {
     const newRole = currentRole === "admin" ? "user" : "admin";
@@ -224,9 +246,12 @@ function AdminAccounts() {
     setAccounts((prev) => prev.filter((a) => a.id !== id));
   };
 
+  if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /></div>;
+  if (error) return <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px]">{error}</div>;
+
   return (
     <div>
-      <div className="mb-6"><h1 className="text-xl font-semibold text-gray-900 tracking-tight">Accounts</h1><p className="text-sm text-gray-500 mt-1">Manage user accounts and roles</p></div>
+      <div className="mb-6"><h1 className="text-xl font-semibold text-gray-900 tracking-tight">Accounts ({accounts.length})</h1><p className="text-sm text-gray-500 mt-1">Manage user accounts and roles</p></div>
       <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-gray-200"><th className="text-left px-4 py-3 text-[12px] font-medium text-gray-500 uppercase tracking-wider">User</th><th className="text-left px-4 py-3 text-[12px] font-medium text-gray-500 uppercase tracking-wider">Role</th><th className="text-left px-4 py-3 text-[12px] font-medium text-gray-500 uppercase tracking-wider">Joined</th><th className="text-right px-4 py-3 text-[12px] font-medium text-gray-500 uppercase tracking-wider">Actions</th></tr></thead>
       <tbody className="divide-y divide-gray-100">{accounts.map((a) => (
         <tr key={a.id} className="hover:bg-gray-50">
@@ -247,9 +272,12 @@ function AdminAccounts() {
 function AdminApiUsage() {
   const [keys, setKeys] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { api("/admin/analytics/api-keys").then((r) => setKeys(r.data)).catch(() => {}).finally(() => setLoading(false)); }, []);
+  const [error, setError] = useState("");
+  useEffect(() => { api("/admin/analytics/api-keys").then((r) => setKeys(r.data)).catch((e: any) => setError(e.message || "Failed to load")).finally(() => setLoading(false)); }, []);
 
   if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /></div>;
+
+  if (error) return <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px]">{error}</div>;
 
   return (
     <div>
@@ -279,17 +307,19 @@ function AdminApiUsage() {
 function AdminApiLogs() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
   useEffect(() => {
     const params = new URLSearchParams({ limit: "100" });
     if (methodFilter) params.set("method", methodFilter);
-    api(`/admin/analytics/api-logs?${params}`).then((r) => setLogs(r.data)).catch(() => {}).finally(() => setLoading(false));
+    api(`/admin/analytics/api-logs?${params}`).then((r) => setLogs(r.data)).catch((e: any) => setError(e.message || "Failed to load")).finally(() => setLoading(false));
   }, [methodFilter]);
 
   const methodColor = (m: string) => m === "GET" ? "text-emerald-600 bg-emerald-50 border-emerald-200" : m === "POST" ? "text-blue-600 bg-blue-50 border-blue-200" : m === "DELETE" ? "text-red-600 bg-rose-50 border-rose-200" : m === "PATCH" ? "text-amber-600 bg-amber-50 border-amber-200" : "text-gray-600 bg-gray-100 border-gray-200";
   const statusColor = (s: number) => s < 300 ? "text-emerald-600" : s < 400 ? "text-blue-600" : s < 500 ? "text-amber-600" : "text-red-600";
 
   if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /></div>;
+  if (error) return <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px]">{error}</div>;
 
   return (
     <div>
@@ -333,7 +363,8 @@ function AdminApiLogs() {
 function AdminWarmups() {
   const [warmups, setWarmups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { api("/admin/warmups").then((r) => setWarmups(r.data)).catch(() => {}).finally(() => setLoading(false)); }, []);
+  const [error, setError] = useState("");
+  useEffect(() => { api("/admin/warmups").then((r) => setWarmups(r.data)).catch((e: any) => setError(e.message || "Failed to load")).finally(() => setLoading(false)); }, []);
 
   const cancelWarmup = async (id: string) => {
     if (!confirm("Cancel this warmup schedule?")) return;
@@ -344,6 +375,9 @@ function AdminWarmups() {
   if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /></div>;
 
   const statusColor = (s: string) => s === "active" ? "text-emerald-600 bg-emerald-50 border-emerald-200" : s === "paused" ? "text-amber-600 bg-amber-50 border-amber-200" : s === "completed" ? "text-blue-600 bg-blue-50 border-blue-200" : "text-gray-600 bg-gray-100 border-gray-200";
+
+  if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /></div>;
+  if (error) return <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px]">{error}</div>;
 
   return (
     <div>
