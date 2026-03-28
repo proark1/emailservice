@@ -106,6 +106,7 @@ export default function InboxPage() {
   const [domainsList, setDomainsList] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterTab>("all");
+  const [domainFilter, setDomainFilter] = useState("");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; pages: number } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -121,12 +122,13 @@ export default function InboxPage() {
 
   /* ---- data fetching ---- */
   const fetchEmails = useCallback(
-    async (p: number, s: string, f: FilterTab, append = false) => {
+    async (p: number, s: string, f: FilterTab, append = false, domain?: string) => {
       setLoading(true);
       try {
         const params = new URLSearchParams();
         if (s) params.set("search", s);
         if (f !== "all") params.set("filter", f);
+        if (domain) params.set("domain_id", domain);
         params.set("page", String(p));
         params.set("limit", "50");
         const res = await api(`/dashboard/inbox?${params}`);
@@ -153,7 +155,7 @@ export default function InboxPage() {
   }, []);
 
   useEffect(() => {
-    fetchEmails(1, "", "all");
+    fetchEmails(1, "", "all", false, "");
     fetchDomains();
   }, [fetchEmails, fetchDomains]);
 
@@ -163,7 +165,7 @@ export default function InboxPage() {
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => {
       setPage(1);
-      fetchEmails(1, value, filter);
+      fetchEmails(1, value, filter, false, domainFilter);
     }, 300);
   };
 
@@ -171,7 +173,13 @@ export default function InboxPage() {
   const onFilterChange = (f: FilterTab) => {
     setFilter(f);
     setPage(1);
-    fetchEmails(1, search, f);
+    fetchEmails(1, search, f, false, domainFilter);
+  };
+
+  const onDomainFilterChange = (d: string) => {
+    setDomainFilter(d);
+    setPage(1);
+    fetchEmails(1, search, filter, false, d);
   };
 
   /* ---- select / open ---- */
@@ -249,7 +257,7 @@ export default function InboxPage() {
   const loadMore = () => {
     const next = page + 1;
     setPage(next);
-    fetchEmails(next, search, filter, true);
+    fetchEmails(next, search, filter, true, domainFilter);
   };
 
   /* ---- iframe auto-height ---- */
@@ -337,6 +345,17 @@ export default function InboxPage() {
               </button>
             ))}
           </div>
+          {/* domain filter */}
+          {domainsList.length > 1 && (
+            <select
+              value={domainFilter}
+              onChange={(e) => onDomainFilterChange(e.target.value)}
+              className="w-full h-8 px-2 bg-white border border-gray-200 rounded-lg text-[12px] text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 mt-1.5"
+            >
+              <option value="">All domains</option>
+              {domainsList.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          )}
         </div>
 
         {/* ---- email list ---- */}

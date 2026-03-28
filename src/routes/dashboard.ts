@@ -48,6 +48,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const query = z.object({
       search: z.string().optional(),
       status: z.string().optional(),
+      domain_id: z.string().uuid().optional(),
       page: z.coerce.number().int().min(1).optional().default(1),
       limit: z.coerce.number().int().min(1).max(100).optional().default(50),
     }).parse(request.query);
@@ -67,6 +68,10 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
     if (query.status) {
       conditions.push(eq(emails.status, query.status as any));
+    }
+
+    if (query.domain_id) {
+      conditions.push(eq(emails.domainId, query.domain_id));
     }
 
     const whereClause = and(...conditions);
@@ -124,6 +129,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const query = z.object({
       search: z.string().optional(),
       filter: z.enum(["all", "unread", "starred", "archived"]).optional().default("all"),
+      domain_id: z.string().uuid().optional(),
       page: z.coerce.number().int().min(1).optional().default(1),
       limit: z.coerce.number().int().min(1).max(100).optional().default(50),
     }).parse(request.query);
@@ -147,6 +153,10 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       conditions.push(eq(inboundEmails.isStarred, true));
     } else if (query.filter === "archived") {
       conditions.push(eq(inboundEmails.isArchived, true));
+    }
+
+    if (query.domain_id) {
+      conditions.push(eq(inboundEmails.domainId, query.domain_id));
     }
 
     const whereClause = and(...conditions);

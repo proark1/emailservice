@@ -94,6 +94,7 @@ export default function EmailsPage() {
   const [loading, setLoading] = useState(true);
 
   const [domains, setDomains] = useState<Domain[]>([]);
+  const [domainFilter, setDomainFilter] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
   const [detailEmail, setDetailEmail] = useState<Email | null>(null);
 
@@ -114,6 +115,7 @@ export default function EmailsPage() {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (activeTab !== "all") params.set("status", activeTab);
+      if (domainFilter) params.set("domain_id", domainFilter);
       params.set("page", String(page));
       params.set("limit", "50");
       const res = await api<{ data: Email[]; pagination: Pagination }>(`/dashboard/emails?${params}`);
@@ -124,7 +126,7 @@ export default function EmailsPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, activeTab, page]);
+  }, [debouncedSearch, activeTab, page, domainFilter]);
 
   const loadCounts = useCallback(async () => {
     try {
@@ -244,6 +246,16 @@ export default function EmailsPage() {
                 className="h-10 w-64 pl-9 pr-3.5 bg-white border border-gray-300 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 transition-all"
               />
             </div>
+            {domains.length > 1 && (
+              <select
+                value={domainFilter}
+                onChange={(e) => { setDomainFilter(e.target.value); setPage(1); }}
+                className="h-10 px-3 bg-white border border-gray-300 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 transition-all"
+              >
+                <option value="">All domains</option>
+                {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            )}
             <Button onClick={() => { resetCompose(); setComposeOpen(true); }}>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />

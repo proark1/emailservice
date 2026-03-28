@@ -115,4 +115,69 @@ export default async function adminRoutes(app: FastifyInstance) {
   app.get("/analytics/api-keys", async () => {
     return { data: await adminAnalytics.getApiKeyUsage() };
   });
+
+  // --- Warmup management (admin can see all warmups across accounts) ---
+  app.get("/warmups", async () => {
+    const { warmupSchedules } = await import("../db/schema/index.js");
+    const { desc, eq } = await import("drizzle-orm");
+    const db = getDb();
+    const schedules = await db.select({
+      id: warmupSchedules.id,
+      accountId: warmupSchedules.accountId,
+      domainId: warmupSchedules.domainId,
+      status: warmupSchedules.status,
+      currentDay: warmupSchedules.currentDay,
+      totalDays: warmupSchedules.totalDays,
+      sentToday: warmupSchedules.sentToday,
+      targetToday: warmupSchedules.targetToday,
+      totalSent: warmupSchedules.totalSent,
+      totalOpens: warmupSchedules.totalOpens,
+      totalReplies: warmupSchedules.totalReplies,
+      fromAddress: warmupSchedules.fromAddress,
+      startedAt: warmupSchedules.startedAt,
+      completedAt: warmupSchedules.completedAt,
+      lastRunAt: warmupSchedules.lastRunAt,
+      createdAt: warmupSchedules.createdAt,
+      accountName: accounts.name,
+      accountEmail: accounts.email,
+      domainName: domains.name,
+    })
+      .from(warmupSchedules)
+      .innerJoin(accounts, eq(warmupSchedules.accountId, accounts.id))
+      .innerJoin(domains, eq(warmupSchedules.domainId, domains.id))
+      .orderBy(desc(warmupSchedules.createdAt));
+
+    return {
+      data: schedules.map((s) => ({
+        id: s.id,
+        account_name: s.accountName,
+        account_email: s.accountEmail,
+        domain_name: s.domainName,
+        status: s.status,
+        current_day: s.currentDay,
+        total_days: s.totalDays,
+        sent_today: s.sentToday,
+        target_today: s.targetToday,
+        total_sent: s.totalSent,
+        from_address: s.fromAddress,
+        progress: Math.min(100, Math.round(((s.currentDay - 1) / s.totalDays) * 100)),
+        started_at: s.startedAt?.toISOString(),
+        completed_at: s.completedAt?.toISOString(),
+        last_run_at: s.lastRunAt?.toISOString(),
+        created_at: s.createdAt?.toISOString(),
+      })),
+    };
+  });
+
+  app.post<{ Params: { id: string } }>("/warmups/:id/cancel", async (request) => {
+    const { warmupSchedules } = await import("../db/schema/index.js");
+    const { eq } = await import("drizzle-orm");
+    const db = getDb();
+    const [updated] = await db.update(warmupSchedules)
+      .set({ status: "cancelled", completedAt: new Date(), updatedAt: new Date() })
+      .where(eq(warmupSchedules.id, request.params.id))
+      .returning();
+    if (!updated) throw new ForbiddenError("Warmup not found");
+    return { data: { success: true } };
+  });
 }

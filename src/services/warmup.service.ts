@@ -67,21 +67,16 @@ const REPLY_BODIES = [
   "Thanks! I'll review and circle back tomorrow morning.",
 ];
 
-// Warmup pool addresses — these are internal addresses that "receive" warmup emails
-// In a real warmup service, these would be real mailboxes across providers.
-// Here we use the MailNowAPI domain as the pool.
-function getWarmupPoolAddresses(): string[] {
+// Warmup recipient addresses — sent to the user's own domain so the
+// inbound SMTP server receives them, creating real mail flow.
+// This builds genuine sender reputation with receiving mail servers.
+function getWarmupRecipients(domainName: string): string[] {
   return [
-    "warmup-inbox-1@mailnowapi.com",
-    "warmup-inbox-2@mailnowapi.com",
-    "warmup-inbox-3@mailnowapi.com",
-    "warmup-inbox-4@mailnowapi.com",
-    "warmup-inbox-5@mailnowapi.com",
-    "warmup-pool-a@mailnowapi.com",
-    "warmup-pool-b@mailnowapi.com",
-    "warmup-pool-c@mailnowapi.com",
-    "warmup-pool-d@mailnowapi.com",
-    "warmup-pool-e@mailnowapi.com",
+    `warmup-1@${domainName}`,
+    `warmup-2@${domainName}`,
+    `warmup-3@${domainName}`,
+    `warmup-4@${domainName}`,
+    `warmup-5@${domainName}`,
   ];
 }
 
@@ -276,36 +271,41 @@ export async function executeWarmupRound(scheduleId: string) {
     if (hoursSinceLastRun < 20) return;
   }
 
+  // Look up the domain for recipient addresses
+  const [domain] = await db.select().from(domains)
+    .where(eq(domains.id, schedule.domainId));
+  if (!domain) return;
+
   const target = schedule.rampSchedule[schedule.currentDay - 1] || 2;
-  const poolAddresses = getWarmupPoolAddresses();
+  const recipients = getWarmupRecipients(domain.name);
   let sentCount = 0;
   let openCount = 0;
   let replyCount = 0;
 
-  // Send warmup emails spread across the pool
+  // Spread sends across the day with small random delays
   for (let i = 0; i < target; i++) {
-    const toAddress = poolAddresses[i % poolAddresses.length];
+    const toAddress = recipients[i % recipients.length];
     const subject = randomItem(WARMUP_SUBJECTS);
     const body = randomItem(WARMUP_BODIES);
 
     try {
-      // Send the actual email through the normal email pipeline
+      // Send real email through the normal pipeline — goes out via SMTP,
+      // comes back in via MX → Postfix → inbound server, creating genuine
+      // mail flow that builds sender reputation with receiving MTAs.
       const result = await sendEmail(schedule.accountId, {
         from: schedule.fromAddress,
         to: [toAddress],
         subject,
         text: body,
-        html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; line-height: 1.6; color: #333;"><p>${body}</p></div>`,
-        tags: { warmup: "true", warmup_day: String(schedule.currentDay) },
+        html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.6;color:#333;"><p>${body}</p></div>`,
+        tags: { _warmup: "true", _warmup_schedule: schedule.id, _warmup_day: String(schedule.currentDay) },
       });
 
-      const emailId = result.cached ? undefined : (result.response as any)?.id;
+      const emailId = !result.cached ? (result.response as any)?.id : undefined;
 
-      // Simulate engagement: ~85% open rate, ~30% reply rate (realistic for warmup)
-      const willOpen = Math.random() < 0.85;
-      const willReply = willOpen && Math.random() < 0.35;
-
-      const [warmupEmail] = await db.insert(warmupEmails).values({
+      // Track the warmup email — engagement is recorded when the email
+      // actually goes through the send pipeline (open/click tracking)
+      await db.insert(warmupEmails).values({
         scheduleId: schedule.id,
         accountId: schedule.accountId,
         emailId: emailId || null,
@@ -313,19 +313,14 @@ export async function executeWarmupRound(scheduleId: string) {
         fromAddress: schedule.fromAddress,
         toAddress,
         subject,
-        opened: willOpen,
-        openedAt: willOpen ? new Date(Date.now() + Math.random() * 3_600_000) : null,
-        replied: willReply,
-        repliedAt: willReply ? new Date(Date.now() + Math.random() * 7_200_000) : null,
-        inboxPlacement: "inbox", // Warmup pool always reports inbox
+        opened: false,
+        replied: false,
+        inboxPlacement: "unknown",
         status: "sent",
-      }).returning();
+      });
 
       sentCount++;
-      if (willOpen) openCount++;
-      if (willReply) replyCount++;
     } catch {
-      // Log failed warmup email but continue
       await db.insert(warmupEmails).values({
         scheduleId: schedule.id,
         accountId: schedule.accountId,
@@ -351,8 +346,8 @@ export async function executeWarmupRound(scheduleId: string) {
     sentToday: sentCount,
     targetToday: nextTarget,
     totalSent: schedule.totalSent + sentCount,
-    totalOpens: schedule.totalOpens + openCount,
-    totalReplies: schedule.totalReplies + replyCount,
+    totalOpens: schedule.totalOpens,
+    totalReplies: schedule.totalReplies,
     lastRunAt: new Date(),
     status: isComplete ? "completed" : "active",
     completedAt: isComplete ? new Date() : null,

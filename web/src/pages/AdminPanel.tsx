@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import { api, patch, del } from "../lib/api";
+import { api, post, patch, del } from "../lib/api";
 
 // ---- Sidebar nav items ----
 const adminNav = [
@@ -9,6 +9,7 @@ const adminNav = [
   { to: "/admin/analytics", label: "Analytics", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg> },
   { to: "/admin/accounts", label: "Accounts", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg> },
   { to: "/admin/api-usage", label: "API Usage", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg> },
+  { to: "/admin/warmups", label: "Warmups", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" /></svg> },
 ];
 
 function AdminSidebar({ open, onToggle }: { open: boolean; onToggle: () => void }) {
@@ -273,6 +274,65 @@ function AdminApiUsage() {
   );
 }
 
+// ---- Warmups (admin) ----
+function AdminWarmups() {
+  const [warmups, setWarmups] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { api("/admin/warmups").then((r) => setWarmups(r.data)).catch(() => {}).finally(() => setLoading(false)); }, []);
+
+  const cancelWarmup = async (id: string) => {
+    if (!confirm("Cancel this warmup schedule?")) return;
+    await post(`/admin/warmups/${id}/cancel`, {});
+    setWarmups((prev) => prev.map((w) => w.id === id ? { ...w, status: "cancelled" } : w));
+  };
+
+  if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /></div>;
+
+  const statusColor = (s: string) => s === "active" ? "text-emerald-600 bg-emerald-50 border-emerald-200" : s === "paused" ? "text-amber-600 bg-amber-50 border-amber-200" : s === "completed" ? "text-blue-600 bg-blue-50 border-blue-200" : "text-gray-600 bg-gray-100 border-gray-200";
+
+  return (
+    <div>
+      <div className="mb-6"><h1 className="text-xl font-semibold text-gray-900 tracking-tight">Warmup Schedules</h1><p className="text-sm text-gray-500 mt-1">Monitor and manage domain warmup across all accounts</p></div>
+      {warmups.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center border border-gray-200 rounded-2xl bg-white">
+          <p className="text-sm font-medium text-gray-900">No warmup schedules</p>
+          <p className="text-[13px] text-gray-500 mt-1">Users can start warmup from their dashboard</p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-gray-200">
+          <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Account</th>
+          <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Domain</th>
+          <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Status</th>
+          <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Progress</th>
+          <th className="text-right px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Sent</th>
+          <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Last Run</th>
+          <th className="text-right px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Actions</th>
+        </tr></thead>
+        <tbody className="divide-y divide-gray-100">{warmups.map((w: any) => (
+          <tr key={w.id} className="hover:bg-gray-50">
+            <td className="px-4 py-2"><p className="text-[13px] text-gray-900">{w.account_name}</p><p className="text-[11px] text-gray-400">{w.account_email}</p></td>
+            <td className="px-4 py-2 text-[13px] text-gray-900 font-mono">{w.domain_name}</td>
+            <td className="px-4 py-2"><span className={`inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium border ${statusColor(w.status)}`}>{w.status}</span></td>
+            <td className="px-4 py-2">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden"><div className="h-full bg-amber-500 rounded-full" style={{ width: `${w.progress}%` }} /></div>
+                <span className="text-[11px] text-gray-500 shrink-0">Day {w.current_day}/{w.total_days}</span>
+              </div>
+            </td>
+            <td className="px-4 py-2 text-[13px] text-gray-600 text-right font-mono">{w.total_sent}</td>
+            <td className="px-4 py-2 text-[12px] text-gray-500">{w.last_run_at ? new Date(w.last_run_at).toLocaleString() : "Not yet"}</td>
+            <td className="px-4 py-2 text-right">
+              {(w.status === "active" || w.status === "paused") && (
+                <button onClick={() => cancelWarmup(w.id)} className="px-2.5 py-1.5 text-[12px] text-red-600 hover:bg-red-50 rounded-lg transition-colors">Cancel</button>
+              )}
+            </td>
+          </tr>
+        ))}</tbody></table></div></div>
+      )}
+    </div>
+  );
+}
+
 // ---- Main Layout ----
 export default function AdminPanel() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -290,6 +350,7 @@ export default function AdminPanel() {
           <Route path="analytics" element={<AdminAnalytics />} />
           <Route path="accounts" element={<AdminAccounts />} />
           <Route path="api-usage" element={<AdminApiUsage />} />
+          <Route path="warmups" element={<AdminWarmups />} />
         </Routes>
       </main>
     </div>
