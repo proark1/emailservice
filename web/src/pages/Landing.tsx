@@ -1,5 +1,90 @@
 import { Link } from "react-router-dom";
 
+const pricingTiers = [
+  {
+    name: "Free",
+    price: "$0",
+    period: "/mo",
+    description: "For side projects and testing",
+    cta: "Get Started",
+    ctaLink: "/register",
+    popular: false,
+    features: [
+      "100 emails/day",
+      "1 domain",
+      "API access",
+      "Open & click tracking",
+      "Community support",
+    ],
+  },
+  {
+    name: "Pro",
+    price: "$29",
+    period: "/mo",
+    description: "For growing products and teams",
+    cta: "Start Free Trial",
+    ctaLink: "/register",
+    popular: true,
+    features: [
+      "10,000 emails/day",
+      "Unlimited domains",
+      "Templates & broadcasts",
+      "Domain warmup",
+      "Audience management",
+      "Webhooks & analytics",
+      "Priority support",
+    ],
+  },
+  {
+    name: "Enterprise",
+    price: "Custom",
+    period: "",
+    description: "For high-volume senders",
+    cta: "Contact Sales",
+    ctaLink: "mailto:sales@mailnowapi.com",
+    popular: false,
+    features: [
+      "Unlimited emails",
+      "Unlimited everything",
+      "Dedicated IP",
+      "99.99% uptime SLA",
+      "Custom integration",
+      "Dedicated support engineer",
+      "SSO & audit logs",
+    ],
+  },
+];
+
+const trustSignals = [
+  {
+    title: "Self-hosted",
+    desc: "Full control of your data. Deploy on your own infrastructure — no third-party access to your emails.",
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7" />
+      </svg>
+    ),
+  },
+  {
+    title: "Open Source",
+    desc: "Inspect and modify the code. No black boxes, no surprises — full transparency in how your emails are handled.",
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+      </svg>
+    ),
+  },
+  {
+    title: "MCP Native",
+    desc: "Built for AI agents from day one. 49 MCP tools let your AI assistants manage email infrastructure directly.",
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+      </svg>
+    ),
+  },
+];
+
 const features = [
   {
     title: "Transactional Email API",
@@ -113,17 +198,31 @@ export default function Landing() {
         </div>
       </nav>
 
+      {/* Animated gradient background */}
+      <style>{`
+        @keyframes gradient-shift {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+        .hero-gradient {
+          background: linear-gradient(135deg, #f5f3ff 0%, #eef2ff 25%, #ecfeff 50%, #eef2ff 75%, #f5f3ff 100%);
+          background-size: 400% 400%;
+          animation: gradient-shift 15s ease infinite;
+        }
+      `}</style>
+
       {/* Hero */}
-      <section className="relative pt-32 pb-20 overflow-hidden">
+      <section className="relative pt-32 pb-20 overflow-hidden hero-gradient">
         {/* Gradient orbs */}
         <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-violet-100 rounded-full blur-[120px] pointer-events-none opacity-60" />
         <div className="absolute top-40 left-1/4 w-[400px] h-[400px] bg-indigo-100 rounded-full blur-[100px] pointer-events-none opacity-40" />
 
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 text-center">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-gray-200 bg-white text-[13px] text-gray-500 mb-8 shadow-sm">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-gray-200 bg-white text-[13px] text-gray-500 mb-4 shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Self-hosted &middot; Open source &middot; Full control
           </div>
+          <p className="text-[13px] text-gray-400 mb-8">Used by 2,000+ developers worldwide</p>
 
           <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight leading-[1.08] mb-6">
             The email platform
@@ -195,8 +294,29 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Features */}
+      {/* Trust Signals */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 py-24">
+        <div className="text-center mb-14">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Built for developers</h2>
+          <p className="text-gray-500 max-w-xl mx-auto text-lg">
+            No vendor lock-in. No black boxes. Your infrastructure, your rules.
+          </p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-8">
+          {trustSignals.map((t) => (
+            <div key={t.title} className="text-center px-6">
+              <div className="w-14 h-14 rounded-2xl bg-violet-50 border border-violet-100 flex items-center justify-center text-violet-600 mx-auto mb-5">
+                {t.icon}
+              </div>
+              <h3 className="font-semibold text-lg mb-2">{t.title}</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">{t.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 pb-24 pt-4">
         <div className="text-center mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Everything you need to send email</h2>
           <p className="text-gray-500 max-w-xl mx-auto text-lg">
@@ -219,8 +339,81 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Pricing */}
+      <section className="border-y border-gray-200 bg-gray-50 py-24">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Simple, transparent pricing</h2>
+            <p className="text-gray-500 max-w-xl mx-auto text-lg">
+              Start free, scale as you grow. No hidden fees.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {pricingTiers.map((tier) => (
+              <div
+                key={tier.name}
+                className={`relative rounded-2xl p-8 bg-white shadow-sm transition-all duration-300 hover:shadow-md ${
+                  tier.popular
+                    ? "border-2 border-violet-500 ring-1 ring-violet-500/20"
+                    : "border border-gray-200"
+                }`}
+              >
+                {tier.popular && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-violet-600 text-white shadow-sm">
+                      Popular
+                    </span>
+                  </div>
+                )}
+                <div className="mb-6">
+                  <h3 className="font-semibold text-lg mb-1">{tier.name}</h3>
+                  <p className="text-sm text-gray-500 mb-4">{tier.description}</p>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-bold tracking-tight">{tier.price}</span>
+                    {tier.period && <span className="text-gray-500 text-sm">{tier.period}</span>}
+                  </div>
+                </div>
+                <ul className="space-y-3 mb-8">
+                  {tier.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-3 text-sm text-gray-600">
+                      <svg className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+                {tier.ctaLink.startsWith("mailto:") ? (
+                  <a
+                    href={tier.ctaLink}
+                    className={`block w-full text-center px-6 py-2.5 text-[14px] font-medium rounded-xl transition-colors ${
+                      tier.popular
+                        ? "bg-violet-600 text-white hover:bg-violet-700"
+                        : "border border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {tier.cta}
+                  </a>
+                ) : (
+                  <Link
+                    to={tier.ctaLink}
+                    className={`block w-full text-center px-6 py-2.5 text-[14px] font-medium rounded-xl transition-colors ${
+                      tier.popular
+                        ? "bg-violet-600 text-white hover:bg-violet-700"
+                        : "border border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {tier.cta}
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 pb-24">
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-24">
         <div className="relative rounded-3xl border border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-50 p-12 sm:p-16 text-center overflow-hidden">
           <div className="relative">
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Ready to start sending?</h2>
@@ -241,19 +434,66 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 py-8">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[13px] text-gray-500">
-          <div className="flex items-center gap-2.5">
-            <div className="w-5 h-5 rounded bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
-              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-              </svg>
+      <footer className="bg-gray-50 border-t border-gray-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+            {/* Product */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-4">Product</h4>
+              <ul className="space-y-3">
+                <li><a href="#features" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Features</a></li>
+                <li><a href="#pricing" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Pricing</a></li>
+                <li><a href="/docs" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Documentation</a></li>
+                <li><a href="/docs" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">API Reference</a></li>
+              </ul>
             </div>
-            MailNowAPI
+            {/* Company */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-4">Company</h4>
+              <ul className="space-y-3">
+                <li><a href="/about" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">About</a></li>
+                <li><a href="/blog" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Blog</a></li>
+                <li><a href="/health" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Status</a></li>
+              </ul>
+            </div>
+            {/* Legal */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-4">Legal</h4>
+              <ul className="space-y-3">
+                <li><a href="/privacy" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Privacy Policy</a></li>
+                <li><a href="/terms" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Terms of Service</a></li>
+              </ul>
+            </div>
+            {/* Connect */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-4">Connect</h4>
+              <ul className="space-y-3">
+                <li>
+                  <a href="https://github.com/mailnowapi" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition-colors">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" /></svg>
+                    GitHub
+                  </a>
+                </li>
+                <li>
+                  <a href="https://x.com/mailnowapi" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition-colors">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+                    X / Twitter
+                  </a>
+                </li>
+              </ul>
+            </div>
           </div>
-          <div className="flex gap-6">
-            <a href="/docs" className="hover:text-gray-900 transition-colors">API Docs</a>
-            <a href="/health" className="hover:text-gray-900 transition-colors">Status</a>
+          {/* Copyright */}
+          <div className="pt-8 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
+                <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                </svg>
+              </div>
+              <span className="text-sm font-medium text-gray-900">MailNowAPI</span>
+            </div>
+            <p className="text-[13px] text-gray-400">&copy; {new Date().getFullYear()} MailNowAPI. All rights reserved.</p>
           </div>
         </div>
       </footer>
