@@ -13,6 +13,12 @@ import trackingRoutes from "./tracking.js";
 import authRoutes from "./auth.js";
 import adminRoutes from "./admin.js";
 import dashboardRoutes from "./dashboard.js";
+import folderRoutes from "./folders.js";
+import inboxRoutes from "./inbox.js";
+import draftRoutes from "./drafts.js";
+import threadRoutes from "./threads.js";
+import signatureRoutes from "./signatures.js";
+import addressBookRoutes from "./address-book.js";
 import { addSuppression, listSuppressions, removeSuppression, formatSuppressionResponse } from "../services/suppression.service.js";
 import { getAccountAnalytics } from "../services/analytics.service.js";
 
@@ -55,6 +61,12 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(broadcastRoutes, { prefix: "/v1/broadcasts" });
   await app.register(warmupRoutes, { prefix: "/v1/warmup" });
   await app.register(templateRoutes, { prefix: "/v1/templates" });
+  await app.register(folderRoutes, { prefix: "/v1/folders" });
+  await app.register(inboxRoutes, { prefix: "/v1/inbox" });
+  await app.register(draftRoutes, { prefix: "/v1/drafts" });
+  await app.register(threadRoutes, { prefix: "/v1/threads" });
+  await app.register(signatureRoutes, { prefix: "/v1/signatures" });
+  await app.register(addressBookRoutes, { prefix: "/v1/address-book" });
 
   // Suppression routes
   await app.register(async (suppApp) => {

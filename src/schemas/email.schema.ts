@@ -22,6 +22,9 @@ export const sendEmailSchema = z.object({
   idempotency_key: z.string().max(255).optional(),
   template_id: z.string().uuid().optional(),
   template_variables: z.record(z.string(), z.string()).optional(),
+  in_reply_to: z.string().max(500).optional(),
+  references: z.array(z.string().max(500)).optional(),
+  signature_id: z.string().uuid().optional(),
 }).refine((d) => d.html || d.text || d.template_id, {
   message: "At least one of html, text, or template_id is required",
   path: ["html"],

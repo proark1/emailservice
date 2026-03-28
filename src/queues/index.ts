@@ -42,6 +42,7 @@ export function getDnsVerifyQueue() { return getQueue("dns.verify"); }
 export function getScheduledEmailQueue() { return getQueue("email.scheduled"); }
 export function getInboundEmailQueue() { return getQueue("email.inbound"); }
 export function getWarmupQueue() { return getQueue("email.warmup"); }
+export function getTrashPurgeQueue() { return getQueue("trash.purge"); }
 
 export async function closeQueues() {
   const closePromises = Array.from(_queues.values()).map((q) => q.close());

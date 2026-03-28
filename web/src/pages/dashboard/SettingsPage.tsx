@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../../lib/auth";
 import { useToast } from "../../components/Toast";
-import { patch, post } from "../../lib/api";
-import { PageHeader, Button, Input, Badge, CopyButton } from "../../components/ui";
+import { api, patch, post, del } from "../../lib/api";
+import { PageHeader, Button, Input, Textarea, Badge, CopyButton, Modal, useConfirmDialog } from "../../components/ui";
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
@@ -135,6 +135,131 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* ---- Email Signatures ---- */}
+      <SignaturesSection />
+    </div>
+  );
+}
+
+type Signature = {
+  id: string;
+  name: string;
+  html_body: string;
+  text_body: string | null;
+  is_default: boolean;
+};
+
+function SignaturesSection() {
+  const [signatures, setSignatures] = useState<Signature[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editSig, setEditSig] = useState<Signature | null>(null);
+  const [form, setForm] = useState({ name: "", html_body: "", text_body: "", is_default: false });
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+
+  const load = async () => {
+    try {
+      const res = await api<{ data: Signature[] }>("/dashboard/signatures");
+      setSignatures(res.data);
+    } catch {}
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const openCreate = () => {
+    setEditSig(null);
+    setForm({ name: "", html_body: "", text_body: "", is_default: false });
+    setModalOpen(true);
+  };
+
+  const openEdit = (sig: Signature) => {
+    setEditSig(sig);
+    setForm({ name: sig.name, html_body: sig.html_body, text_body: sig.text_body || "", is_default: sig.is_default });
+    setModalOpen(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const body: any = { name: form.name, html_body: form.html_body, is_default: form.is_default };
+      if (form.text_body) body.text_body = form.text_body;
+      if (editSig) {
+        await patch(`/dashboard/signatures/${editSig.id}`, body);
+      } else {
+        await post("/dashboard/signatures", body);
+      }
+      setModalOpen(false);
+      load();
+    } catch (err: any) {
+      toast(err.message || "Failed to save", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteSig = (sig: Signature) => {
+    confirm({
+      title: "Delete Signature",
+      message: `Delete "${sig.name}"?`,
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        try {
+          await del(`/dashboard/signatures/${sig.id}`);
+          load();
+        } catch (err: any) {
+          toast(err.message || "Failed to delete", "error");
+        }
+      },
+    });
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-[14px] font-semibold text-gray-900 dark:text-gray-100">Email Signatures</h3>
+          <p className="text-[12px] text-gray-500 mt-0.5">Create signatures to append to outgoing emails</p>
+        </div>
+        <Button size="sm" onClick={openCreate}>+ New Signature</Button>
+      </div>
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editSig ? "Edit Signature" : "New Signature"} wide>
+        <div className="space-y-3">
+          <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Work Signature" />
+          <Textarea label="HTML Body" value={form.html_body} onChange={(e) => setForm({ ...form, html_body: e.target.value })} rows={6} />
+          <Textarea label="Plain Text (optional)" value={form.text_body} onChange={(e) => setForm({ ...form, text_body: e.target.value })} rows={3} />
+          <label className="flex items-center gap-2 text-[13px] text-gray-700 dark:text-gray-300">
+            <input type="checkbox" checked={form.is_default} onChange={(e) => setForm({ ...form, is_default: e.target.checked })} className="rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+            Set as default signature
+          </label>
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button onClick={save} disabled={saving || !form.name || !form.html_body}>{saving ? "Saving..." : editSig ? "Update" : "Create"}</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {signatures.length === 0 ? (
+        <p className="text-[13px] text-gray-400 py-4 text-center">No signatures yet</p>
+      ) : (
+        <div className="space-y-2">
+          {signatures.map((sig) => (
+            <div key={sig.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] font-medium text-gray-900 dark:text-gray-100">{sig.name}</span>
+                {sig.is_default && <Badge variant="success">Default</Badge>}
+              </div>
+              <div className="flex gap-1">
+                <Button size="sm" variant="secondary" onClick={() => openEdit(sig)}>Edit</Button>
+                <Button size="sm" variant="danger" onClick={() => deleteSig(sig)}>Delete</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {confirmDialog}
     </div>
   );
 }

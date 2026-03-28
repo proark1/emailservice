@@ -17,17 +17,36 @@ export interface InboundEmailJobData {
   html: string;
   messageId?: string;
   inReplyTo?: string;
+  references?: string[];
   headers: Record<string, unknown>;
+  attachments?: Array<{ filename: string; contentType: string; size: number; content: string }>;
 }
 
 async function processInboundEmail(job: Job<InboundEmailJobData>) {
   const data = job.data;
   const db = getDb();
 
+  // Compute thread ID
+  const { computeThreadId } = await import("../services/thread.service.js");
+  const threadId = computeThreadId(data.messageId, data.inReplyTo, data.references, data.subject);
+
+  // Get inbox folder for this account
+  let inboxFolderId: string | null = null;
+  try {
+    const { getFolderBySlug } = await import("../services/folder.service.js");
+    const inboxFolder = await getFolderBySlug(data.accountId, "inbox");
+    inboxFolderId = inboxFolder.id;
+  } catch {
+    // Folders not yet seeded — email will have null folderId (treated as inbox)
+  }
+
+  const hasAttachments = !!data.attachments && data.attachments.length > 0;
+
   // Store the inbound email
   const [stored] = await db.insert(inboundEmails).values({
     accountId: data.accountId,
     domainId: data.domainId || null,
+    folderId: inboxFolderId,
     fromAddress: data.from,
     fromName: data.fromName,
     toAddress: data.to,
@@ -37,8 +56,35 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
     htmlBody: data.html || null,
     messageId: data.messageId,
     inReplyTo: data.inReplyTo,
+    threadId,
+    references: data.references || null,
+    hasAttachments,
     headers: (data.headers as Record<string, string>) || null,
   }).returning();
+
+  // Store attachments
+  if (data.attachments && data.attachments.length > 0) {
+    try {
+      const { storeInboundAttachment } = await import("../services/attachment.service.js");
+      for (const att of data.attachments) {
+        await storeInboundAttachment(data.accountId, stored.id, {
+          filename: att.filename,
+          contentType: att.contentType,
+          size: att.size,
+          content: Buffer.from(att.content, "base64"),
+        });
+      }
+    } catch (err) {
+      console.error(`[inbound-email] Failed to store attachments for ${stored.id}:`, err);
+    }
+  }
+
+  // Auto-learn sender contact
+  try {
+    const { autoLearnContact } = await import("../services/address-book.service.js");
+    await autoLearnContact(data.accountId, data.from, data.fromName);
+  } catch {}
+
 
   // Fire webhook (best-effort — don't fail the job if dispatch errors)
   try {

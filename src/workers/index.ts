@@ -4,6 +4,7 @@ import { createWebhookDeliverWorker } from "./webhook-deliver.worker.js";
 import { createInboundEmailWorker } from "./inbound-email.worker.js";
 import { createScheduledEmailWorker } from "./scheduled-email.worker.js";
 import { createWarmupWorker } from "./warmup.worker.js";
+import { createTrashPurgeWorker } from "./trash-purge.worker.js";
 
 export function startAllWorkers() {
   const workers = [
@@ -13,6 +14,7 @@ export function startAllWorkers() {
     createInboundEmailWorker(),
     createScheduledEmailWorker(),
     createWarmupWorker(),
+    createTrashPurgeWorker(),
   ];
 
   console.log(`Started ${workers.length} workers:`);
@@ -22,6 +24,7 @@ export function startAllWorkers() {
   console.log("  - email.inbound (concurrency: 5)");
   console.log("  - email.scheduled (concurrency: 1)");
   console.log("  - email.warmup (concurrency: 1, recurring: 60m)");
+  console.log("  - trash.purge (concurrency: 1, recurring: 6h)");
 
   return workers;
 }

@@ -1127,4 +1127,213 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       },
     };
   });
+
+  // --- Folders ---
+  app.get("/folders", async (request) => {
+    const folderService = await import("../services/folder.service.js");
+    const folders = await folderService.listFolders(request.account.id);
+    const unreadCounts = await folderService.getUnreadCounts(request.account.id);
+    return {
+      data: folders.map((f) => ({
+        ...folderService.formatFolderResponse(f),
+        unread_count: unreadCounts[f.id] || 0,
+      })),
+    };
+  });
+
+  app.post("/folders", async (request, reply) => {
+    const folderService = await import("../services/folder.service.js");
+    const { createFolderSchema } = await import("../schemas/folder.schema.js");
+    const input = createFolderSchema.parse(request.body);
+    const folder = await folderService.createFolder(request.account.id, input);
+    return reply.status(201).send({ data: folderService.formatFolderResponse(folder) });
+  });
+
+  app.patch<{ Params: { id: string } }>("/folders/:id", async (request) => {
+    const folderService = await import("../services/folder.service.js");
+    const { updateFolderSchema } = await import("../schemas/folder.schema.js");
+    const input = updateFolderSchema.parse(request.body);
+    const updated = await folderService.updateFolder(request.account.id, request.params.id, input);
+    return { data: folderService.formatFolderResponse(updated) };
+  });
+
+  app.delete<{ Params: { id: string } }>("/folders/:id", async (request) => {
+    const folderService = await import("../services/folder.service.js");
+    const deleted = await folderService.deleteFolder(request.account.id, request.params.id);
+    return { data: folderService.formatFolderResponse(deleted!) };
+  });
+
+  // --- Inbox Extended ---
+  app.post<{ Params: { id: string } }>("/inbox/:id/move", async (request) => {
+    const inboxService = await import("../services/inbox.service.js");
+    const { moveEmailSchema } = await import("../schemas/inbox.schema.js");
+    const input = moveEmailSchema.parse(request.body);
+    const updated = await inboxService.moveToFolder(request.account.id, request.params.id, input.folder_id);
+    return { data: inboxService.formatInboxEmailResponse(updated) };
+  });
+
+  app.post<{ Params: { id: string } }>("/inbox/:id/restore", async (request) => {
+    const inboxService = await import("../services/inbox.service.js");
+    const updated = await inboxService.restoreFromTrash(request.account.id, request.params.id);
+    return { data: inboxService.formatInboxEmailResponse(updated) };
+  });
+
+  app.post("/inbox/bulk", async (request) => {
+    const inboxService = await import("../services/inbox.service.js");
+    const { bulkActionSchema } = await import("../schemas/inbox.schema.js");
+    const input = bulkActionSchema.parse(request.body);
+    return { data: await inboxService.bulkAction(request.account.id, input) };
+  });
+
+  app.get<{ Params: { id: string } }>("/inbox/:id/attachments", async (request) => {
+    const attachmentService = await import("../services/attachment.service.js");
+    const attachments = await attachmentService.listAttachments(request.account.id, request.params.id);
+    return { data: attachments.map(attachmentService.formatAttachmentResponse) };
+  });
+
+  app.get<{ Params: { id: string; aid: string } }>("/inbox/:id/attachments/:aid", async (request, reply) => {
+    const attachmentService = await import("../services/attachment.service.js");
+    const { metadata, stream } = await attachmentService.getAttachment(request.account.id, request.params.aid);
+    reply.header("Content-Type", metadata.contentType);
+    reply.header("Content-Disposition", `attachment; filename="${metadata.filename}"`);
+    reply.header("Content-Length", metadata.size);
+    return reply.send(stream);
+  });
+
+  // --- Drafts ---
+  app.get("/drafts", async (request) => {
+    const draftService = await import("../services/draft.service.js");
+    const query = z.object({
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+      cursor: z.string().optional(),
+    }).parse(request.query);
+    return draftService.listDrafts(request.account.id, query);
+  });
+
+  app.post("/drafts", async (request, reply) => {
+    const draftService = await import("../services/draft.service.js");
+    const { saveDraftSchema } = await import("../schemas/draft.schema.js");
+    const input = saveDraftSchema.parse(request.body);
+    const draft = await draftService.saveDraft(request.account.id, input);
+    return reply.status(201).send({ data: draftService.formatDraftResponse(draft) });
+  });
+
+  app.get<{ Params: { id: string } }>("/drafts/:id", async (request) => {
+    const draftService = await import("../services/draft.service.js");
+    const draft = await draftService.getDraft(request.account.id, request.params.id);
+    return { data: draftService.formatDraftResponse(draft) };
+  });
+
+  app.patch<{ Params: { id: string } }>("/drafts/:id", async (request) => {
+    const draftService = await import("../services/draft.service.js");
+    const { updateDraftSchema } = await import("../schemas/draft.schema.js");
+    const input = updateDraftSchema.parse(request.body);
+    const updated = await draftService.updateDraft(request.account.id, request.params.id, input);
+    return { data: draftService.formatDraftResponse(updated) };
+  });
+
+  app.post<{ Params: { id: string } }>("/drafts/:id/send", async (request) => {
+    const draftService = await import("../services/draft.service.js");
+    const sent = await draftService.sendDraft(request.account.id, request.params.id);
+    return { data: emailService.formatEmailResponse(sent) };
+  });
+
+  app.delete<{ Params: { id: string } }>("/drafts/:id", async (request) => {
+    const draftService = await import("../services/draft.service.js");
+    const deleted = await draftService.deleteDraft(request.account.id, request.params.id);
+    return { data: draftService.formatDraftResponse(deleted) };
+  });
+
+  // --- Threads ---
+  app.get("/threads", async (request) => {
+    const threadService = await import("../services/thread.service.js");
+    const query = z.object({
+      folder_id: z.string().uuid().optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+      cursor: z.string().optional(),
+    }).parse(request.query);
+    return threadService.listThreads(request.account.id, {
+      folderId: query.folder_id,
+      limit: query.limit,
+      cursor: query.cursor,
+    });
+  });
+
+  app.get<{ Params: { threadId: string } }>("/threads/:threadId", async (request) => {
+    const threadService = await import("../services/thread.service.js");
+    const thread = await threadService.getThread(request.account.id, request.params.threadId);
+    return { data: thread };
+  });
+
+  // --- Signatures ---
+  app.get("/signatures", async (request) => {
+    const signatureService = await import("../services/signature.service.js");
+    const list = await signatureService.listSignatures(request.account.id);
+    return { data: list.map(signatureService.formatSignatureResponse) };
+  });
+
+  app.post("/signatures", async (request, reply) => {
+    const signatureService = await import("../services/signature.service.js");
+    const { createSignatureSchema } = await import("../schemas/signature.schema.js");
+    const input = createSignatureSchema.parse(request.body);
+    const signature = await signatureService.createSignature(request.account.id, input);
+    return reply.status(201).send({ data: signatureService.formatSignatureResponse(signature) });
+  });
+
+  app.patch<{ Params: { id: string } }>("/signatures/:id", async (request) => {
+    const signatureService = await import("../services/signature.service.js");
+    const { updateSignatureSchema } = await import("../schemas/signature.schema.js");
+    const input = updateSignatureSchema.parse(request.body);
+    const updated = await signatureService.updateSignature(request.account.id, request.params.id, input);
+    return { data: signatureService.formatSignatureResponse(updated) };
+  });
+
+  app.delete<{ Params: { id: string } }>("/signatures/:id", async (request) => {
+    const signatureService = await import("../services/signature.service.js");
+    const deleted = await signatureService.deleteSignature(request.account.id, request.params.id);
+    return { data: signatureService.formatSignatureResponse(deleted) };
+  });
+
+  // --- Address Book ---
+  app.get("/address-book/autocomplete", async (request) => {
+    const addressBookService = await import("../services/address-book.service.js");
+    const query = z.object({ q: z.string().min(1) }).parse(request.query);
+    const results = await addressBookService.autocomplete(request.account.id, query.q);
+    return { data: results };
+  });
+
+  app.get("/address-book", async (request) => {
+    const addressBookService = await import("../services/address-book.service.js");
+    const query = z.object({ search: z.string().optional() }).parse(request.query);
+    const list = await addressBookService.listContacts(request.account.id, query.search);
+    return { data: list.map(addressBookService.formatAddressBookContactResponse) };
+  });
+
+  app.post("/address-book", async (request, reply) => {
+    const addressBookService = await import("../services/address-book.service.js");
+    const { createAddressBookContactSchema } = await import("../schemas/address-book.schema.js");
+    const input = createAddressBookContactSchema.parse(request.body);
+    const contact = await addressBookService.addContact(request.account.id, input);
+    return reply.status(201).send({ data: addressBookService.formatAddressBookContactResponse(contact) });
+  });
+
+  app.get<{ Params: { id: string } }>("/address-book/:id", async (request) => {
+    const addressBookService = await import("../services/address-book.service.js");
+    const contact = await addressBookService.getContact(request.account.id, request.params.id);
+    return { data: addressBookService.formatAddressBookContactResponse(contact) };
+  });
+
+  app.patch<{ Params: { id: string } }>("/address-book/:id", async (request) => {
+    const addressBookService = await import("../services/address-book.service.js");
+    const { updateAddressBookContactSchema } = await import("../schemas/address-book.schema.js");
+    const input = updateAddressBookContactSchema.parse(request.body);
+    const updated = await addressBookService.updateContact(request.account.id, request.params.id, input);
+    return { data: addressBookService.formatAddressBookContactResponse(updated) };
+  });
+
+  app.delete<{ Params: { id: string } }>("/address-book/:id", async (request) => {
+    const addressBookService = await import("../services/address-book.service.js");
+    const deleted = await addressBookService.deleteContact(request.account.id, request.params.id);
+    return { data: addressBookService.formatAddressBookContactResponse(deleted) };
+  });
 }

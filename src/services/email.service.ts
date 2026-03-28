@@ -92,12 +92,41 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
     }
   }
 
+  // Append signature if requested
+  let htmlBody = input.html;
+  let textBody = input.text;
+  if (input.signature_id) {
+    const { getSignature } = await import("./signature.service.js");
+    const sig = await getSignature(accountId, input.signature_id);
+    if (htmlBody) {
+      htmlBody = htmlBody + `<br/><div class="email-signature">${sig.htmlBody}</div>`;
+    }
+    if (textBody) {
+      textBody = textBody + "\n\n-- \n" + (sig.textBody || "");
+    }
+  }
+
+  // Compute thread ID for reply chains
+  const { computeThreadId } = await import("./thread.service.js");
+  const threadId = computeThreadId(null, input.in_reply_to, input.references, input.subject);
+
+  // Get sent folder for this account
+  let sentFolderId: string | null = null;
+  try {
+    const { getFolderBySlug } = await import("./folder.service.js");
+    const sentFolder = await getFolderBySlug(accountId, "sent");
+    sentFolderId = sentFolder.id;
+  } catch {
+    // Folders not yet seeded — that's OK
+  }
+
   // Create email record
   const [email] = await db
     .insert(emails)
     .values({
       accountId,
       domainId: domain.id,
+      folderId: sentFolderId,
       idempotencyKey: input.idempotency_key,
       fromAddress: from.address,
       fromName: from.name,
@@ -106,8 +135,8 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
       bccAddresses: input.bcc,
       replyTo: input.reply_to,
       subject: input.subject,
-      htmlBody: input.html,
-      textBody: input.text,
+      htmlBody: htmlBody,
+      textBody: textBody,
       headers: input.headers,
       attachments: input.attachments?.map((a) => ({
         filename: a.filename,
@@ -118,6 +147,9 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
       tags: input.tags,
       status: "queued",
       scheduledAt: input.scheduled_at ? new Date(input.scheduled_at) : null,
+      inReplyTo: input.in_reply_to,
+      references: input.references,
+      threadId,
     })
     .returning();
 

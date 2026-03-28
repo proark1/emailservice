@@ -15,3 +15,7 @@ export { broadcasts } from "./broadcasts.js";
 export { warmupSchedules, warmupEmails } from "./warmup.js";
 export { templates } from "./templates.js";
 export { apiLogs } from "./api-logs.js";
+export { folders } from "./folders.js";
+export { emailSignatures } from "./email-signatures.js";
+export { addressBookContacts } from "./address-book-contacts.js";
+export { inboundAttachments } from "./inbound-attachments.js";

@@ -149,6 +149,14 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       "X-Mailer": "MailNowAPI/1.0",
     };
 
+    // Add reply/forward threading headers
+    if (email.inReplyTo) {
+      mergedHeaders["In-Reply-To"] = email.inReplyTo;
+    }
+    if (email.references && email.references.length > 0) {
+      mergedHeaders["References"] = (email.references as string[]).join(" ");
+    }
+
     const transport = getOrCreateTransport();
     const info = await transport.sendMail({
       from: email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress,

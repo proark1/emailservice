@@ -769,6 +769,480 @@ server.tool(
   },
 );
 
+// ---- Folders ----------------------------------------------------------------
+
+server.tool(
+  "list_folders",
+  "List all email folders with unread counts.",
+  {},
+  async () => {
+    const res = await api("GET", "/v1/folders");
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "create_folder",
+  "Create a new custom email folder.",
+  {
+    name: z.string().describe("Folder name"),
+  },
+  async (params) => {
+    const res = await api("POST", "/v1/folders", params);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "update_folder",
+  "Update a custom folder's name or position.",
+  {
+    folder_id: z.string().describe("Folder ID"),
+    name: z.string().optional().describe("New folder name"),
+    position: z.number().optional().describe("New position"),
+  },
+  async (params) => {
+    const { folder_id, ...body } = params;
+    const res = await api("PATCH", `/v1/folders/${folder_id}`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "delete_folder",
+  "Delete a custom folder. Emails in it are moved to Inbox.",
+  {
+    folder_id: z.string().describe("Folder ID"),
+  },
+  async (params) => {
+    const res = await api("DELETE", `/v1/folders/${params.folder_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+// ---- Inbox ------------------------------------------------------------------
+
+server.tool(
+  "list_inbox",
+  "List inbound emails with optional folder, search, and filter parameters.",
+  {
+    folder_id: z.string().optional().describe("Filter by folder ID"),
+    folder_slug: z.string().optional().describe("Filter by folder slug (inbox, sent, trash, spam, archive)"),
+    thread_id: z.string().optional().describe("Filter by thread ID"),
+    search: z.string().optional().describe("Search in subject, from address, and from name"),
+    is_read: z.enum(["true", "false"]).optional().describe("Filter by read status"),
+    is_starred: z.enum(["true", "false"]).optional().describe("Filter by starred status"),
+    limit: z.number().optional().describe("Max results (1-100, default 50)"),
+    cursor: z.string().optional().describe("Pagination cursor"),
+  },
+  async (params) => {
+    const query = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined) query.set(k, String(v));
+    }
+    const res = await api("GET", `/v1/inbox?${query}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "get_inbox_email",
+  "Get a single inbound email by ID.",
+  {
+    email_id: z.string().describe("Inbound email ID"),
+  },
+  async (params) => {
+    const res = await api("GET", `/v1/inbox/${params.email_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "update_inbox_email",
+  "Update an inbound email's read or starred status.",
+  {
+    email_id: z.string().describe("Inbound email ID"),
+    is_read: z.boolean().optional().describe("Mark as read/unread"),
+    is_starred: z.boolean().optional().describe("Star/unstar"),
+  },
+  async (params) => {
+    const { email_id, ...body } = params;
+    const res = await api("PATCH", `/v1/inbox/${email_id}`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "move_email_to_folder",
+  "Move an inbound email to a different folder.",
+  {
+    email_id: z.string().describe("Inbound email ID"),
+    folder_id: z.string().describe("Target folder ID"),
+  },
+  async (params) => {
+    const res = await api("POST", `/v1/inbox/${params.email_id}/move`, { folder_id: params.folder_id });
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "delete_inbox_email",
+  "Soft-delete an inbound email (move to trash).",
+  {
+    email_id: z.string().describe("Inbound email ID"),
+  },
+  async (params) => {
+    const res = await api("DELETE", `/v1/inbox/${params.email_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "restore_inbox_email",
+  "Restore an email from trash back to inbox.",
+  {
+    email_id: z.string().describe("Inbound email ID"),
+  },
+  async (params) => {
+    const res = await api("POST", `/v1/inbox/${params.email_id}/restore`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "bulk_inbox_action",
+  "Perform a bulk action on multiple inbound emails.",
+  {
+    ids: z.array(z.string()).describe("Array of email IDs (1-100)"),
+    action: z.enum(["mark_read", "mark_unread", "star", "unstar", "move_to_folder", "move_to_trash", "permanent_delete"]).describe("Action to perform"),
+    folder_id: z.string().optional().describe("Target folder ID (required for move_to_folder)"),
+  },
+  async (params) => {
+    const res = await api("POST", "/v1/inbox/bulk", params);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "list_email_attachments",
+  "List attachments for an inbound email.",
+  {
+    email_id: z.string().describe("Inbound email ID"),
+  },
+  async (params) => {
+    const res = await api("GET", `/v1/inbox/${params.email_id}/attachments`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+// ---- Drafts -----------------------------------------------------------------
+
+server.tool(
+  "save_draft",
+  "Save a new email draft.",
+  {
+    from: z.string().optional().describe("Sender address"),
+    to: z.array(z.string()).optional().describe("Recipient addresses"),
+    subject: z.string().optional().describe("Subject line"),
+    html: z.string().optional().describe("HTML body"),
+    text: z.string().optional().describe("Plain text body"),
+    cc: z.array(z.string()).optional().describe("CC recipients"),
+    bcc: z.array(z.string()).optional().describe("BCC recipients"),
+    in_reply_to: z.string().optional().describe("Message-ID being replied to"),
+    references: z.array(z.string()).optional().describe("References header chain"),
+  },
+  async (params) => {
+    const res = await api("POST", "/v1/drafts", params);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "update_draft",
+  "Update an existing email draft.",
+  {
+    draft_id: z.string().describe("Draft ID"),
+    from: z.string().optional().describe("Sender address"),
+    to: z.array(z.string()).optional().describe("Recipient addresses"),
+    subject: z.string().optional().describe("Subject line"),
+    html: z.string().optional().describe("HTML body"),
+    text: z.string().optional().describe("Plain text body"),
+  },
+  async (params) => {
+    const { draft_id, ...body } = params;
+    const res = await api("PATCH", `/v1/drafts/${draft_id}`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "list_drafts",
+  "List all email drafts.",
+  {
+    limit: z.number().optional().describe("Max results (1-100, default 50)"),
+    cursor: z.string().optional().describe("Pagination cursor"),
+  },
+  async (params) => {
+    const query = new URLSearchParams();
+    if (params.limit) query.set("limit", String(params.limit));
+    if (params.cursor) query.set("cursor", params.cursor);
+    const res = await api("GET", `/v1/drafts?${query}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "send_draft",
+  "Send an existing draft email.",
+  {
+    draft_id: z.string().describe("Draft ID to send"),
+  },
+  async (params) => {
+    const res = await api("POST", `/v1/drafts/${params.draft_id}/send`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "delete_draft",
+  "Permanently delete a draft.",
+  {
+    draft_id: z.string().describe("Draft ID"),
+  },
+  async (params) => {
+    const res = await api("DELETE", `/v1/drafts/${params.draft_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+// ---- Threads ----------------------------------------------------------------
+
+server.tool(
+  "list_threads",
+  "List email conversation threads.",
+  {
+    folder_id: z.string().optional().describe("Filter by folder ID"),
+    limit: z.number().optional().describe("Max results (1-100, default 50)"),
+    cursor: z.string().optional().describe("Pagination cursor"),
+  },
+  async (params) => {
+    const query = new URLSearchParams();
+    if (params.folder_id) query.set("folder_id", params.folder_id);
+    if (params.limit) query.set("limit", String(params.limit));
+    if (params.cursor) query.set("cursor", params.cursor);
+    const res = await api("GET", `/v1/threads?${query}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "get_thread",
+  "Get all messages in a conversation thread.",
+  {
+    thread_id: z.string().describe("Thread ID"),
+  },
+  async (params) => {
+    const res = await api("GET", `/v1/threads/${encodeURIComponent(params.thread_id)}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+// ---- Signatures -------------------------------------------------------------
+
+server.tool(
+  "list_signatures",
+  "List all email signatures.",
+  {},
+  async () => {
+    const res = await api("GET", "/v1/signatures");
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "create_signature",
+  "Create a new email signature.",
+  {
+    name: z.string().describe("Signature name"),
+    html_body: z.string().describe("HTML content of the signature"),
+    text_body: z.string().optional().describe("Plain text version"),
+    is_default: z.boolean().optional().describe("Set as default signature"),
+  },
+  async (params) => {
+    const res = await api("POST", "/v1/signatures", params);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "update_signature",
+  "Update an email signature.",
+  {
+    signature_id: z.string().describe("Signature ID"),
+    name: z.string().optional().describe("Signature name"),
+    html_body: z.string().optional().describe("HTML content"),
+    text_body: z.string().optional().describe("Plain text version"),
+    is_default: z.boolean().optional().describe("Set as default"),
+  },
+  async (params) => {
+    const { signature_id, ...body } = params;
+    const res = await api("PATCH", `/v1/signatures/${signature_id}`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "delete_signature",
+  "Delete an email signature.",
+  {
+    signature_id: z.string().describe("Signature ID"),
+  },
+  async (params) => {
+    const res = await api("DELETE", `/v1/signatures/${params.signature_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+// ---- Address Book -----------------------------------------------------------
+
+server.tool(
+  "list_address_book",
+  "List personal address book contacts.",
+  {
+    search: z.string().optional().describe("Search by name, email, or company"),
+  },
+  async (params) => {
+    const query = params.search ? `?search=${encodeURIComponent(params.search)}` : "";
+    const res = await api("GET", `/v1/address-book${query}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "add_address_book_contact",
+  "Add a new contact to the address book.",
+  {
+    email: z.string().describe("Contact email"),
+    name: z.string().optional().describe("Contact name"),
+    company: z.string().optional().describe("Company name"),
+    notes: z.string().optional().describe("Notes"),
+  },
+  async (params) => {
+    const res = await api("POST", "/v1/address-book", params);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "update_address_book_contact",
+  "Update an address book contact.",
+  {
+    contact_id: z.string().describe("Contact ID"),
+    email: z.string().optional().describe("Contact email"),
+    name: z.string().optional().describe("Contact name"),
+    company: z.string().optional().describe("Company name"),
+    notes: z.string().optional().describe("Notes"),
+  },
+  async (params) => {
+    const { contact_id, ...body } = params;
+    const res = await api("PATCH", `/v1/address-book/${contact_id}`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "delete_address_book_contact",
+  "Delete a contact from the address book.",
+  {
+    contact_id: z.string().describe("Contact ID"),
+  },
+  async (params) => {
+    const res = await api("DELETE", `/v1/address-book/${params.contact_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "autocomplete_contacts",
+  "Autocomplete email addresses from address book and recent senders.",
+  {
+    query: z.string().describe("Search query (min 1 character)"),
+  },
+  async (params) => {
+    const res = await api("GET", `/v1/address-book/autocomplete?q=${encodeURIComponent(params.query)}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "reply_to_email",
+  "Reply to an inbound email with proper threading headers.",
+  {
+    email_id: z.string().describe("Inbound email ID to reply to"),
+    from: z.string().describe("Sender address"),
+    html: z.string().optional().describe("HTML body"),
+    text: z.string().optional().describe("Plain text body"),
+    reply_all: z.boolean().optional().describe("Reply to all recipients (default: false)"),
+    signature_id: z.string().optional().describe("Signature ID to append"),
+  },
+  async (params) => {
+    // Get the original email first
+    const original = await api("GET", `/v1/inbox/${params.email_id}`);
+    if (!original.ok) return { content: [{ type: "text" as const, text: formatResult(original) }] };
+    const email = (original.body as any)?.data;
+    if (!email) return { content: [{ type: "text" as const, text: "Error: Email not found" }] };
+
+    const to = params.reply_all
+      ? [email.from, ...(email.cc || [])].filter((a: string) => a !== params.from)
+      : [email.from];
+    const refs = [...(email.references || [])];
+    if (email.message_id && !refs.includes(email.message_id)) refs.push(email.message_id);
+
+    const res = await api("POST", "/v1/emails", {
+      from: params.from,
+      to,
+      subject: email.subject.startsWith("Re:") ? email.subject : `Re: ${email.subject}`,
+      html: params.html,
+      text: params.text,
+      in_reply_to: email.message_id,
+      references: refs,
+      signature_id: params.signature_id,
+    });
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "forward_email",
+  "Forward an inbound email to new recipients.",
+  {
+    email_id: z.string().describe("Inbound email ID to forward"),
+    from: z.string().describe("Sender address"),
+    to: z.array(z.string()).describe("Forward recipients"),
+    html: z.string().optional().describe("Additional message (prepended to forwarded content)"),
+    text: z.string().optional().describe("Additional plain text message"),
+    signature_id: z.string().optional().describe("Signature ID to append"),
+  },
+  async (params) => {
+    const original = await api("GET", `/v1/inbox/${params.email_id}`);
+    if (!original.ok) return { content: [{ type: "text" as const, text: formatResult(original) }] };
+    const email = (original.body as any)?.data;
+    if (!email) return { content: [{ type: "text" as const, text: "Error: Email not found" }] };
+
+    const fwdHtml = `${params.html || ""}<br/><hr/><p><b>---------- Forwarded message ----------</b><br/>From: ${email.from}<br/>Date: ${email.created_at}<br/>Subject: ${email.subject}<br/>To: ${email.to}</p>${email.html_body || email.text_body || ""}`;
+
+    const res = await api("POST", "/v1/emails", {
+      from: params.from,
+      to: params.to,
+      subject: email.subject.startsWith("Fwd:") ? email.subject : `Fwd: ${email.subject}`,
+      html: fwdHtml,
+      text: params.text,
+      signature_id: params.signature_id,
+    });
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------

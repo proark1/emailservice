@@ -83,7 +83,19 @@ export function createInboundServer(): SMTPServer {
             const domain = await lookupReceiveDomain(recipientDomain);
             if (!domain) continue;
 
-            const emailData = {
+            // Extract References header
+          const referencesRaw = parsed.references;
+          const references: string[] = Array.isArray(referencesRaw) ? referencesRaw : referencesRaw ? [referencesRaw] : [];
+
+          // Extract attachments
+          const attachmentData = (parsed.attachments || []).map((att) => ({
+            filename: att.filename || "attachment",
+            contentType: att.contentType || "application/octet-stream",
+            size: att.size || 0,
+            content: att.content.toString("base64"),
+          }));
+
+          const emailData = {
               accountId: domain.accountId,
               domainId: domain.id,
               from: fromAddress,
@@ -95,7 +107,9 @@ export function createInboundServer(): SMTPServer {
               html: typeof parsed.html === "string" ? parsed.html : "",
               messageId: parsed.messageId,
               inReplyTo: parsed.inReplyTo,
+              references,
               headers: headerMap as Record<string, unknown>,
+              attachments: attachmentData,
             };
 
             // Try queue first, fall back to direct DB insert

@@ -779,6 +779,22 @@ export default function EmailsPage() {
                 </>
               )}
             </Button>
+            <Button variant="secondary" onClick={async () => {
+              try {
+                const body: any = {};
+                if (form.from) body.from = form.from;
+                if (form.to) body.to = form.to.split(",").map((s: string) => s.trim()).filter(Boolean);
+                if (form.subject) body.subject = form.subject;
+                if (form.html) body.html = form.html;
+                await post("/dashboard/drafts", body);
+                setComposeOpen(false);
+                setComposeError("");
+              } catch (err: any) {
+                setComposeError(err.message || "Failed to save draft");
+              }
+            }}>
+              Save as Draft
+            </Button>
             <Button variant="secondary" onClick={() => { setComposeOpen(false); setComposeError(""); }}>
               Cancel
             </Button>
