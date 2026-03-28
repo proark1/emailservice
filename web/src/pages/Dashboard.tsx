@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { api, post, del } from "../lib/api";
-import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Textarea, Modal, CopyButton, Dot } from "../components/ui";
+import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Textarea, Modal, CopyButton, Dot, useConfirmDialog, useToast } from "../components/ui";
 import { patch } from "../lib/api";
 import InboxPage from "./dashboard/InboxPage";
 import EmailsPage from "./dashboard/EmailsPage";
@@ -424,7 +424,7 @@ function Overview() {
       )}
 
       {/* Stats cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {sc("Emails", stats.emails)}
         {sc("Domains", stats.domains)}
         {sc("API Keys", stats.api_keys)}
@@ -448,6 +448,8 @@ function DomainsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<any>(null);
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const { showError, toast } = useToast();
   // Auto-setup state
   const [setupDomain, setSetupDomain] = useState<any>(null);
   const [detectedProvider, setDetectedProvider] = useState<string | null>(null);
@@ -520,10 +522,16 @@ function DomainsPage() {
     finally { setSetupLoading(false); }
   };
 
-  const remove = async (id: string) => {
-    if (!window.confirm("Delete this domain?")) return;
-    try { await del(`/dashboard/domains/${id}`); } catch (e: any) { alert(e.message || "Delete failed"); }
-    load();
+  const remove = (id: string) => {
+    confirm({
+      title: "Delete this domain?",
+      message: "DNS records and email history associated with this domain will be affected.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        try { await del(`/dashboard/domains/${id}`); } catch (e: any) { showError(e.message || "Delete failed"); }
+        load();
+      },
+    });
   };
   const [verifyResult, setVerifyResult] = useState<any>(null);
   const [verifying, setVerifying] = useState(false);
@@ -758,6 +766,8 @@ function DomainsPage() {
           ))}
         </Table>
       )}
+      {confirmDialog}
+      {toast}
     </div>
   );
 }
@@ -770,6 +780,8 @@ function ApiKeysPage() {
   const [newKey, setNewKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const { showError, toast } = useToast();
 
   const load = () => api("/dashboard/api-keys").then((r) => setItems(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -780,10 +792,16 @@ function ApiKeysPage() {
     catch (e: any) { setError(e.message || "Failed to create API key"); } finally { setLoading(false); }
   };
 
-  const revoke = async (id: string) => {
-    if (!window.confirm("Revoke this API key?")) return;
-    try { await del(`/dashboard/api-keys/${id}`); } catch (e: any) { alert(e.message || "Revoke failed"); }
-    load();
+  const revoke = (id: string) => {
+    confirm({
+      title: "Revoke this API key?",
+      message: "Any applications using this key will lose access immediately.",
+      confirmLabel: "Revoke",
+      onConfirm: async () => {
+        try { await del(`/dashboard/api-keys/${id}`); } catch (e: any) { showError(e.message || "Revoke failed"); }
+        load();
+      },
+    });
   };
 
   return (
@@ -820,6 +838,8 @@ function ApiKeysPage() {
           ))}
         </Table>
       )}
+      {confirmDialog}
+      {toast}
     </div>
   );
 }
@@ -834,6 +854,8 @@ function WebhooksPage() {
   const [selectedWebhook, setSelectedWebhook] = useState<any>(null);
   const [deliveries, setDeliveries] = useState<any[]>([]);
   const [deliveriesLoading, setDeliveriesLoading] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const { showError, toast } = useToast();
 
   const load = () => api("/dashboard/webhooks").then((r) => setItems(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -856,10 +878,16 @@ function WebhooksPage() {
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   };
 
-  const remove = async (id: string) => {
-    if (!window.confirm("Delete this webhook?")) return;
-    try { await del(`/dashboard/webhooks/${id}`); } catch (e: any) { alert(e.message || "Delete failed"); }
-    load();
+  const remove = (id: string) => {
+    confirm({
+      title: "Delete this webhook?",
+      message: "This webhook will stop receiving event notifications immediately.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        try { await del(`/dashboard/webhooks/${id}`); } catch (e: any) { showError(e.message || "Delete failed"); }
+        load();
+      },
+    });
   };
 
   return (
@@ -912,6 +940,8 @@ function WebhooksPage() {
           </div>
         )}
       </Modal>
+      {confirmDialog}
+      {toast}
     </div>
   );
 }
@@ -1008,7 +1038,7 @@ export default function Dashboard() {
       <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
       {/* Mobile top bar */}
       <div className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 flex items-center px-4 z-30 lg:hidden">
-        <button onClick={() => setSidebarOpen(true)} className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100">
+        <button onClick={() => setSidebarOpen(true)} aria-label="Open navigation menu" className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
         </button>
         <div className="flex-1 flex justify-center">
@@ -1019,7 +1049,7 @@ export default function Dashboard() {
         </div>
         <div className="w-8" /> {/* Spacer for centering */}
       </div>
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl overflow-y-auto pt-18 lg:pt-8">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl overflow-y-auto pt-[4.5rem] lg:pt-8">
         <Routes>
           <Route index element={<Overview />} />
           <Route path="emails" element={<EmailsPage />} />

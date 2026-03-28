@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { api, post, patch, del } from "../../lib/api";
-import { Badge, EmptyState, Table, PageHeader, Button, Input, Modal } from "../../components/ui";
+import { Badge, EmptyState, Table, PageHeader, Button, Input, Modal, useConfirmDialog, useToast } from "../../components/ui";
 
 interface Audience {
   id: string;
@@ -24,6 +24,8 @@ export default function AudiencesPage() {
   const [createName, setCreateName] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const { showError, toast } = useToast();
 
   const loadAudiences = () => {
     api("/dashboard/audiences").then((r) => setAudiences(r.data)).catch(() => {});
@@ -42,10 +44,16 @@ export default function AudiencesPage() {
     finally { setCreating(false); }
   };
 
-  const deleteAudience = async (id: string) => {
-    if (!window.confirm("Delete this audience and all its contacts?")) return;
-    try { await del(`/dashboard/audiences/${id}`); } catch (e: any) { alert(e.message || "Delete failed"); }
-    loadAudiences();
+  const deleteAudience = (id: string) => {
+    confirm({
+      title: "Delete this audience?",
+      message: "This audience and all its contacts will be permanently removed.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        try { await del(`/dashboard/audiences/${id}`); } catch (e: any) { showError(e.message || "Delete failed"); }
+        loadAudiences();
+      },
+    });
   };
 
   if (selectedAudience) {
@@ -95,6 +103,8 @@ export default function AudiencesPage() {
           ))}
         </div>
       )}
+      {confirmDialog}
+      {toast}
     </div>
   );
 }
@@ -115,6 +125,8 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; total: number } | null>(null);
   const [importError, setImportError] = useState("");
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const { showError, toast } = useToast();
 
   const loadContacts = () => {
     api(`/dashboard/audiences/${audience.id}/contacts`).then((r) => setContacts(r.data)).catch(() => {});
@@ -161,10 +173,16 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
     finally { setEditing(false); }
   };
 
-  const deleteContact = async (contactId: string) => {
-    if (!window.confirm("Remove this contact?")) return;
-    try { await del(`/dashboard/audiences/${audience.id}/contacts/${contactId}`); } catch (e: any) { alert(e.message || "Delete failed"); }
-    loadContacts();
+  const deleteContact = (contactId: string) => {
+    confirm({
+      title: "Remove this contact?",
+      message: "This contact will be removed from the audience.",
+      confirmLabel: "Remove",
+      onConfirm: async () => {
+        try { await del(`/dashboard/audiences/${audience.id}/contacts/${contactId}`); } catch (e: any) { showError(e.message || "Delete failed"); }
+        loadContacts();
+      },
+    });
   };
 
   const exportContacts = async () => {
@@ -323,6 +341,8 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
           ))}
         </Table>
       )}
+      {confirmDialog}
+      {toast}
     </div>
   );
 }

@@ -433,7 +433,7 @@ export default function AdminPanel() {
         <div className="flex-1 flex justify-center"><span className="font-semibold text-[14px] text-gray-900">Admin Panel</span></div>
         <div className="w-8" />
       </div>
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl overflow-y-auto pt-18 lg:pt-8">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl overflow-y-auto pt-[4.5rem] lg:pt-8">
         <Routes>
           <Route index element={<AdminOverview />} />
           <Route path="analytics" element={<AdminAnalytics />} />

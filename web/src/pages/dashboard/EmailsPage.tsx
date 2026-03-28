@@ -14,6 +14,8 @@ import {
   Modal,
   CopyButton,
   Dot,
+  useConfirmDialog,
+  useToast,
 } from "../../components/ui";
 
 /* ---------- types ---------- */
@@ -129,6 +131,8 @@ export default function EmailsPage() {
   const [composeError, setComposeError] = useState("");
   const [previewMode, setPreviewMode] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(600);
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const { showError, toast } = useToast();
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
   const verifiedDomains = domains.filter((d) => d.status === "verified");
@@ -487,18 +491,24 @@ export default function EmailsPage() {
                       setDetailEmail(null);
                       loadEmails();
                       loadCounts();
-                    } catch (e: any) { alert(e.message); }
+                    } catch (e: any) { showError(e.message); }
                   }}>Retry Send</Button>
                 )}
                 {(detailEmail.status === "queued" && detailEmail.scheduledAt) && (
-                  <Button variant="secondary" onClick={async () => {
-                    if (!window.confirm("Cancel this scheduled email?")) return;
-                    try {
-                      await del(`/dashboard/emails/${detailEmail.id}`);
-                      setDetailEmail(null);
-                      loadEmails();
-                      loadCounts();
-                    } catch (e: any) { alert(e.message); }
+                  <Button variant="secondary" onClick={() => {
+                    confirm({
+                      title: "Cancel this scheduled email?",
+                      message: "The email will not be sent.",
+                      confirmLabel: "Cancel Email",
+                      onConfirm: async () => {
+                        try {
+                          await del(`/dashboard/emails/${detailEmail.id}`);
+                          setDetailEmail(null);
+                          loadEmails();
+                          loadCounts();
+                        } catch (e: any) { showError(e.message); }
+                      },
+                    });
                   }}>Cancel Scheduled</Button>
                 )}
                 <CopyButton text={detailEmail.id} />
@@ -775,6 +785,8 @@ export default function EmailsPage() {
           </div>
         </div>
       </Modal>
+      {confirmDialog}
+      {toast}
     </div>
   );
 }

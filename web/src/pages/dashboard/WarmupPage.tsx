@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { api, post, del } from "../../lib/api";
-import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Modal } from "../../components/ui";
+import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Modal, useConfirmDialog, useToast } from "../../components/ui";
 
 interface Domain {
   id: string;
@@ -69,6 +69,8 @@ export default function WarmupPage() {
   const [form, setForm] = useState({ domain_id: "", total_days: 30, from_address: "" });
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const { showError, toast } = useToast();
 
   const loadWarmups = () => {
     api("/dashboard/warmup").then((r) => setWarmups(r.data)).catch(() => {});
@@ -121,19 +123,25 @@ export default function WarmupPage() {
   };
 
   const pauseWarmup = async (id: string) => {
-    try { await post(`/dashboard/warmup/${id}/pause`, {}); } catch (e: any) { alert(e.message || "Pause failed"); }
+    try { await post(`/dashboard/warmup/${id}/pause`, {}); } catch (e: any) { showError(e.message || "Pause failed"); }
     loadWarmups();
   };
 
   const resumeWarmup = async (id: string) => {
-    try { await post(`/dashboard/warmup/${id}/resume`, {}); } catch (e: any) { alert(e.message || "Resume failed"); }
+    try { await post(`/dashboard/warmup/${id}/resume`, {}); } catch (e: any) { showError(e.message || "Resume failed"); }
     loadWarmups();
   };
 
-  const cancelWarmup = async (id: string) => {
-    if (!window.confirm("Cancel this warmup? This cannot be undone.")) return;
-    try { await del(`/dashboard/warmup/${id}`); } catch (e: any) { alert(e.message || "Cancel failed"); }
-    loadWarmups();
+  const cancelWarmup = (id: string) => {
+    confirm({
+      title: "Cancel this warmup?",
+      message: "This cannot be undone. The warmup schedule will be permanently stopped.",
+      confirmLabel: "Cancel Warmup",
+      onConfirm: async () => {
+        try { await del(`/dashboard/warmup/${id}`); } catch (e: any) { showError(e.message || "Cancel failed"); }
+        loadWarmups();
+      },
+    });
   };
 
   const viewStats = async (w: Warmup) => {
@@ -383,6 +391,8 @@ export default function WarmupPage() {
           ))}
         </div>
       )}
+      {confirmDialog}
+      {toast}
     </div>
   );
 }

@@ -17,6 +17,10 @@ import { getDnsVerifyQueue } from "../queues/index.js";
 import { getConfig } from "../config/index.js";
 import { WEBHOOK_EVENT_TYPES } from "../types/webhook-events.js";
 
+function escapeIlike(s: string): string {
+  return s.replace(/[%_\\]/g, (c) => `\\${c}`);
+}
+
 function calculateReputationScore(t: any): number {
   const totalSent = (t.sent || 0) + (t.delivered || 0);
   if (totalSent === 0) return 100;
@@ -71,7 +75,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const conditions: any[] = [eq(emails.accountId, request.account.id)];
 
     if (query.search) {
-      const pattern = `%${query.search}%`;
+      const pattern = `%${escapeIlike(query.search)}%`;
       conditions.push(
         or(
           ilike(emails.fromAddress, pattern),
@@ -203,7 +207,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const conditions: any[] = [eq(inboundEmails.accountId, request.account.id)];
 
     if (query.search) {
-      const pattern = `%${query.search}%`;
+      const pattern = `%${escapeIlike(query.search)}%`;
       conditions.push(
         or(
           ilike(inboundEmails.fromAddress, pattern),

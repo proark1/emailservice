@@ -9,6 +9,8 @@ import {
   Input,
   Textarea,
   Modal,
+  useConfirmDialog,
+  useToast,
 } from "../../components/ui";
 import { RichEditor, wrapEmailHtml } from "../../components/RichEditor";
 
@@ -64,6 +66,8 @@ export default function TemplatesPage() {
   const [showText, setShowText] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const { showError, toast } = useToast();
 
   /* --- data loading --- */
 
@@ -155,14 +159,20 @@ export default function TemplatesPage() {
 
   /* --- delete --- */
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this template?")) return;
-    try {
-      await del(`/dashboard/templates/${id}`);
-      loadTemplates();
-    } catch (e: any) {
-      alert(e.message || "Failed to delete template");
-    }
+  const handleDelete = (id: string) => {
+    confirm({
+      title: "Delete this template?",
+      message: "This template will be permanently removed.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        try {
+          await del(`/dashboard/templates/${id}`);
+          loadTemplates();
+        } catch (e: any) {
+          showError(e.message || "Failed to delete template");
+        }
+      },
+    });
   };
 
   /* --- preview --- */
@@ -443,6 +453,8 @@ export default function TemplatesPage() {
           </div>
         )}
       </Modal>
+      {confirmDialog}
+      {toast}
     </div>
   );
 }

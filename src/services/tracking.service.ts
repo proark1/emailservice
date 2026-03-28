@@ -1,7 +1,9 @@
+import crypto from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents } from "../db/schema/index.js";
 import { isRedisConfigured } from "../queues/index.js";
+import { getConfig } from "../config/index.js";
 
 // 1x1 transparent GIF
 const TRACKING_PIXEL = Buffer.from(
@@ -86,11 +88,22 @@ export async function recordClick(emailId: string, url: string) {
 
 export function decodeClickTrackingData(encoded: string): { emailId: string; url: string } | null {
   try {
-    const decoded = Buffer.from(encoded, "base64url").toString("utf8");
-    const data = JSON.parse(decoded);
-    if (data.emailId && data.url) {
-      return { emailId: data.emailId, url: data.url };
+    const config = getConfig();
+
+    // New signed format: payload.signature
+    const dotIndex = encoded.lastIndexOf(".");
+    if (dotIndex !== -1) {
+      const payload = encoded.substring(0, dotIndex);
+      const sig = encoded.substring(dotIndex + 1);
+      const expected = crypto.createHmac("sha256", config.ENCRYPTION_KEY).update(payload).digest("base64url");
+      if (crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+        const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+        if (data.emailId && data.url) {
+          return { emailId: data.emailId, url: data.url };
+        }
+      }
     }
+
     return null;
   } catch {
     return null;

@@ -6,7 +6,12 @@ export async function api<T = any>(path: string, options?: RequestInit): Promise
   });
   const text = await res.text();
   const data = text ? (() => { try { return JSON.parse(text); } catch { return {}; } })() : {};
-  if (!res.ok) throw new Error(data?.error?.message || `Request failed (${res.status})`);
+  if (!res.ok) {
+    if ((res.status === 401 || res.status === 403) && !path.startsWith("/auth/")) {
+      window.location.href = "/login";
+    }
+    throw new Error(data?.error?.message || `Request failed (${res.status})`);
+  }
   return data;
 }
 

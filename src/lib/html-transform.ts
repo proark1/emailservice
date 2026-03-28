@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { getConfig } from "../config/index.js";
 
 /**
@@ -36,7 +37,9 @@ export function rewriteLinks(html: string, emailId: string): string {
         return `<a ${before}href="${url}"${after}>`;
       }
 
-      const encoded = Buffer.from(JSON.stringify({ emailId, url })).toString("base64url");
+      const payload = Buffer.from(JSON.stringify({ emailId, url })).toString("base64url");
+      const sig = crypto.createHmac("sha256", config.ENCRYPTION_KEY).update(payload).digest("base64url");
+      const encoded = `${payload}.${sig}`;
       const trackingUrl = `${config.TRACKING_URL}/c/${encoded}`;
       return `<a ${before}href="${trackingUrl}"${after}>`;
     },

@@ -1,4 +1,4 @@
-import { useState, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 
 // --- Badge ---
 export function Badge({ children, variant = "default" }: { children: string; variant?: "success" | "warning" | "error" | "default" }) {
@@ -161,6 +161,56 @@ export function ConfirmDialog({ open, onClose, onConfirm, title = "Are you sure?
       </div>
     </div>
   );
+}
+
+// --- useConfirmDialog Hook ---
+export function useConfirmDialog() {
+  const [state, setState] = useState<{ open: boolean; title: string; message: string; confirmLabel: string; onConfirm: () => void }>({
+    open: false, title: "", message: "", confirmLabel: "Confirm", onConfirm: () => {},
+  });
+
+  const confirm = useCallback((opts: { title: string; message: string; confirmLabel?: string; onConfirm: () => void }) => {
+    setState({ open: true, title: opts.title, message: opts.message, confirmLabel: opts.confirmLabel || "Confirm", onConfirm: opts.onConfirm });
+  }, []);
+
+  const dialog = (
+    <ConfirmDialog
+      open={state.open}
+      onClose={() => setState((s) => ({ ...s, open: false }))}
+      onConfirm={state.onConfirm}
+      title={state.title}
+      message={state.message}
+      confirmLabel={state.confirmLabel}
+    />
+  );
+
+  return { confirm, dialog };
+}
+
+// --- Toast ---
+export function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 4000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+
+  return (
+    <div className="fixed bottom-4 right-4 z-[70] max-w-sm animate-slide-up">
+      <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 shadow-lg">
+        <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+        <p className="text-[13px] text-red-700">{message}</p>
+        <button onClick={onClose} className="ml-auto text-red-400 hover:text-red-600"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
+      </div>
+    </div>
+  );
+}
+
+// --- useToast Hook ---
+export function useToast() {
+  const [message, setMessage] = useState<string | null>(null);
+  const showError = useCallback((msg: string) => setMessage(msg), []);
+  const toast = message ? <Toast message={message} onClose={() => setMessage(null)} /> : null;
+  return { showError, toast };
 }
 
 // --- Select ---
