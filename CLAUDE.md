@@ -241,7 +241,24 @@ import { api, post, patch, del } from "../lib/api";
 const result = await api("/dashboard/stats");
 const created = await post("/dashboard/domains", { name: "example.com" });
 ```
-All wrappers include `credentials: "include"` for cookie auth. JSON.parse errors are silently handled.
+All wrappers include `credentials: "include"` for cookie auth. JSON.parse errors are silently handled. On 401/403 responses (except `/auth/*` paths), the user is automatically redirected to `/login`.
+
+### Frontend UI patterns
+Use the hooks and components in `web/src/components/ui.tsx`:
+```typescript
+import { useConfirmDialog, useToast, ConfirmDialog, Toast, Modal } from "../components/ui";
+
+// Confirm dialog for destructive actions (never use window.confirm)
+const { confirm, dialog: confirmDialog } = useConfirmDialog();
+confirm({ title: "Delete?", message: "Cannot be undone.", confirmLabel: "Delete", onConfirm: async () => { ... } });
+// Render {confirmDialog} in JSX
+
+// Toast for error feedback (never use alert())
+const { showError, toast } = useToast();
+showError("Something went wrong");
+// Render {toast} in JSX
+```
+Modal supports Escape key dismissal and has ARIA attributes for accessibility.
 
 ---
 
@@ -309,3 +326,5 @@ curl -X POST http://localhost:3000/v1/domains/DOMAIN_ID/verify \
 - **Never use `dangerouslySetInnerHTML`** — email HTML is rendered in a sandboxed `<iframe>`.
 - **Do not bypass auth hooks** — always add `onRequest` hook with `app.authenticate()` on protected routes.
 - **Do not return errors manually** — throw from `src/lib/errors.ts` and let the error handler format the response.
+- **Never use `window.confirm()` or `alert()`** — use `useConfirmDialog` and `useToast` hooks from `web/src/components/ui.tsx`.
+- **Never create unsigned/unencrypted tracking or unsubscribe URLs** — click tracking uses HMAC signatures, unsubscribe uses AES-256-GCM encryption.

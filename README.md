@@ -10,11 +10,12 @@ Self-hosted email service platform — a Resend.com-style API you own and contro
 - **Webhook delivery** with HMAC signatures and automatic retries
 - **SMTP relay server** (port 587/465) for clients sending through the service
 - **SMTP inbound** for receiving emails
-- **Click and open tracking** with per-email analytics
+- **Click and open tracking** with HMAC-signed URLs and per-email analytics
 - **Batch sending** up to 100 emails per request
 - **Audiences and contacts** management
 - **Suppression lists** (bounces, complaints, unsubscribes)
-- **Dashboard UI** — React 19 + Vite + TailwindCSS 4
+- **Dashboard UI** — React 19 + Vite + TailwindCSS 4, fully mobile-responsive
+- **Security hardened** — SSRF protection on webhooks, HMAC-signed tracking links, encrypted unsubscribe tokens, rate limiting
 
 ## Quick Start
 
@@ -110,4 +111,4 @@ ISC
 
 ---
 
-Version 1.3.0 — Last updated: 2026-03-21 00:30 UTC
+Version 1.4.0 — Last updated: 2026-03-28

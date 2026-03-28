@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] — 2026-03-28
+
+### Security
+- Click tracking URLs now signed with HMAC to prevent open redirect abuse
+- Removed legacy unsigned base64url unsubscribe fallback (prevented suppression injection)
+- Expanded webhook SSRF protection with IPv6 private ranges, `.local`/`.internal` suffixes
+- Added 25MB message size limit to SMTP inbound server
+- Frontend API layer now redirects to login on 401/403 (expired session handling)
+
+### Fixed
+- Fixed invalid Tailwind `pt-18` class causing dashboard content to be hidden behind mobile header
+- Fixed ILIKE wildcard characters (`%`, `_`) not escaped in dashboard search queries
+- Fixed inbox mutations (star, archive, delete) silently swallowing errors with no user feedback
+- Fixed modal error state persisting when reopening Broadcast and Warmup create modals
+- Fixed AdminPanel account delete and warmup cancel having no error handling
+
+### Changed
+- Replaced all native `window.confirm()`/`alert()` dialogs with styled `ConfirmDialog` component across 9 pages
+- Added `useConfirmDialog` hook, `Toast` component, and `useToast` hook to UI component library
+- Added Escape key handler and ARIA attributes (`role`, `aria-modal`, `aria-label`) to Modal component
+- Added `aria-label` to mobile hamburger menu button
+- Added `sm:grid-cols-3` breakpoint to dashboard stats grid for tablet viewports
+- Added delete confirmation dialog to inbox email deletion
+
 ## [1.3.0] — 2026-03-21
 
 ### Added

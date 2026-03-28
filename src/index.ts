@@ -45,7 +45,7 @@ async function main() {
       info: {
         title: "Email Service API",
         description: "Self-hosted email service platform — send, receive, and manage email at scale",
-        version: "1.0.0",
+        version: "1.4.0",
       },
       components: {
         securitySchemes: {
