@@ -14,9 +14,9 @@ export function generateDnsRecords(_domain: string): DnsRecords {
     // SPF: "a mx" authorizes the domain's own A/MX IPs to send.
     // If we have a real mail host, also include it.
     spfRecord: isConfigured
-      ? `v=spf1 a mx include:${mailHost} ~all`
-      : `v=spf1 a mx ~all`,
-    dmarcRecord: `v=DMARC1; p=none; adkim=s; aspf=s`,
+      ? `v=spf1 a mx include:${mailHost} -all`
+      : `v=spf1 a mx -all`,
+    dmarcRecord: `v=DMARC1; p=quarantine; adkim=s; aspf=s; pct=100`,
   };
 }
 

@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import crypto from "node:crypto";
 import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains } from "../db/schema/index.js";
@@ -101,8 +102,42 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       unsubscribeHeaders["List-Unsubscribe"] = `<${config.BASE_URL}/unsubscribe/${encodedData}>, <mailto:unsubscribe@${fromDomain}>`;
     }
 
+    // Auto-generate text/plain from HTML if not provided (critical for deliverability)
+    let textBody = email.textBody;
+    if (!textBody && html) {
+      textBody = html
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/p>/gi, "\n\n")
+        .replace(/<\/div>/gi, "\n")
+        .replace(/<\/li>/gi, "\n")
+        .replace(/<li[^>]*>/gi, "  - ")
+        .replace(/<\/h[1-6]>/gi, "\n\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    }
+
+    // Generate RFC 5322 compliant Message-ID using the sender's domain
+    const messageId = `<${crypto.randomUUID()}@${fromDomain}>`;
+
+    // Build Feedback-ID for Gmail Postmaster Tools
+    const feedbackId = `${email.id}:${accountId}:transactional:${fromDomain}`;
+
     const existingHeaders = email.headers || {};
-    const mergedHeaders = { ...existingHeaders, ...unsubscribeHeaders };
+    const mergedHeaders: Record<string, string> = {
+      ...existingHeaders,
+      ...unsubscribeHeaders,
+      "Feedback-ID": feedbackId,
+      "X-Mailer": "MailNowAPI/1.0",
+    };
 
     const transport = getOrCreateTransport();
     const info = await transport.sendMail({
@@ -113,7 +148,17 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       replyTo: email.replyTo || undefined,
       subject: email.subject,
       html: html || undefined,
-      text: email.textBody || undefined,
+      text: textBody || undefined,
+      messageId,
+      // Set envelope sender for SPF alignment (Return-Path matches From domain)
+      envelope: {
+        from: `bounces@${fromDomain}`,
+        to: [
+          ...(email.toAddresses || []),
+          ...(email.ccAddresses || []),
+          ...(email.bccAddresses || []),
+        ].filter(Boolean),
+      },
       headers: mergedHeaders,
       attachments: email.attachments?.map((a) => ({
         filename: a.filename,

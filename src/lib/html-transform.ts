@@ -26,8 +26,13 @@ export function rewriteLinks(html: string, emailId: string): string {
   return html.replace(
     /<a\s([^>]*?)href=["']([^"']+)["']([^>]*?)>/gi,
     (_match, before, url, after) => {
-      // Don't track mailto: and tel: links
-      if (url.startsWith("mailto:") || url.startsWith("tel:") || url.startsWith("#")) {
+      // Don't track mailto:, tel:, anchor links, or unsubscribe links
+      if (url.startsWith("mailto:") || url.startsWith("tel:") || url.startsWith("#") || url.includes("/unsubscribe/")) {
+        return `<a ${before}href="${url}"${after}>`;
+      }
+
+      // Don't rewrite links with data-no-track attribute
+      if (before.includes("data-no-track") || after.includes("data-no-track")) {
         return `<a ${before}href="${url}"${after}>`;
       }
 
