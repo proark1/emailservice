@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { suppressions } from "../db/schema/index.js";
 import { NotFoundError, ConflictError } from "../lib/errors.js";
@@ -51,4 +51,17 @@ export function formatSuppressionResponse(suppression: typeof suppressions.$infe
     reason: suppression.reason,
     created_at: suppression.createdAt.toISOString(),
   };
+}
+
+export async function processDeliveryFailure(accountId: string, email: string, reason: "bounce" | "complaint") {
+  const db = getDb();
+  try { await addSuppression(accountId, email, reason); } catch {}
+  try {
+    const { contacts, audiences } = await import("../db/schema/index.js");
+    const accts = await db.select({ id: audiences.id }).from(audiences).where(eq(audiences.accountId, accountId));
+    if (accts.length > 0) {
+      await db.update(contacts).set({ subscribed: false, unsubscribedAt: new Date() })
+        .where(and(inArray(contacts.audienceId, accts.map(a => a.id)), eq(contacts.email, email)));
+    }
+  } catch {}
 }

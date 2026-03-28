@@ -17,6 +17,19 @@ import { getDnsVerifyQueue } from "../queues/index.js";
 import { getConfig } from "../config/index.js";
 import { WEBHOOK_EVENT_TYPES } from "../types/webhook-events.js";
 
+function calculateReputationScore(t: any): number {
+  const totalSent = (t.sent || 0) + (t.delivered || 0);
+  if (totalSent === 0) return 100;
+  const bounceRate = (t.bounced || 0) / totalSent;
+  const complaintRate = (t.complained || 0) / totalSent;
+  const deliveryRate = (t.delivered || 0) / totalSent;
+  let score = 100;
+  score -= bounceRate * 200;
+  score -= complaintRate * 1000;
+  score += deliveryRate * 10;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
 export default async function dashboardRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     try {
@@ -40,7 +53,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const [a] = await db.select({ count: count() }).from(apiKeys).where(and(eq(apiKeys.accountId, id), isNull(apiKeys.revokedAt)));
     const [w] = await db.select({ count: count() }).from(webhooks).where(eq(webhooks.accountId, id));
     const [au] = await db.select({ count: count() }).from(audiences).where(eq(audiences.accountId, id));
-    return { data: { emails: Number(e.count), domains: Number(d.count), api_keys: Number(a.count), webhooks: Number(w.count), audiences: Number(au.count) } };
+    const [vd] = await db.select({ count: count() }).from(domains).where(and(eq(domains.accountId, id), eq(domains.status, "verified")));
+    return { data: { emails: Number(e.count), domains: Number(d.count), verified_domains: Number(vd.count), api_keys: Number(a.count), webhooks: Number(w.count), audiences: Number(au.count) } };
   });
 
   // --- Emails ---
@@ -912,6 +926,191 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const { removeSuppression, formatSuppressionResponse } = await import("../services/suppression.service.js");
     const removed = await removeSuppression(request.account.id, request.params.id);
     return { data: formatSuppressionResponse(removed) };
+  });
+
+  // --- Activity Feed (SSE) ---
+  app.get("/activity/stream", async (request, reply) => {
+    const accountId = request.account.id;
+
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+
+    // Send initial batch of recent events
+    const db = getDb();
+    const { emailEvents } = await import("../db/schema/index.js");
+    const recent = await db.select({
+      id: emailEvents.id,
+      type: emailEvents.type,
+      emailId: emailEvents.emailId,
+      data: emailEvents.data,
+      createdAt: emailEvents.createdAt,
+    }).from(emailEvents)
+      .where(eq(emailEvents.accountId, accountId))
+      .orderBy(desc(emailEvents.createdAt))
+      .limit(20);
+
+    reply.raw.write(`data: ${JSON.stringify({ type: "init", events: recent.map(e => ({
+      id: e.id,
+      type: e.type,
+      email_id: e.emailId,
+      data: e.data,
+      created_at: e.createdAt?.toISOString(),
+    })) })}\n\n`);
+
+    // Poll for new events every 5 seconds
+    let lastId = recent[0]?.id || null;
+    const interval = setInterval(async () => {
+      try {
+        const conditions: any[] = [eq(emailEvents.accountId, accountId)];
+        if (lastId) {
+          conditions.push(sql`${emailEvents.createdAt} > (SELECT created_at FROM email_events WHERE id = ${lastId})`);
+        }
+        const newEvents = await db.select({
+          id: emailEvents.id,
+          type: emailEvents.type,
+          emailId: emailEvents.emailId,
+          data: emailEvents.data,
+          createdAt: emailEvents.createdAt,
+        }).from(emailEvents)
+          .where(and(...conditions))
+          .orderBy(emailEvents.createdAt)
+          .limit(50);
+
+        for (const e of newEvents) {
+          reply.raw.write(`data: ${JSON.stringify({
+            type: "event",
+            event: {
+              id: e.id,
+              type: e.type,
+              email_id: e.emailId,
+              data: e.data,
+              created_at: e.createdAt?.toISOString(),
+            },
+          })}\n\n`);
+          lastId = e.id;
+        }
+      } catch {
+        // Connection might be closed
+      }
+    }, 5000);
+
+    // Keepalive ping every 30s
+    const ping = setInterval(() => {
+      try { reply.raw.write(": ping\n\n"); } catch {}
+    }, 30000);
+
+    request.raw.on("close", () => {
+      clearInterval(interval);
+      clearInterval(ping);
+    });
+  });
+
+  // --- Usage ---
+  app.get("/usage", async (request) => {
+    const db = getDb();
+    const accountId = request.account.id;
+
+    // Current month usage
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const [monthUsage] = await db.select({
+      emailsSent: sql<number>`count(*) filter (where ${emails.status} in ('sent','delivered','bounced','failed','complained'))::int`,
+      emailsDelivered: sql<number>`count(*) filter (where ${emails.status} = 'delivered')::int`,
+    }).from(emails).where(and(
+      eq(emails.accountId, accountId),
+      sql`${emails.createdAt} >= ${startOfMonth.toISOString()}::timestamp`,
+    ));
+
+    // Last 6 months breakdown
+    const monthlyBreakdown = await db.select({
+      month: sql<string>`to_char(${emails.createdAt}, 'YYYY-MM')`,
+      count: sql<number>`count(*)::int`,
+    }).from(emails)
+      .where(and(
+        eq(emails.accountId, accountId),
+        sql`${emails.createdAt} > now() - interval '6 months'`,
+      ))
+      .groupBy(sql`to_char(${emails.createdAt}, 'YYYY-MM')`)
+      .orderBy(sql`to_char(${emails.createdAt}, 'YYYY-MM')`);
+
+    // Counts
+    const [domainCount] = await db.select({ count: count() }).from(domains).where(eq(domains.accountId, accountId));
+    const [audienceCount] = await db.select({ count: count() }).from(audiences).where(eq(audiences.accountId, accountId));
+    const { contacts } = await import("../db/schema/index.js");
+    const { templates } = await import("../db/schema/index.js");
+    const [contactCount] = await db.select({ count: count() }).from(contacts)
+      .innerJoin(audiences, eq(contacts.audienceId, audiences.id))
+      .where(eq(audiences.accountId, accountId));
+    const [templateCount] = await db.select({ count: count() }).from(templates).where(eq(templates.accountId, accountId));
+
+    return {
+      data: {
+        current_month: {
+          emails_sent: monthUsage.emailsSent || 0,
+          emails_delivered: monthUsage.emailsDelivered || 0,
+          period: startOfMonth.toISOString().slice(0, 7),
+        },
+        monthly: monthlyBreakdown.map(m => ({ month: m.month, count: m.count })),
+        resources: {
+          domains: Number(domainCount.count),
+          audiences: Number(audienceCount.count),
+          contacts: Number(contactCount.count),
+          templates: Number(templateCount.count),
+        },
+      },
+    };
+  });
+
+  // --- Deliverability ---
+  app.get("/deliverability", async (request) => {
+    const db = getDb();
+    const accountId = request.account.id;
+    const [totals] = await db.select({
+      total: count(),
+      sent: sql<number>`count(*) filter (where ${emails.status} = 'sent')::int`,
+      delivered: sql<number>`count(*) filter (where ${emails.status} = 'delivered')::int`,
+      bounced: sql<number>`count(*) filter (where ${emails.status} = 'bounced')::int`,
+      failed: sql<number>`count(*) filter (where ${emails.status} = 'failed')::int`,
+      complained: sql<number>`count(*) filter (where ${emails.status} = 'complained')::int`,
+      totalOpens: sql<number>`coalesce(sum(${emails.openCount}), 0)::int`,
+      totalClicks: sql<number>`coalesce(sum(${emails.clickCount}), 0)::int`,
+    }).from(emails).where(eq(emails.accountId, accountId));
+
+    const daily = await db.select({
+      date: sql<string>`date(${emails.createdAt})`,
+      sent: sql<number>`count(*) filter (where ${emails.status} in ('sent','delivered'))::int`,
+      bounced: sql<number>`count(*) filter (where ${emails.status} = 'bounced')::int`,
+      complained: sql<number>`count(*) filter (where ${emails.status} = 'complained')::int`,
+      opens: sql<number>`coalesce(sum(${emails.openCount}), 0)::int`,
+    }).from(emails)
+      .where(and(eq(emails.accountId, accountId), sql`${emails.createdAt} > now() - interval '7 days'`))
+      .groupBy(sql`date(${emails.createdAt})`)
+      .orderBy(sql`date(${emails.createdAt})`);
+
+    const { suppressions } = await import("../db/schema/index.js");
+    const [suppCount] = await db.select({ count: count() }).from(suppressions).where(eq(suppressions.accountId, accountId));
+    const t = totals;
+    const totalSent = (t.sent || 0) + (t.delivered || 0);
+    return {
+      data: {
+        score: calculateReputationScore(t),
+        totals: { sent: totalSent, delivered: t.delivered || 0, bounced: t.bounced || 0, failed: t.failed || 0, complained: t.complained || 0, opens: t.totalOpens || 0, clicks: t.totalClicks || 0, suppressions: Number(suppCount.count) },
+        rates: {
+          delivery: totalSent > 0 ? (t.delivered || 0) / totalSent : 0,
+          bounce: totalSent > 0 ? (t.bounced || 0) / totalSent : 0,
+          complaint: totalSent > 0 ? (t.complained || 0) / totalSent : 0,
+          open: totalSent > 0 ? (t.totalOpens || 0) / totalSent : 0,
+          click: totalSent > 0 ? (t.totalClicks || 0) / totalSent : 0,
+        },
+        daily,
+      },
+    };
   });
 
   // --- API Docs metadata ---

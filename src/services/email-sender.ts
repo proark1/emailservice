@@ -198,6 +198,15 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       data: { error: errorMessage },
     });
 
+    if (errorMessage.includes("550") || errorMessage.includes("bounce") || errorMessage.includes("rejected") || errorMessage.includes("undeliverable")) {
+      try {
+        const { processDeliveryFailure } = await import("./suppression.service.js");
+        for (const addr of (email.toAddresses || [])) {
+          await processDeliveryFailure(accountId, addr, "bounce");
+        }
+      } catch {}
+    }
+
     throw error;
   }
 }
