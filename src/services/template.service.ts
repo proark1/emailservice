@@ -133,7 +133,7 @@ export function formatTemplateResponse(template: typeof templates.$inferSelect) 
     subject: template.subject,
     html_body: template.htmlBody,
     text_body: template.textBody,
-    variables: template.variables ? JSON.parse(template.variables) : [],
+    variables: template.variables ? (() => { try { return JSON.parse(template.variables); } catch { return []; } })() : [],
     version: template.version,
     created_at: template.createdAt.toISOString(),
     updated_at: template.updatedAt.toISOString(),

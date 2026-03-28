@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import * as argon2 from "argon2";
+import { ValidationError } from "./errors.js";
 
 const API_KEY_PREFIX = "es_";
 const KEY_LENGTH = 32;
@@ -68,16 +69,16 @@ export function encryptPrivateKey(privateKey: string, encryptionKey: string): st
 export function decryptPrivateKey(encrypted: string, encryptionKey: string): string {
   const parts = encrypted.split(":");
   if (parts.length !== 3) {
-    throw new Error("Invalid encrypted data format");
+    throw new ValidationError("Invalid encrypted data format");
   }
   const [ivB64, authTagB64, data] = parts;
   const iv = Buffer.from(ivB64, "base64");
   if (iv.length !== 16) {
-    throw new Error("Invalid encrypted data: bad IV length");
+    throw new ValidationError("Invalid encrypted data: bad IV length");
   }
   const authTag = Buffer.from(authTagB64, "base64");
   if (authTag.length !== 16) {
-    throw new Error("Invalid encrypted data: bad auth tag length");
+    throw new ValidationError("Invalid encrypted data: bad auth tag length");
   }
   const key = Buffer.from(encryptionKey, "hex");
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
