@@ -131,9 +131,17 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
     // Build Feedback-ID for Gmail Postmaster Tools
     const feedbackId = `${email.id}:${accountId}:transactional:${fromDomain}`;
 
+    // Sanitize user-provided headers — block dangerous ones that could hijack mail routing
+    const BLOCKED_HEADERS = new Set(["from", "to", "cc", "bcc", "sender", "return-path", "envelope-from", "dkim-signature", "received", "authentication-results", "arc-seal", "arc-message-signature", "arc-authentication-results"]);
     const existingHeaders = email.headers || {};
+    const sanitizedHeaders: Record<string, string> = {};
+    for (const [key, value] of Object.entries(existingHeaders)) {
+      if (!BLOCKED_HEADERS.has(key.toLowerCase()) && !key.toLowerCase().startsWith("x-google-") && !value.includes("\n") && !value.includes("\r")) {
+        sanitizedHeaders[key] = value;
+      }
+    }
     const mergedHeaders: Record<string, string> = {
-      ...existingHeaders,
+      ...sanitizedHeaders,
       ...unsubscribeHeaders,
       "Feedback-ID": feedbackId,
       "X-Mailer": "MailNowAPI/1.0",

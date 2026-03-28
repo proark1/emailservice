@@ -5,8 +5,13 @@ import { getDb } from "../db/index.js";
 import * as authService from "../services/auth.service.js";
 
 export default async function authRoutes(app: FastifyInstance) {
+  // Rate limit auth endpoints more aggressively
+  app.addHook("onRequest", async (request) => {
+    // Handled by global rate limiter, but we enforce stricter limits via route config
+  });
+
   // POST /auth/register
-  app.post("/register", async (request, reply) => {
+  app.post("/register", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request, reply) => {
     const body = z.object({
       name: z.string().min(1).max(255),
       email: z.string().email(),
@@ -36,10 +41,10 @@ export default async function authRoutes(app: FastifyInstance) {
   });
 
   // POST /auth/login
-  app.post("/login", async (request, reply) => {
+  app.post("/login", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (request, reply) => {
     const body = z.object({
       email: z.string().email(),
-      password: z.string().min(1),
+      password: z.string().min(8),
     }).parse(request.body);
 
     const account = await authService.login(body.email, body.password);

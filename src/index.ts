@@ -63,8 +63,22 @@ async function main() {
   await app.register(swaggerUi, { routePrefix: "/docs" });
 
   // Security
-  await app.register(cors, { origin: true, credentials: true });
-  await app.register(helmet, { contentSecurityPolicy: false });
+  // CORS: restrict to own origin in production
+  const allowedOrigins = config.NODE_ENV === "production"
+    ? [config.BASE_URL, config.TRACKING_URL].filter(Boolean)
+    : true;
+  await app.register(cors, { origin: allowedOrigins, credentials: true });
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:"],
+        frameSrc: ["'self'"],
+      },
+    },
+  });
 
   // Plugins
   await app.register(errorHandler);

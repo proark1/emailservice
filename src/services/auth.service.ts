@@ -10,7 +10,7 @@ export async function register(name: string, email: string, password: string) {
   // Check if email exists
   const existing = await db.select().from(accounts).where(eq(accounts.email, email));
   if (existing.length > 0) {
-    throw new ConflictError("An account with this email already exists");
+    throw new ConflictError("Unable to create account with this email");
   }
 
   if (password.length < 8) {
