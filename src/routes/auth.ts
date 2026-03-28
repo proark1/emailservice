@@ -1,5 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
+import { getDb } from "../db/index.js";
 import * as authService from "../services/auth.service.js";
 
 export default async function authRoutes(app: FastifyInstance) {
@@ -89,5 +91,42 @@ export default async function authRoutes(app: FastifyInstance) {
     } catch {
       return reply.status(401).send({ data: null });
     }
+  });
+
+  // PATCH /auth/profile — update name
+  app.patch("/profile", async (request) => {
+    const token = request.cookies.token;
+    if (!token) throw new (await import("../lib/errors.js")).UnauthorizedError();
+    const decoded = app.jwt.verify<{ id: string }>(token);
+    const { name } = z.object({ name: z.string().min(1).max(255) }).parse(request.body);
+    const db = getDb();
+    const { accounts } = await import("../db/schema/index.js");
+    const [updated] = await db.update(accounts).set({ name, updatedAt: new Date() }).where(eq(accounts.id, decoded.id)).returning();
+    if (!updated) throw new (await import("../lib/errors.js")).NotFoundError("Account");
+    return { data: { id: updated.id, name: updated.name, email: updated.email, role: updated.role } };
+  });
+
+  // POST /auth/change-password
+  app.post("/change-password", async (request) => {
+    const token = request.cookies.token;
+    if (!token) throw new (await import("../lib/errors.js")).UnauthorizedError();
+    const decoded = app.jwt.verify<{ id: string }>(token);
+    const { current_password, new_password } = z.object({
+      current_password: z.string().min(1),
+      new_password: z.string().min(8).max(255),
+    }).parse(request.body);
+
+    const db = getDb();
+    const { accounts } = await import("../db/schema/index.js");
+    const [account] = await db.select().from(accounts).where(eq(accounts.id, decoded.id));
+    if (!account) throw new (await import("../lib/errors.js")).NotFoundError("Account");
+
+    const argon2 = await import("argon2");
+    const valid = await argon2.verify(account.passwordHash!, current_password);
+    if (!valid) throw new (await import("../lib/errors.js")).ValidationError("Current password is incorrect");
+
+    const newHash = await argon2.hash(new_password);
+    await db.update(accounts).set({ passwordHash: newHash, updatedAt: new Date() }).where(eq(accounts.id, decoded.id));
+    return { data: { success: true } };
   });
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
-import { api, post } from "../../lib/api";
+import { api, post, del } from "../../lib/api";
 import { RichEditor, wrapEmailHtml } from "../../components/RichEditor";
 import {
   Badge,
@@ -58,7 +58,7 @@ type Domain = {
   status: string;
 };
 
-const STATUS_TABS = ["all", "queued", "sent", "delivered", "bounced", "failed"] as const;
+const STATUS_TABS = ["all", "queued", "scheduled", "sent", "delivered", "bounced", "failed"] as const;
 type StatusTab = (typeof STATUS_TABS)[number];
 
 /* ---------- helpers ---------- */
@@ -141,13 +141,20 @@ export default function EmailsPage() {
     try {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set("search", debouncedSearch);
-      if (activeTab !== "all") params.set("status", activeTab);
+      if (activeTab === "scheduled") params.set("status", "queued");
+      else if (activeTab !== "all") params.set("status", activeTab);
       if (domainFilter) params.set("domain_id", domainFilter);
       params.set("page", String(page));
       params.set("limit", "50");
       const res = await api<{ data: Email[]; pagination: Pagination }>(`/dashboard/emails?${params}`);
-      setEmails(res.data);
-      if (res.pagination) setPagination(res.pagination);
+      if (activeTab === "scheduled") {
+        const scheduled = res.data.filter((e: Email) => e.scheduledAt && new Date(e.scheduledAt) > new Date());
+        setEmails(scheduled);
+        if (res.pagination) setPagination({ ...res.pagination, total: scheduled.length, pages: 1 });
+      } else {
+        setEmails(res.data);
+        if (res.pagination) setPagination(res.pagination);
+      }
     } catch {
       setEmails([]);
     } finally {
@@ -161,7 +168,7 @@ export default function EmailsPage() {
       const allRes = await api<{ data: Email[]; pagination: Pagination }>("/dashboard/emails?limit=1");
       counts.all = allRes.pagination?.total ?? 0;
       await Promise.all(
-        STATUS_TABS.filter((s) => s !== "all").map(async (status) => {
+        STATUS_TABS.filter((s) => s !== "all" && s !== "scheduled").map(async (status) => {
           try {
             const res = await api<{ data: Email[]; pagination: Pagination }>(`/dashboard/emails?status=${status}&limit=1`);
             counts[status] = res.pagination?.total ?? 0;
@@ -170,6 +177,11 @@ export default function EmailsPage() {
           }
         })
       );
+      // For "scheduled" tab, we fetch queued emails and count those with future scheduledAt
+      try {
+        const queuedRes = await api<{ data: Email[] }>("/dashboard/emails?status=queued&limit=100");
+        counts.scheduled = queuedRes.data.filter((e: Email) => e.scheduledAt && new Date(e.scheduledAt) > new Date()).length;
+      } catch { counts.scheduled = 0; }
       setStatusCounts(counts);
     } catch {
       // silent
@@ -382,7 +394,7 @@ export default function EmailsPage() {
         />
       ) : (
         <>
-          <Table headers={["To", "Subject", "Status", "Opens", "Clicks", "Date"]}>
+          <Table headers={["To", "Subject", "Status", ...(activeTab === "scheduled" ? ["Scheduled For"] : []), "Opens", "Clicks", "Date"]}>
             {emails.map((e) => (
               <tr
                 key={e.id}
@@ -399,6 +411,9 @@ export default function EmailsPage() {
                 <td className="px-4 py-3">
                   <Badge variant={statusVariant(e.status)}>{e.status}</Badge>
                 </td>
+                {activeTab === "scheduled" && (
+                  <td className="px-4 py-3 text-gray-500 text-[13px] whitespace-nowrap">{e.scheduledAt ? formatFullDate(e.scheduledAt) : "\u2014"}</td>
+                )}
                 <td className="px-4 py-3 text-gray-500 text-[13px] tabular-nums">{e.openCount ?? 0}</td>
                 <td className="px-4 py-3 text-gray-500 text-[13px] tabular-nums">{e.clickCount ?? 0}</td>
                 <td className="px-4 py-3 text-gray-500 text-[13px] whitespace-nowrap">{formatDate(e.createdAt)}</td>
@@ -464,7 +479,28 @@ export default function EmailsPage() {
                   {detailEmail.clickCount} click{detailEmail.clickCount !== 1 ? "s" : ""}
                 </span>
               )}
-              <div className="ml-auto">
+              <div className="ml-auto flex items-center gap-2">
+                {detailEmail.status === "failed" && (
+                  <Button variant="secondary" onClick={async () => {
+                    try {
+                      await post(`/dashboard/emails/${detailEmail.id}/retry`);
+                      setDetailEmail(null);
+                      loadEmails();
+                      loadCounts();
+                    } catch (e: any) { alert(e.message); }
+                  }}>Retry Send</Button>
+                )}
+                {(detailEmail.status === "queued" && detailEmail.scheduledAt) && (
+                  <Button variant="secondary" onClick={async () => {
+                    if (!window.confirm("Cancel this scheduled email?")) return;
+                    try {
+                      await del(`/dashboard/emails/${detailEmail.id}`);
+                      setDetailEmail(null);
+                      loadEmails();
+                      loadCounts();
+                    } catch (e: any) { alert(e.message); }
+                  }}>Cancel Scheduled</Button>
+                )}
                 <CopyButton text={detailEmail.id} />
               </div>
             </div>

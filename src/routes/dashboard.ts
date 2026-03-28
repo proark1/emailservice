@@ -145,6 +145,36 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     })) };
   });
 
+  // --- Cancel Scheduled Email ---
+  app.delete<{ Params: { id: string } }>("/emails/:id", async (request) => {
+    const cancelled = await emailService.cancelScheduledEmail(request.account.id, request.params.id);
+    return { data: emailService.formatEmailResponse(cancelled) };
+  });
+
+  // --- Retry Failed Email ---
+  app.post<{ Params: { id: string } }>("/emails/:id/retry", async (request, reply) => {
+    const db = getDb();
+    const [email] = await db.select().from(emails)
+      .where(and(eq(emails.id, request.params.id), eq(emails.accountId, request.account.id)));
+    if (!email) throw new (await import("../lib/errors.js")).NotFoundError("Email");
+    if (email.status !== "failed") throw new (await import("../lib/errors.js")).ValidationError("Only failed emails can be retried");
+
+    // Create a new send with the same content
+    const result = await emailService.sendEmail(request.account.id, {
+      from: email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress,
+      to: email.toAddresses as string[],
+      cc: (email.ccAddresses as string[]) || undefined,
+      bcc: (email.bccAddresses as string[]) || undefined,
+      reply_to: (email.replyTo as string[]) || undefined,
+      subject: email.subject,
+      html: email.htmlBody || undefined,
+      text: email.textBody || undefined,
+      headers: (email.headers as Record<string, string>) || undefined,
+      tags: (email.tags as Record<string, string>) || undefined,
+    });
+    return reply.status(201).send({ data: result.response });
+  });
+
   // --- Inbox (inbound emails) ---
   app.get("/inbox", async (request) => {
     const db = getDb();
@@ -564,6 +594,13 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     };
   });
 
+  // --- Webhook Deliveries ---
+  app.get<{ Params: { id: string } }>("/webhooks/:id/deliveries", async (request) => {
+    const webhook = await webhookService.getWebhook(request.account.id, request.params.id);
+    const deliveries = await webhookService.listDeliveries(request.account.id, webhook.id);
+    return { data: deliveries.map(webhookService.formatDeliveryResponse) };
+  });
+
   // --- Audiences ---
   app.get("/audiences", async (request) => {
     const list = await audienceService.listAudiences(request.account.id);
@@ -852,6 +889,29 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         templates: templateResults,
       },
     };
+  });
+
+  // --- Suppressions ---
+  app.get("/suppressions", async (request) => {
+    const { listSuppressions, formatSuppressionResponse } = await import("../services/suppression.service.js");
+    const list = await listSuppressions(request.account.id);
+    return { data: list.map(formatSuppressionResponse) };
+  });
+
+  app.post("/suppressions", async (request, reply) => {
+    const { addSuppression, formatSuppressionResponse } = await import("../services/suppression.service.js");
+    const { email, reason } = z.object({
+      email: z.string().email(),
+      reason: z.enum(["bounce", "complaint", "unsubscribe", "manual"]).default("manual"),
+    }).parse(request.body);
+    const suppression = await addSuppression(request.account.id, email, reason);
+    return reply.status(201).send({ data: formatSuppressionResponse(suppression) });
+  });
+
+  app.delete<{ Params: { id: string } }>("/suppressions/:id", async (request) => {
+    const { removeSuppression, formatSuppressionResponse } = await import("../services/suppression.service.js");
+    const removed = await removeSuppression(request.account.id, request.params.id);
+    return { data: formatSuppressionResponse(removed) };
   });
 
   // --- API Docs metadata ---

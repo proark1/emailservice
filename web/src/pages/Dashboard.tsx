@@ -10,6 +10,8 @@ import AudiencesPage from "./dashboard/AudiencesPage";
 import BroadcastsPage from "./dashboard/BroadcastsPage";
 import WarmupPage from "./dashboard/WarmupPage";
 import TemplatesPage from "./dashboard/TemplatesPage";
+import SettingsPage from "./dashboard/SettingsPage";
+import SuppressionsPage from "./dashboard/SuppressionsPage";
 
 const navItems = [
   { to: "/dashboard", label: "Overview", end: true, icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" /></svg> },
@@ -587,16 +589,29 @@ function ApiKeysPage() {
   );
 }
 
-// --- WEBHOOKS with create/delete ---
+// --- WEBHOOKS with create/delete + delivery log ---
 function WebhooksPage() {
   const [items, setItems] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selectedWebhook, setSelectedWebhook] = useState<any>(null);
+  const [deliveries, setDeliveries] = useState<any[]>([]);
+  const [deliveriesLoading, setDeliveriesLoading] = useState(false);
 
   const load = () => api("/dashboard/webhooks").then((r) => setItems(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
+
+  const loadDeliveries = async (webhook: any) => {
+    setSelectedWebhook(webhook);
+    setDeliveriesLoading(true);
+    try {
+      const res = await api(`/dashboard/webhooks/${webhook.id}/deliveries`);
+      setDeliveries(res.data);
+    } catch { setDeliveries([]); }
+    finally { setDeliveriesLoading(false); }
+  };
 
   const create = async () => {
     setError(""); setLoading(true);
@@ -626,16 +641,42 @@ function WebhooksPage() {
       {items.length === 0 ? <EmptyState title="No webhooks" desc="Add a webhook to receive delivery events" /> : (
         <Table headers={["URL", "Events", "Status", "Secret", ""]}>
           {items.map((w) => (
-            <tr key={w.id} className="hover:bg-gray-50">
+            <tr key={w.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => loadDeliveries(w)}>
               <td className="px-4 py-3 text-gray-900 text-[13px] font-mono truncate max-w-[200px]">{w.url}</td>
               <td className="px-4 py-3 text-gray-500 text-[13px]">{w.events?.length || 0} events</td>
               <td className="px-4 py-3"><Badge variant={w.active ? "success" : "default"}>{w.active ? "Active" : "Inactive"}</Badge></td>
               <td className="px-4 py-3"><div className="flex items-center gap-1"><code className="text-[11px] text-gray-400 font-mono">{w.signing_secret?.slice(0, 12)}...</code><CopyButton text={w.signing_secret || ""} /></div></td>
-              <td className="px-4 py-3 text-right"><button onClick={() => remove(w.id)} className="px-2 py-1 text-[12px] text-red-600 hover:bg-red-50 rounded-lg">Delete</button></td>
+              <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}><button onClick={() => remove(w.id)} className="px-2 py-1 text-[12px] text-red-600 hover:bg-red-50 rounded-lg">Delete</button></td>
             </tr>
           ))}
         </Table>
       )}
+
+      {/* Webhook Deliveries Modal */}
+      <Modal open={!!selectedWebhook} onClose={() => setSelectedWebhook(null)} title={`Deliveries — ${selectedWebhook?.url || ""}`}>
+        {deliveriesLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="w-5 h-5 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : deliveries.length === 0 ? (
+          <p className="text-[13px] text-gray-400 py-4 text-center">No deliveries recorded yet</p>
+        ) : (
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            {deliveries.map((d: any) => (
+              <div key={d.id} className="p-3 rounded-xl border border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant={d.status === "success" ? "success" : d.status === "failed" ? "error" : "default"}>{d.status}</Badge>
+                  <span className="text-[12px] text-gray-500">Attempt {d.attempt_number}</span>
+                  {d.response_status_code && <span className="text-[12px] text-gray-400">HTTP {d.response_status_code}</span>}
+                  <span className="text-[11px] text-gray-400 ml-auto">{new Date(d.created_at).toLocaleString()}</span>
+                </div>
+                {d.event_type && <p className="text-[12px] text-gray-500 mt-1">Event: <span className="font-medium text-gray-700">{d.event_type}</span></p>}
+                {d.error_message && <p className="text-[12px] text-red-500 mt-1">{d.error_message}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
