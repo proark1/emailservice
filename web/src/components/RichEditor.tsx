@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 
 /**
  * Simple rich text editor using contentEditable.
@@ -16,6 +16,23 @@ export function RichEditor({
   minHeight?: string;
 }) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const initializedRef = useRef(false);
+
+  // Set initial content once on mount — don't use dangerouslySetInnerHTML
+  // which would overwrite user edits on every parent re-render
+  useEffect(() => {
+    if (editorRef.current && !initializedRef.current) {
+      editorRef.current.innerHTML = value;
+      initializedRef.current = true;
+    }
+  }, []);
+
+  // Reset content when value is cleared (e.g., form reset)
+  useEffect(() => {
+    if (editorRef.current && value === "" && initializedRef.current) {
+      editorRef.current.innerHTML = "";
+    }
+  }, [value]);
 
   const exec = useCallback((cmd: string, val?: string) => {
     document.execCommand(cmd, false, val);
@@ -38,7 +55,9 @@ export function RichEditor({
 
   const insertLink = () => {
     const url = prompt("Enter URL:");
-    if (url) exec("createLink", url);
+    if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+      exec("createLink", url);
+    }
   };
 
   const ToolBtn = ({ onClick, active, title, children }: { onClick: () => void; active?: boolean; title: string; children: React.ReactNode }) => (
@@ -109,7 +128,6 @@ export function RichEditor({
         data-placeholder={placeholder}
         className="px-3.5 py-3 text-sm text-gray-900 outline-none overflow-y-auto prose prose-sm max-w-none [&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-gray-400"
         style={{ minHeight }}
-        dangerouslySetInnerHTML={{ __html: value }}
       />
     </div>
   );

@@ -201,11 +201,13 @@ function ActivityFeed() {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     const es = new EventSource("/dashboard/activity/stream", { withCredentials: true });
 
-    es.onopen = () => setConnected(true);
+    es.onopen = () => { if (mounted) setConnected(true); };
 
     es.onmessage = (e) => {
+      if (!mounted) return;
       try {
         const data = JSON.parse(e.data);
         if (data.type === "init") {
@@ -216,9 +218,9 @@ function ActivityFeed() {
       } catch {}
     };
 
-    es.onerror = () => setConnected(false);
+    es.onerror = () => { if (mounted) setConnected(false); };
 
-    return () => es.close();
+    return () => { mounted = false; es.close(); };
   }, []);
 
   const eventColors: Record<string, string> = {
