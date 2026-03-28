@@ -104,16 +104,25 @@ export function renderTemplate(
   template: { subject?: string | null; htmlBody?: string | null; textBody?: string | null },
   variables: Record<string, string>,
 ): { subject?: string; html?: string; text?: string } {
-  const replace = (str: string): string => {
+  const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+  const replaceHtml = (str: string): string => {
+    return str.replace(/\{\{(\w+)\}\}/g, (match, name) => {
+      return variables[name] !== undefined ? escapeHtml(variables[name]) : match;
+    });
+  };
+
+  // Plain text and subject don't need HTML escaping
+  const replacePlain = (str: string): string => {
     return str.replace(/\{\{(\w+)\}\}/g, (match, name) => {
       return variables[name] !== undefined ? variables[name] : match;
     });
   };
 
   return {
-    subject: template.subject ? replace(template.subject) : undefined,
-    html: template.htmlBody ? replace(template.htmlBody) : undefined,
-    text: template.textBody ? replace(template.textBody) : undefined,
+    subject: template.subject ? replacePlain(template.subject) : undefined,
+    html: template.htmlBody ? replaceHtml(template.htmlBody) : undefined,
+    text: template.textBody ? replacePlain(template.textBody) : undefined,
   };
 }
 

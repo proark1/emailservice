@@ -45,8 +45,21 @@ export default async function trackingRoutes(app: FastifyInstance) {
     const { encodedData } = request.params;
 
     try {
-      const decoded = JSON.parse(Buffer.from(encodedData, "base64url").toString("utf-8"));
-      const { accountId, email } = decoded;
+      let accountId: string;
+      let email: string;
+      try {
+        // Try encrypted format first (new)
+        const { decryptPrivateKey } = await import("../lib/crypto.js");
+        const { getConfig } = await import("../config/index.js");
+        const decrypted = JSON.parse(decryptPrivateKey(decodeURIComponent(encodedData), getConfig().ENCRYPTION_KEY));
+        accountId = decrypted.a;
+        email = decrypted.e;
+      } catch {
+        // Fall back to legacy base64url format for existing links
+        const legacy = JSON.parse(Buffer.from(encodedData, "base64url").toString("utf-8"));
+        accountId = legacy.accountId;
+        email = legacy.email;
+      }
 
       if (!accountId || !email) {
         return reply.status(400).header("Content-Type", "text/html").send(

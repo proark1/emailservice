@@ -59,6 +59,11 @@ export async function createBroadcast(accountId: string, input: CreateBroadcastI
     throw new ValidationError("No subscribed contacts in this audience");
   }
 
+  const MAX_BROADCAST_RECIPIENTS = 10_000;
+  if (subscribedContacts.length > MAX_BROADCAST_RECIPIENTS) {
+    throw new ValidationError(`Broadcast cannot exceed ${MAX_BROADCAST_RECIPIENTS.toLocaleString()} contacts. This audience has ${subscribedContacts.length.toLocaleString()}.`);
+  }
+
   // If scheduled_at is in the future, save as "scheduled" and don't send yet
   const isScheduled = input.scheduled_at && new Date(input.scheduled_at) > new Date();
 

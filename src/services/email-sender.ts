@@ -98,7 +98,9 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
     // Add web-based unsubscribe link if we have recipient info
     if (email.toAddresses?.length) {
       const recipientEmail = Array.isArray(email.toAddresses) ? email.toAddresses[0] : email.toAddresses;
-      const encodedData = Buffer.from(JSON.stringify({ accountId, email: recipientEmail })).toString("base64url");
+      // Encrypt unsubscribe data to prevent accountId/email leakage
+      const { encryptPrivateKey } = await import("../lib/crypto.js");
+      const encodedData = encodeURIComponent(encryptPrivateKey(JSON.stringify({ a: accountId, e: recipientEmail }), config.ENCRYPTION_KEY));
       unsubscribeHeaders["List-Unsubscribe"] = `<${config.BASE_URL}/unsubscribe/${encodedData}>, <mailto:unsubscribe@${fromDomain}>`;
     }
 
