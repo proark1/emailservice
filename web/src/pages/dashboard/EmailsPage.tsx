@@ -483,7 +483,7 @@ export default function EmailsPage() {
                 {detailEmail.status === "failed" && (
                   <Button variant="secondary" onClick={async () => {
                     try {
-                      await post(`/dashboard/emails/${detailEmail.id}/retry`);
+                      await post(`/dashboard/emails/${detailEmail.id}/retry`, {});
                       setDetailEmail(null);
                       loadEmails();
                       loadCounts();
