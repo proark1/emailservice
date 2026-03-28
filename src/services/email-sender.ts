@@ -86,6 +86,24 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       html = transformHtml(html, email.id);
     }
 
+    // Build List-Unsubscribe headers
+    const fromDomain = email.fromAddress.split("@")[1];
+    const config = getConfig();
+    const unsubscribeHeaders: Record<string, string> = {
+      "List-Unsubscribe": `<mailto:unsubscribe@${fromDomain}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    };
+
+    // Add web-based unsubscribe link if we have recipient info
+    if (email.toAddresses?.length) {
+      const recipientEmail = Array.isArray(email.toAddresses) ? email.toAddresses[0] : email.toAddresses;
+      const encodedData = Buffer.from(JSON.stringify({ accountId, email: recipientEmail })).toString("base64url");
+      unsubscribeHeaders["List-Unsubscribe"] = `<${config.BASE_URL}/unsubscribe/${encodedData}>, <mailto:unsubscribe@${fromDomain}>`;
+    }
+
+    const existingHeaders = email.headers || {};
+    const mergedHeaders = { ...existingHeaders, ...unsubscribeHeaders };
+
     const transport = getOrCreateTransport();
     const info = await transport.sendMail({
       from: email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress,
@@ -96,7 +114,7 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       subject: email.subject,
       html: html || undefined,
       text: email.textBody || undefined,
-      headers: email.headers || undefined,
+      headers: mergedHeaders,
       attachments: email.attachments?.map((a) => ({
         filename: a.filename,
         content: Buffer.from(a.content, "base64"),

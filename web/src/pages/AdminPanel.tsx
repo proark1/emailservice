@@ -9,6 +9,7 @@ const adminNav = [
   { to: "/admin/analytics", label: "Analytics", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg> },
   { to: "/admin/accounts", label: "Accounts", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg> },
   { to: "/admin/api-usage", label: "API Usage", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg> },
+  { to: "/admin/api-logs", label: "API Logs", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" /></svg> },
   { to: "/admin/warmups", label: "Warmups", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" /></svg> },
 ];
 
@@ -274,6 +275,60 @@ function AdminApiUsage() {
   );
 }
 
+// ---- API Logs ----
+function AdminApiLogs() {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [methodFilter, setMethodFilter] = useState("");
+  useEffect(() => {
+    const params = new URLSearchParams({ limit: "100" });
+    if (methodFilter) params.set("method", methodFilter);
+    api(`/admin/analytics/api-logs?${params}`).then((r) => setLogs(r.data)).catch(() => {}).finally(() => setLoading(false));
+  }, [methodFilter]);
+
+  const methodColor = (m: string) => m === "GET" ? "text-emerald-600 bg-emerald-50 border-emerald-200" : m === "POST" ? "text-blue-600 bg-blue-50 border-blue-200" : m === "DELETE" ? "text-red-600 bg-rose-50 border-rose-200" : m === "PATCH" ? "text-amber-600 bg-amber-50 border-amber-200" : "text-gray-600 bg-gray-100 border-gray-200";
+  const statusColor = (s: number) => s < 300 ? "text-emerald-600" : s < 400 ? "text-blue-600" : s < 500 ? "text-amber-600" : "text-red-600";
+
+  if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /></div>;
+
+  return (
+    <div>
+      <div className="flex items-start justify-between mb-6">
+        <div><h1 className="text-xl font-semibold text-gray-900 tracking-tight">API Logs</h1><p className="text-sm text-gray-500 mt-1">Recent API requests across all accounts</p></div>
+        <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} className="h-9 px-3 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-500/30">
+          <option value="">All methods</option>
+          <option value="GET">GET</option>
+          <option value="POST">POST</option>
+          <option value="PATCH">PATCH</option>
+          <option value="DELETE">DELETE</option>
+        </select>
+      </div>
+      {logs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center border border-gray-200 rounded-2xl bg-white"><p className="text-sm font-medium text-gray-900">No API requests yet</p><p className="text-[13px] text-gray-500 mt-1">Logs appear when users make API calls</p></div>
+      ) : (
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-gray-200">
+          <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Time</th>
+          <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Method</th>
+          <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Path</th>
+          <th className="text-right px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Status</th>
+          <th className="text-right px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Time (ms)</th>
+          <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Account</th>
+        </tr></thead>
+        <tbody className="divide-y divide-gray-100">{logs.map((l: any) => (
+          <tr key={l.id} className="hover:bg-gray-50">
+            <td className="px-4 py-2 text-[12px] text-gray-500 font-mono whitespace-nowrap">{new Date(l.created_at).toLocaleString()}</td>
+            <td className="px-4 py-2"><span className={`inline-flex px-2 py-0.5 rounded-md text-[11px] font-bold font-mono border ${methodColor(l.method)}`}>{l.method}</span></td>
+            <td className="px-4 py-2 text-[13px] text-gray-700 font-mono truncate max-w-[250px]">{l.path}</td>
+            <td className={`px-4 py-2 text-[13px] font-mono text-right ${statusColor(l.status_code)}`}>{l.status_code}</td>
+            <td className="px-4 py-2 text-[13px] text-gray-500 font-mono text-right">{l.response_time}ms</td>
+            <td className="px-4 py-2 text-[13px] text-gray-500">{l.account_name || "—"}</td>
+          </tr>
+        ))}</tbody></table></div></div>
+      )}
+    </div>
+  );
+}
+
 // ---- Warmups (admin) ----
 function AdminWarmups() {
   const [warmups, setWarmups] = useState<any[]>([]);
@@ -350,6 +405,7 @@ export default function AdminPanel() {
           <Route path="analytics" element={<AdminAnalytics />} />
           <Route path="accounts" element={<AdminAccounts />} />
           <Route path="api-usage" element={<AdminApiUsage />} />
+          <Route path="api-logs" element={<AdminApiLogs />} />
           <Route path="warmups" element={<AdminWarmups />} />
         </Routes>
       </main>

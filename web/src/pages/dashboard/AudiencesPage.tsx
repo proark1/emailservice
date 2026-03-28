@@ -110,6 +110,11 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
   const [editForm, setEditForm] = useState({ first_name: "", last_name: "", subscribed: true });
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [csvText, setCsvText] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; total: number } | null>(null);
+  const [importError, setImportError] = useState("");
 
   const loadContacts = () => {
     api(`/dashboard/audiences/${audience.id}/contacts`).then((r) => setContacts(r.data)).catch(() => {});
@@ -162,6 +167,35 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
     loadContacts();
   };
 
+  const exportContacts = async () => {
+    const res = await fetch(`/dashboard/audiences/${audience.id}/contacts/export`, { credentials: "include" });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${audience.name}-contacts.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setCsvText(ev.target?.result as string);
+    reader.readAsText(file);
+  };
+
+  const handleImport = async () => {
+    setImportError(""); setImporting(true); setImportResult(null);
+    try {
+      const res = await post(`/dashboard/audiences/${audience.id}/contacts/import`, { csv: csvText });
+      setImportResult(res.data);
+      loadContacts();
+    } catch (e: any) { setImportError(e.message); }
+    finally { setImporting(false); }
+  };
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-3">
@@ -174,7 +208,11 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
             <p className="text-sm text-gray-500 mt-1">{contacts.length} contact{contacts.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
-        <Button onClick={() => setAddOpen(true)}>+ Add Contact</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={exportContacts}>Export CSV</Button>
+          <Button variant="secondary" onClick={() => { setImportOpen(true); setCsvText(""); setImportResult(null); setImportError(""); }}>Import CSV</Button>
+          <Button onClick={() => setAddOpen(true)}>+ Add Contact</Button>
+        </div>
       </div>
 
       {/* Search */}
@@ -222,6 +260,41 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
           <div className="flex gap-2">
             <Button onClick={saveEdit} disabled={editing}>{editing ? "Saving..." : "Save Changes"}</Button>
             <Button variant="secondary" onClick={() => setEditContact(null)}>Cancel</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Import CSV Modal */}
+      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Import Contacts from CSV">
+        {importError && <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[13px]">{importError}</div>}
+        {importResult && (
+          <div className="mb-4 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-green-700 text-[13px]">
+            Imported {importResult.imported} contact{importResult.imported !== 1 ? "s" : ""}, skipped {importResult.skipped} of {importResult.total} total rows.
+          </div>
+        )}
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Upload CSV file</label>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFile}
+              className="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 cursor-pointer"
+            />
+          </div>
+          <div>
+            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Or paste CSV content</label>
+            <textarea
+              rows={6}
+              placeholder={"email,first_name,last_name,subscribed\njane@example.com,Jane,Doe,true"}
+              value={csvText}
+              onChange={(e) => setCsvText(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 transition-all font-mono"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={handleImport} disabled={importing || !csvText.trim()}>{importing ? "Importing..." : "Import Contacts"}</Button>
+            <Button variant="secondary" onClick={() => setImportOpen(false)}>Cancel</Button>
           </div>
         </div>
       </Modal>

@@ -502,6 +502,73 @@ server.tool(
   },
 );
 
+// ---- Templates -------------------------------------------------------------
+
+server.tool(
+  "create_template",
+  "Create a reusable email template with {{variable}} placeholders.",
+  {
+    name: z.string().describe("Template name"),
+    subject: z.string().optional().describe("Subject line (supports {{variables}})"),
+    html: z.string().optional().describe("HTML body (supports {{variables}})"),
+    text: z.string().optional().describe("Plain text body (supports {{variables}})"),
+  },
+  async (params) => {
+    const res = await api("POST", "/v1/templates", params);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "list_templates",
+  "List all email templates.",
+  {},
+  async () => {
+    const res = await api("GET", "/v1/templates");
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "get_template",
+  "Get a specific email template by ID.",
+  {
+    template_id: z.string().describe("Template UUID"),
+  },
+  async ({ template_id }) => {
+    const res = await api("GET", `/v1/templates/${template_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "update_template",
+  "Update an email template.",
+  {
+    template_id: z.string().describe("Template UUID"),
+    name: z.string().optional().describe("Updated name"),
+    subject: z.string().optional().describe("Updated subject"),
+    html: z.string().optional().describe("Updated HTML body"),
+    text: z.string().optional().describe("Updated text body"),
+  },
+  async ({ template_id, ...body }) => {
+    const res = await api("PATCH", `/v1/templates/${template_id}`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "delete_template",
+  "Delete an email template.",
+  {
+    template_id: z.string().describe("Template UUID to delete"),
+  },
+  async ({ template_id }) => {
+    const res = await api("DELETE", `/v1/templates/${template_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
 // ---- Broadcasts ------------------------------------------------------------
 
 server.tool(

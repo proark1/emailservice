@@ -20,8 +20,10 @@ export const sendEmailSchema = z.object({
   tags: z.record(z.string(), z.string()).optional(),
   scheduled_at: z.string().datetime().optional(),
   idempotency_key: z.string().max(255).optional(),
-}).refine((d) => d.html || d.text, {
-  message: "At least one of html or text is required",
+  template_id: z.string().uuid().optional(),
+  template_variables: z.record(z.string(), z.string()).optional(),
+}).refine((d) => d.html || d.text || d.template_id, {
+  message: "At least one of html, text, or template_id is required",
   path: ["html"],
 });
 

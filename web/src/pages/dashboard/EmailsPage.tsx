@@ -38,6 +38,13 @@ type Email = {
   scheduledAt?: string;
 };
 
+type EmailEvent = {
+  id: string;
+  type: string;
+  data: Record<string, unknown> | null;
+  created_at: string;
+};
+
 type Pagination = {
   page: number;
   limit: number;
@@ -81,6 +88,22 @@ function formatFullDate(dateStr: string | undefined): string {
   });
 }
 
+function eventDotClass(type: string): string {
+  switch (type) {
+    case "delivered": return "border-green-500 bg-green-500";
+    case "sent": return "border-emerald-400 bg-emerald-400";
+    case "queued": return "border-gray-400 bg-gray-400";
+    case "bounced": return "border-red-500 bg-red-500";
+    case "soft_bounced": return "border-orange-400 bg-orange-400";
+    case "failed": return "border-red-600 bg-red-600";
+    case "opened": return "border-blue-500 bg-blue-500";
+    case "clicked": return "border-cyan-500 bg-cyan-500";
+    case "complained": return "border-amber-500 bg-amber-500";
+    case "deferred": return "border-yellow-400 bg-yellow-400";
+    default: return "border-gray-300 bg-gray-300";
+  }
+}
+
 /* ---------- main component ---------- */
 
 export default function EmailsPage() {
@@ -97,11 +120,15 @@ export default function EmailsPage() {
   const [domainFilter, setDomainFilter] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
   const [detailEmail, setDetailEmail] = useState<Email | null>(null);
+  const [detailEvents, setDetailEvents] = useState<EmailEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
 
   const [form, setForm] = useState({ from: "", to: "", cc: "", bcc: "", subject: "", html: "", scheduledAt: "" });
   const [showCcBcc, setShowCcBcc] = useState(false);
   const [sending, setSending] = useState(false);
   const [composeError, setComposeError] = useState("");
+  const [previewMode, setPreviewMode] = useState(false);
+  const [previewWidth, setPreviewWidth] = useState(600);
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
   const verifiedDomains = domains.filter((d) => d.status === "verified");
@@ -167,6 +194,27 @@ export default function EmailsPage() {
     loadEmails();
   }, [loadEmails]);
 
+  /* --- load events when detail modal opens --- */
+
+  useEffect(() => {
+    if (!detailEmail) {
+      setDetailEvents([]);
+      return;
+    }
+    const loadEvents = async () => {
+      setEventsLoading(true);
+      try {
+        const res = await api<{ data: EmailEvent[] }>(`/dashboard/emails/${detailEmail.id}/events`);
+        setDetailEvents(res.data);
+      } catch {
+        setDetailEvents([]);
+      } finally {
+        setEventsLoading(false);
+      }
+    };
+    loadEvents();
+  }, [detailEmail?.id]);
+
   /* --- search debounce --- */
 
   const handleSearch = (value: string) => {
@@ -189,6 +237,8 @@ export default function EmailsPage() {
     setForm({ from: "", to: "", cc: "", bcc: "", subject: "", html: "", scheduledAt: "" });
     setShowCcBcc(false);
     setComposeError("");
+    setPreviewMode(false);
+    setPreviewWidth(600);
   };
 
   const handleSend = async () => {
@@ -469,6 +519,54 @@ export default function EmailsPage() {
               {detailEmail.deliveredAt && <DetailRow label="Delivered" value={formatFullDate(detailEmail.deliveredAt)} />}
               {detailEmail.scheduledAt && <DetailRow label="Scheduled" value={formatFullDate(detailEmail.scheduledAt)} />}
             </div>
+
+            {/* Event Timeline */}
+            <div className="border-t border-gray-100 pt-3">
+              <p className="text-[12px] font-medium text-gray-500 uppercase tracking-wider mb-2">Event Log</p>
+              {eventsLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="w-4 h-4 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : detailEvents.length === 0 ? (
+                <p className="text-[13px] text-gray-400 py-2">No events recorded yet</p>
+              ) : (
+                <div className="relative ml-2">
+                  {/* Vertical line */}
+                  <div className="absolute left-[5px] top-2 bottom-2 w-px bg-gray-200" />
+                  <div className="space-y-3">
+                    {detailEvents.map((evt) => (
+                      <div key={evt.id} className="flex items-start gap-3 relative">
+                        <div
+                          className={`w-[11px] h-[11px] rounded-full border-2 shrink-0 mt-0.5 z-10 ${eventDotClass(evt.type)}`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[13px] font-medium text-gray-900 capitalize">
+                              {evt.type.replace(/_/g, " ")}
+                            </span>
+                            <span className="text-[11px] text-gray-400">
+                              {formatFullDate(evt.created_at)}
+                            </span>
+                          </div>
+                          {evt.data && Object.keys(evt.data).length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {Object.entries(evt.data).map(([key, val]) => (
+                                <span
+                                  key={key}
+                                  className="inline-flex px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-500 border border-gray-150"
+                                >
+                                  {key}: {String(val)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </Modal>
@@ -565,13 +663,36 @@ export default function EmailsPage() {
           />
 
           <div>
-            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Body</label>
-            <RichEditor
-              value={form.html}
-              onChange={(html) => setForm({ ...form, html })}
-              placeholder="Write your email content..."
-              minHeight="180px"
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[13px] font-medium text-gray-700">Body</label>
+              <button type="button" onClick={() => setPreviewMode(!previewMode)} className="text-[12px] text-violet-600 hover:text-violet-700 font-medium cursor-pointer transition-colors">
+                {previewMode ? "Edit" : "Preview"}
+              </button>
+            </div>
+            {previewMode ? (
+              <div>
+                <div className="flex gap-2 mb-2">
+                  <button onClick={() => setPreviewWidth(600)} className={`text-[12px] px-2 py-1 rounded-md cursor-pointer transition-colors ${previewWidth === 600 ? "bg-violet-100 text-violet-700" : "text-gray-500"}`}>Desktop</button>
+                  <button onClick={() => setPreviewWidth(375)} className={`text-[12px] px-2 py-1 rounded-md cursor-pointer transition-colors ${previewWidth === 375 ? "bg-violet-100 text-violet-700" : "text-gray-500"}`}>Mobile</button>
+                </div>
+                <div className="flex justify-center bg-gray-100 rounded-xl p-4">
+                  <iframe
+                    srcDoc={wrapEmailHtml(form.html)}
+                    sandbox=""
+                    title="Preview"
+                    className="border border-gray-200 rounded-lg bg-white"
+                    style={{ width: previewWidth, height: 400 }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <RichEditor
+                value={form.html}
+                onChange={(html) => setForm({ ...form, html })}
+                placeholder="Write your email content..."
+                minHeight="180px"
+              />
+            )}
           </div>
 
           <div>

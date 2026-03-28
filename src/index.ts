@@ -70,6 +70,7 @@ async function main() {
   await app.register(errorHandler);
   await app.register(authPlugin);
   await app.register(rateLimitPlugin);
+  await app.register((await import("./plugins/api-logger.js")).default);
 
   // API Routes
   await registerRoutes(app);
@@ -93,7 +94,8 @@ async function main() {
       request.url.startsWith("/health") ||
       request.url.startsWith("/docs") ||
       request.url.startsWith("/t/") ||
-      request.url.startsWith("/c/")
+      request.url.startsWith("/c/") ||
+      request.url.startsWith("/unsubscribe/")
     ) {
       return reply.status(404).send({
         error: { type: "not_found", message: "Route not found" },

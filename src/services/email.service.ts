@@ -26,6 +26,22 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
     }
   }
 
+  // Resolve template if template_id is provided
+  if (input.template_id) {
+    const { getTemplate, renderTemplate } = await import("./template.service.js");
+    const template = await getTemplate(accountId, input.template_id);
+    const rendered = renderTemplate(template, input.template_variables || {});
+    if (rendered.subject && !input.subject) {
+      (input as any).subject = rendered.subject;
+    }
+    if (rendered.html && !input.html) {
+      (input as any).html = rendered.html;
+    }
+    if (rendered.text && !input.text) {
+      (input as any).text = rendered.text;
+    }
+  }
+
   // Parse "from" address
   const from = parseFromAddress(input.from);
   const fromDomain = from.address.split("@")[1];

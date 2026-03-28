@@ -3,8 +3,8 @@ import { z } from "zod";
 import * as authService from "../services/auth.service.js";
 import * as adminAnalytics from "../services/admin-analytics.service.js";
 import { getDb } from "../db/index.js";
-import { emails, emailEvents, domains, accounts, apiKeys, webhooks } from "../db/schema/index.js";
-import { count, sql } from "drizzle-orm";
+import { emails, emailEvents, domains, accounts, apiKeys, webhooks, apiLogs } from "../db/schema/index.js";
+import { count, sql, desc, eq, and, ilike } from "drizzle-orm";
 import { ForbiddenError } from "../lib/errors.js";
 
 export default async function adminRoutes(app: FastifyInstance) {
@@ -179,5 +179,52 @@ export default async function adminRoutes(app: FastifyInstance) {
       .returning();
     if (!updated) throw new ForbiddenError("Warmup not found");
     return { data: { success: true } };
+  });
+
+  // --- API Request Logs ---
+
+  app.get("/analytics/api-logs", async (request) => {
+    const query = z.object({
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+      method: z.string().optional(),
+      path: z.string().optional(),
+      account_id: z.string().uuid().optional(),
+    }).parse(request.query);
+
+    const db = getDb();
+
+    const conditions: any[] = [];
+    if (query.account_id) conditions.push(eq(apiLogs.accountId, query.account_id));
+    if (query.method) conditions.push(eq(apiLogs.method, query.method.toUpperCase()));
+    if (query.path) conditions.push(ilike(apiLogs.path, `%${query.path}%`));
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const logs = await db.select({
+      id: apiLogs.id,
+      method: apiLogs.method,
+      path: apiLogs.path,
+      statusCode: apiLogs.statusCode,
+      responseTime: apiLogs.responseTime,
+      ip: apiLogs.ip,
+      createdAt: apiLogs.createdAt,
+      accountName: accounts.name,
+    })
+      .from(apiLogs)
+      .leftJoin(accounts, eq(apiLogs.accountId, accounts.id))
+      .where(whereClause)
+      .orderBy(desc(apiLogs.createdAt))
+      .limit(query.limit);
+
+    return { data: logs.map(l => ({
+      id: l.id,
+      method: l.method,
+      path: l.path,
+      status_code: l.statusCode,
+      response_time: l.responseTime,
+      ip: l.ip,
+      account_name: l.accountName,
+      created_at: l.createdAt?.toISOString(),
+    })) };
   });
 }

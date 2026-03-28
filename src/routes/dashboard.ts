@@ -9,6 +9,7 @@ import * as emailService from "../services/email.service.js";
 import * as audienceService from "../services/audience.service.js";
 import * as broadcastService from "../services/broadcast.service.js";
 import * as warmupService from "../services/warmup.service.js";
+import * as templateService from "../services/template.service.js";
 import { getDb } from "../db/index.js";
 import { emails, domains, apiKeys, webhooks, audiences, inboundEmails } from "../db/schema/index.js";
 import { ForbiddenError } from "../lib/errors.js";
@@ -121,6 +122,27 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       text: input.text,
     });
     return reply.status(201).send({ data: result.response });
+  });
+
+  // --- Email Events ---
+  app.get<{ Params: { id: string } }>("/emails/:id/events", async (request) => {
+    const db = getDb();
+    const { emailEvents, emails } = await import("../db/schema/index.js");
+    // Verify email belongs to account
+    const [email] = await db.select().from(emails)
+      .where(and(eq(emails.id, request.params.id), eq(emails.accountId, request.account.id)));
+    if (!email) throw new (await import("../lib/errors.js")).NotFoundError("Email");
+
+    const events = await db.select().from(emailEvents)
+      .where(eq(emailEvents.emailId, request.params.id))
+      .orderBy(desc(emailEvents.createdAt));
+
+    return { data: events.map(e => ({
+      id: e.id,
+      type: e.type,
+      data: e.data,
+      created_at: e.createdAt.toISOString(),
+    })) };
   });
 
   // --- Inbox (inbound emails) ---
@@ -538,6 +560,54 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     return { data: audienceService.formatContactResponse(deleted) };
   });
 
+  // CSV Export
+  app.get<{ Params: { id: string } }>("/audiences/:id/contacts/export", async (request, reply) => {
+    const audience = await audienceService.getAudience(request.account.id, request.params.id);
+    const contacts = await audienceService.listContacts(request.account.id, request.params.id);
+
+    const header = "email,first_name,last_name,subscribed\n";
+    const rows = contacts.map(c => {
+      const formatted = audienceService.formatContactResponse(c);
+      return `${formatted.email},${formatted.first_name || ""},${formatted.last_name || ""},${formatted.subscribed}`;
+    }).join("\n");
+
+    reply.header("Content-Type", "text/csv");
+    reply.header("Content-Disposition", `attachment; filename="${audience.name}-contacts.csv"`);
+    return header + rows;
+  });
+
+  // CSV Import
+  app.post<{ Params: { id: string } }>("/audiences/:id/contacts/import", async (request, reply) => {
+    const audience = await audienceService.getAudience(request.account.id, request.params.id);
+    const { csv } = z.object({ csv: z.string().min(1) }).parse(request.body);
+
+    const lines = csv.split("\n").map(l => l.trim()).filter(Boolean);
+    const startIdx = lines[0]?.toLowerCase().includes("email") ? 1 : 0;
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (let i = startIdx; i < lines.length; i++) {
+      const parts = lines[i].split(",").map(p => p.trim().replace(/^"|"$/g, ""));
+      const email = parts[0];
+      if (!email || !email.includes("@")) { skipped++; continue; }
+
+      try {
+        await audienceService.createContact(request.account.id, request.params.id, {
+          email,
+          first_name: parts[1] || undefined,
+          last_name: parts[2] || undefined,
+          subscribed: parts[3] !== "false",
+        });
+        imported++;
+      } catch {
+        skipped++;
+      }
+    }
+
+    return reply.status(200).send({ data: { imported, skipped, total: lines.length - startIdx } });
+  });
+
   // --- Broadcasts ---
   app.get("/broadcasts", async (request) => {
     const list = await broadcastService.listBroadcasts(request.account.id);
@@ -609,6 +679,36 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>("/warmup/:id", async (request) => {
     const schedule = await warmupService.cancelWarmup(request.account.id, request.params.id);
     return { data: warmupService.formatWarmupResponse(schedule) };
+  });
+
+  // --- Templates ---
+  app.get("/templates", async (request) => {
+    const list = await templateService.listTemplates(request.account.id);
+    return { data: list.map(templateService.formatTemplateResponse) };
+  });
+
+  app.post("/templates", async (request, reply) => {
+    const { createTemplateSchema } = await import("../schemas/template.schema.js");
+    const input = createTemplateSchema.parse(request.body);
+    const template = await templateService.createTemplate(request.account.id, input);
+    return reply.status(201).send({ data: templateService.formatTemplateResponse(template) });
+  });
+
+  app.get<{ Params: { id: string } }>("/templates/:id", async (request) => {
+    const template = await templateService.getTemplate(request.account.id, request.params.id);
+    return { data: templateService.formatTemplateResponse(template) };
+  });
+
+  app.patch<{ Params: { id: string } }>("/templates/:id", async (request) => {
+    const { updateTemplateSchema } = await import("../schemas/template.schema.js");
+    const input = updateTemplateSchema.parse(request.body);
+    const updated = await templateService.updateTemplate(request.account.id, request.params.id, input);
+    return { data: templateService.formatTemplateResponse(updated) };
+  });
+
+  app.delete<{ Params: { id: string } }>("/templates/:id", async (request) => {
+    const deleted = await templateService.deleteTemplate(request.account.id, request.params.id);
+    return { data: templateService.formatTemplateResponse(deleted) };
   });
 
   // --- API Docs metadata ---

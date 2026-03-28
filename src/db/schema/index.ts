@@ -13,3 +13,5 @@ export { idempotencyKeys } from "./idempotency-keys.js";
 export { inboundEmails } from "./inbound-emails.js";
 export { broadcasts } from "./broadcasts.js";
 export { warmupSchedules, warmupEmails } from "./warmup.js";
+export { templates } from "./templates.js";
+export { apiLogs } from "./api-logs.js";

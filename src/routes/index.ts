@@ -8,6 +8,7 @@ import webhookRoutes from "./webhooks.js";
 import audienceRoutes from "./audiences.js";
 import broadcastRoutes from "./broadcasts.js";
 import warmupRoutes from "./warmup.js";
+import templateRoutes from "./templates.js";
 import trackingRoutes from "./tracking.js";
 import authRoutes from "./auth.js";
 import adminRoutes from "./admin.js";
@@ -53,6 +54,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(audienceRoutes, { prefix: "/v1/audiences" });
   await app.register(broadcastRoutes, { prefix: "/v1/broadcasts" });
   await app.register(warmupRoutes, { prefix: "/v1/warmup" });
+  await app.register(templateRoutes, { prefix: "/v1/templates" });
 
   // Suppression routes
   await app.register(async (suppApp) => {
