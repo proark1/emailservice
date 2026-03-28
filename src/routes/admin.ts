@@ -5,7 +5,7 @@ import * as adminAnalytics from "../services/admin-analytics.service.js";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, accounts, apiKeys, webhooks, webhookDeliveries, apiLogs } from "../db/schema/index.js";
 import { count, sql, desc, eq, and, ilike } from "drizzle-orm";
-import { ForbiddenError, NotFoundError } from "../lib/errors.js";
+import { AppError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { getWebhookDeliverQueue } from "../queues/index.js";
 import { RETRY_DELAYS } from "../workers/webhook-deliver.worker.js";
 
@@ -212,17 +212,21 @@ export default async function adminRoutes(app: FastifyInstance) {
 
     const requestBody = delivery.requestBody as { type?: string; data?: Record<string, unknown> } | null;
 
-    await getWebhookDeliverQueue().add("deliver", {
-      webhookId: delivery.webhookId,
-      emailEventId: delivery.emailEventId,
-      eventType: requestBody?.type ?? "email.sent",
-      payload: (requestBody?.data ?? {}) as Record<string, unknown>,
-      signingSecret: webhook.signingSecret,
-      url: delivery.url,
-    }, {
-      attempts: RETRY_DELAYS.length + 1,
-      backoff: { type: "exponential", delay: 30_000 },
-    });
+    try {
+      await getWebhookDeliverQueue().add("deliver", {
+        webhookId: delivery.webhookId,
+        emailEventId: delivery.emailEventId,
+        eventType: requestBody?.type ?? "email.sent",
+        payload: (requestBody?.data ?? {}) as Record<string, unknown>,
+        signingSecret: webhook.signingSecret,
+        url: delivery.url,
+      }, {
+        attempts: RETRY_DELAYS.length + 1,
+        backoff: { type: "exponential", delay: 30_000 },
+      });
+    } catch {
+      throw new AppError(503, "service_unavailable", "Queue service is temporarily unavailable");
+    }
 
     return { data: { success: true, delivery_id: delivery.id } };
   });

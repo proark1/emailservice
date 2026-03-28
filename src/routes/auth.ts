@@ -102,7 +102,12 @@ export default async function authRoutes(app: FastifyInstance) {
   app.patch("/profile", async (request) => {
     const token = request.cookies.token;
     if (!token) throw new (await import("../lib/errors.js")).UnauthorizedError();
-    const decoded = app.jwt.verify<{ id: string }>(token);
+    let decoded: { id: string };
+    try {
+      decoded = app.jwt.verify<{ id: string }>(token);
+    } catch {
+      throw new (await import("../lib/errors.js")).UnauthorizedError("Invalid or expired token");
+    }
     const { name } = z.object({ name: z.string().min(1).max(255) }).parse(request.body);
     const db = getDb();
     const { accounts } = await import("../db/schema/index.js");
@@ -115,7 +120,12 @@ export default async function authRoutes(app: FastifyInstance) {
   app.post("/change-password", async (request) => {
     const token = request.cookies.token;
     if (!token) throw new (await import("../lib/errors.js")).UnauthorizedError();
-    const decoded = app.jwt.verify<{ id: string }>(token);
+    let decoded: { id: string };
+    try {
+      decoded = app.jwt.verify<{ id: string }>(token);
+    } catch {
+      throw new (await import("../lib/errors.js")).UnauthorizedError("Invalid or expired token");
+    }
     const { current_password, new_password } = z.object({
       current_password: z.string().min(1),
       new_password: z.string().min(8).max(255),

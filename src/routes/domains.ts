@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { createDomainSchema } from "../schemas/domain.schema.js";
 import * as domainService from "../services/domain.service.js";
 import { getDnsVerifyQueue } from "../queues/index.js";
+import { AppError } from "../lib/errors.js";
 
 export default async function domainRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
@@ -14,7 +15,7 @@ export default async function domainRoutes(app: FastifyInstance) {
     const domain = await domainService.createDomain(request.account.id, input);
 
     // Queue initial DNS verification with 60s delay
-    await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() }, { delay: 60_000 });
+    try { await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() }, { delay: 60_000 }); } catch {}
 
     return reply.status(201).send({
       data: domainService.formatDomainResponse(domain),
@@ -42,7 +43,11 @@ export default async function domainRoutes(app: FastifyInstance) {
   // POST /v1/domains/:id/verify
   app.post<{ Params: { id: string } }>("/:id/verify", async (request) => {
     const domain = await domainService.getDomain(request.account.id, request.params.id);
-    await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() });
+    try {
+      await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() });
+    } catch {
+      throw new AppError(503, "service_unavailable", "Verification service is temporarily unavailable");
+    }
     return { data: { message: "Verification initiated" } };
   });
 }
