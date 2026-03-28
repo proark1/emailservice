@@ -36,20 +36,22 @@ const getInitials = (name: string | null, email: string): string => {
   return source.charAt(0).toUpperCase();
 };
 
-const avatarGradients = [
-  "from-violet-100 to-indigo-100 text-violet-600",
-  "from-sky-100 to-cyan-100 text-sky-600",
-  "from-emerald-100 to-teal-100 text-emerald-600",
-  "from-amber-100 to-orange-100 text-amber-600",
-  "from-rose-100 to-pink-100 text-rose-600",
-  "from-fuchsia-100 to-purple-100 text-fuchsia-600",
+const avatarColors = [
+  "from-violet-400 to-indigo-400 text-white",
+  "from-cyan-400 to-blue-400 text-white",
+  "from-emerald-400 to-green-400 text-white",
+  "from-amber-400 to-orange-400 text-white",
+  "from-pink-400 to-rose-400 text-white",
+  "from-teal-400 to-cyan-400 text-white",
 ];
 
-const avatarColor = (email: string) => {
-  let h = 0;
-  for (let i = 0; i < email.length; i++) h = (h * 31 + email.charCodeAt(i)) | 0;
-  return avatarGradients[Math.abs(h) % avatarGradients.length];
+const colorIndex = (email: string) => {
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) hash = ((hash << 5) - hash) + email.charCodeAt(i);
+  return Math.abs(hash) % avatarColors.length;
 };
+
+const avatarColor = (email: string) => avatarColors[colorIndex(email)];
 
 /* ---------- tiny icon components ---------- */
 const StarIcon = ({ filled }: { filled: boolean }) => (
@@ -376,16 +378,17 @@ export default function InboxPage() {
             </div>
           ) : (
             <>
-              {items.map((email) => (
+              {items.map((email, idx) => (
                 <button
                   key={email.id}
                   onClick={() => openEmail(email)}
-                  className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors group ${
+                  style={{ animationDelay: `${idx * 30}ms`, animationFillMode: "backwards" }}
+                  className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors group animate-slide-up ${
                     selected?.id === email.id
-                      ? "bg-violet-50 border-l-2 border-l-violet-500"
+                      ? "bg-violet-50 border-l-[3px] border-l-violet-500 pl-[13px]"
                       : !email.isRead
-                        ? "bg-white"
-                        : "bg-gray-50/30"
+                        ? "bg-white border-l-[3px] border-l-transparent pl-[13px]"
+                        : "bg-gray-50/30 border-l-[3px] border-l-transparent pl-[13px]"
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -464,7 +467,7 @@ export default function InboxPage() {
             <p className="text-[12px] text-gray-400 mt-1">Choose a conversation from the list</p>
           </div>
         ) : (
-          <>
+          <div className="flex flex-col h-full overflow-hidden animate-fade-in">
             {/* ---- email header ---- */}
             <div className="px-6 py-4 border-b border-gray-200 shrink-0">
               {/* mobile back */}
@@ -647,7 +650,7 @@ export default function InboxPage() {
                 </div>
               )}
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>

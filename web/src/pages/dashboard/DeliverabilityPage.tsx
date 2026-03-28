@@ -26,8 +26,19 @@ export default function DeliverabilityPage() {
       {/* Score + Key Rates */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 flex flex-col items-center justify-center">
-          <p className={`text-5xl font-bold ${scoreColor}`}>{data.score}</p>
-          <p className="text-[13px] text-gray-500 mt-1">Reputation Score</p>
+          <svg className="w-32 h-32" viewBox="0 0 120 120">
+            <circle cx="60" cy="60" r="50" fill="none" strokeWidth="8" stroke="#e5e7eb" />
+            <circle cx="60" cy="60" r="50" fill="none" strokeWidth="8"
+              stroke={data.score >= 80 ? "#10b981" : data.score >= 60 ? "#f59e0b" : "#ef4444"}
+              strokeLinecap="round"
+              strokeDasharray={`${(data.score / 100) * 314} 314`}
+              transform="rotate(-90 60 60)"
+              className="transition-all duration-1000"
+            />
+            <text x="60" y="55" textAnchor="middle" className="text-3xl font-bold fill-gray-900">{data.score}</text>
+            <text x="60" y="72" textAnchor="middle" className="text-[11px] fill-gray-500">out of 100</text>
+          </svg>
+          <p className="text-[13px] text-gray-500 mt-2">Reputation Score</p>
           <span className={`mt-2 px-3 py-1 rounded-full text-[12px] font-medium ${data.score >= 80 ? "bg-emerald-50 text-emerald-700" : data.score >= 60 ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{scoreLabel}</span>
         </div>
         <div className="col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -39,7 +50,7 @@ export default function DeliverabilityPage() {
             { label: "Click Rate", value: pct(data.rates.click), good: data.rates.click > 0.02 },
             { label: "Suppressions", value: data.totals.suppressions.toLocaleString(), good: true },
           ].map((m) => (
-            <div key={m.label} className="rounded-xl border border-gray-200 bg-white shadow-sm p-4">
+            <div key={m.label} className="rounded-xl border border-gray-200 bg-white shadow-sm p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
               <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">{m.label}</p>
               <p className={`text-xl font-bold ${m.good ? "text-gray-900" : "text-amber-600"}`}>{m.value}</p>
             </div>
@@ -58,7 +69,7 @@ export default function DeliverabilityPage() {
           { label: "Opens", value: data.totals.opens },
           { label: "Clicks", value: data.totals.clicks },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-gray-200 bg-white shadow-sm p-3 text-center">
+          <div key={s.label} className="rounded-xl border border-gray-200 bg-white shadow-sm p-3 text-center hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
             <p className="text-[11px] text-gray-500 uppercase mb-1">{s.label}</p>
             <p className="text-lg font-bold text-gray-900">{s.value.toLocaleString()}</p>
           </div>
