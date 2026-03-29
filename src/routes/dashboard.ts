@@ -699,7 +699,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const contacts = await audienceService.listContacts(request.account.id, request.params.id);
 
     const csvEscape = (v: string) => {
-      if (v.includes(",") || v.includes('"') || v.includes("\n")) {
+      if (v.includes(",") || v.includes('"') || v.includes("\n") || v.includes("\r")) {
         return `"${v.replace(/"/g, '""')}"`;
       }
       return v;
@@ -727,8 +727,28 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     let imported = 0;
     let skipped = 0;
 
+    const parseCsvLine = (line: string): string[] => {
+      const fields: string[] = [];
+      let current = "";
+      let inQuotes = false;
+      for (let j = 0; j < line.length; j++) {
+        const ch = line[j];
+        if (inQuotes) {
+          if (ch === '"' && line[j + 1] === '"') { current += '"'; j++; }
+          else if (ch === '"') { inQuotes = false; }
+          else { current += ch; }
+        } else {
+          if (ch === '"') { inQuotes = true; }
+          else if (ch === ",") { fields.push(current.trim()); current = ""; }
+          else { current += ch; }
+        }
+      }
+      fields.push(current.trim());
+      return fields;
+    };
+
     for (let i = startIdx; i < lines.length; i++) {
-      const parts = lines[i].split(",").map(p => p.trim().replace(/^"|"$/g, ""));
+      const parts = parseCsvLine(lines[i]);
       const email = parts[0];
       if (!email || !email.includes("@")) { skipped++; continue; }
 
