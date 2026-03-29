@@ -7,3 +7,4 @@ certs/
 *.log
 .DS_Store
 coverage/
+package-lock.json
