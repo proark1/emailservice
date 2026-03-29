@@ -75,7 +75,10 @@ function SearchBar() {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, []);
 
   const hasResults = results && (results.emails?.length || results.inbox?.length || results.domains?.length || results.contacts?.length || results.templates?.length);

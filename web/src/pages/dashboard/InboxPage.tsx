@@ -244,7 +244,8 @@ export default function InboxPage() {
     fetchEmails(1, "", "all", false, "");
     fetchDomains();
     fetchFolders();
-  }, [fetchEmails, fetchDomains, fetchFolders]);
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const switchFolder = (slug: string) => {
     setActiveFolder(slug);
@@ -560,7 +561,7 @@ export default function InboxPage() {
               )}
             </div>
             <button
-              onClick={() => fetchEmails(page, search, filter)}
+              onClick={() => fetchEmails(page, search, filter, false, domainFilter)}
               className="p-1.5 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
               title="Refresh"
             >
@@ -585,7 +586,7 @@ export default function InboxPage() {
             />
             {search && (
               <button
-                onClick={() => { setSearch(""); setPage(1); fetchEmails(1, "", filter); }}
+                onClick={() => { setSearch(""); setPage(1); fetchEmails(1, "", filter, false, domainFilter); }}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-gray-400 hover:text-gray-600"
               >
                 <CloseIcon />

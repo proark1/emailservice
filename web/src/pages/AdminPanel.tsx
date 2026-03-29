@@ -325,6 +325,7 @@ function AdminApiLogs() {
   const [error, setError] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
   useEffect(() => {
+    setLoading(true);
     const params = new URLSearchParams({ limit: "100" });
     if (methodFilter) params.set("method", methodFilter);
     api(`/admin/analytics/api-logs?${params}`).then((r) => setLogs(r.data)).catch((e: any) => setError(e.message || "Failed to load")).finally(() => setLoading(false));

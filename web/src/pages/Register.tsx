@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 
 function getPasswordStrength(password: string): { label: string; color: string; width: string } {
@@ -19,6 +19,8 @@ function getPasswordStrength(password: string): { label: string; color: string; 
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get("invite");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,7 +43,7 @@ export default function Register() {
     setLoading(true);
     try {
       await register(name, email, password);
-      navigate("/dashboard");
+      navigate(inviteToken ? `/accept-invite/${inviteToken}` : "/dashboard");
     } catch (err: any) {
       setError(err.message || "Registration failed");
     } finally {
