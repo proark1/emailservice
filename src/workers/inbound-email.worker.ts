@@ -1,9 +1,9 @@
 import { Worker, Job } from "bullmq";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getRedisConnection } from "../queues/index.js";
 import { dispatchEvent } from "../services/webhook.service.js";
 import { getDb } from "../db/index.js";
-import { inboundEmails, domains } from "../db/schema/index.js";
+import { inboundEmails, domains, emails, warmupEmails, warmupSchedules } from "../db/schema/index.js";
 
 export interface InboundEmailJobData {
   accountId: string;
@@ -87,6 +87,38 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
     await autoLearnContact(data.accountId, data.from, data.fromName);
   } catch {}
 
+
+  // Detect replies to warmup emails (best-effort — don't fail the job)
+  if (data.inReplyTo) {
+    try {
+      const db = getDb();
+      const now = new Date();
+
+      // Find the outbound warmup email this is replying to (single query)
+      const [sentEmail] = await db
+        .select({ id: emails.id, tags: emails.tags })
+        .from(emails)
+        .where(eq(emails.messageId, data.inReplyTo))
+        .limit(1);
+
+      if (sentEmail?.tags?.["_warmup"] === "true") {
+        const [warmupEmail] = await db
+          .update(warmupEmails)
+          .set({ replied: true, repliedAt: now })
+          .where(eq(warmupEmails.emailId, sentEmail.id))
+          .returning({ scheduleId: warmupEmails.scheduleId });
+
+        if (warmupEmail) {
+          await db
+            .update(warmupSchedules)
+            .set({ totalReplies: sql`${warmupSchedules.totalReplies} + 1`, updatedAt: now })
+            .where(eq(warmupSchedules.id, warmupEmail.scheduleId));
+        }
+      }
+    } catch (err) {
+      console.error(`[inbound-email] Failed to record warmup reply for ${stored.id}:`, err);
+    }
+  }
 
   // Fire webhook (best-effort — don't fail the job if dispatch errors)
   try {

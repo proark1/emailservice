@@ -1,0 +1,1 @@
+CREATE INDEX "idx_warmup_emails_email_id" ON "warmup_emails" USING btree ("email_id");

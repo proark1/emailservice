@@ -69,4 +69,5 @@ export const warmupEmails = pgTable("warmup_emails", {
 }, (table) => [
   index("idx_warmup_emails_schedule").on(table.scheduleId),
   index("idx_warmup_emails_account_day").on(table.accountId, table.day),
+  index("idx_warmup_emails_email_id").on(table.emailId),
 ]);

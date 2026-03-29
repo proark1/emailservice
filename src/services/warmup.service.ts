@@ -77,6 +77,11 @@ function getWarmupRecipients(domainName: string): string[] {
     `warmup-3@${domainName}`,
     `warmup-4@${domainName}`,
     `warmup-5@${domainName}`,
+    `warmup-6@${domainName}`,
+    `warmup-7@${domainName}`,
+    `warmup-8@${domainName}`,
+    `warmup-9@${domainName}`,
+    `warmup-10@${domainName}`,
   ];
 }
 
@@ -170,8 +175,10 @@ export async function resumeWarmup(accountId: string, scheduleId: string) {
   if (!schedule) throw new NotFoundError("Warmup schedule");
   if (schedule.status !== "paused") throw new ValidationError("Warmup is not paused");
 
+  // Reset lastRunAt so the next hourly worker check runs a round immediately
+  // rather than waiting for the original pause time to become 20h old.
   const [updated] = await db.update(warmupSchedules)
-    .set({ status: "active", updatedAt: new Date() })
+    .set({ status: "active", lastRunAt: null, updatedAt: new Date() })
     .where(eq(warmupSchedules.id, scheduleId))
     .returning();
 
@@ -279,14 +286,22 @@ export async function executeWarmupRound(scheduleId: string) {
   const target = schedule.rampSchedule[schedule.currentDay - 1] || 2;
   const recipients = getWarmupRecipients(domain.name);
   let sentCount = 0;
-  let openCount = 0;
-  let replyCount = 0;
 
-  // Spread sends across the day with small random delays
+  // Spread sends across the day: up to 8 hours, min 20 min per email.
+  // Each email is scheduled at an offset so ISPs see natural timing, not a burst.
+  const spreadMs = Math.min(target * 20 * 60_000, 8 * 3_600_000);
+  const intervalMs = target > 1 ? spreadMs / (target - 1) : 0;
+
   for (let i = 0; i < target; i++) {
-    const toAddress = recipients[i % recipients.length];
+    // Randomise which recipient gets this email
+    const toAddress = recipients[Math.floor(Math.random() * recipients.length)];
     const subject = randomItem(WARMUP_SUBJECTS);
     const body = randomItem(WARMUP_BODIES);
+
+    // Schedule each email staggered from now
+    const scheduledAt = intervalMs > 0
+      ? new Date(Date.now() + i * intervalMs)
+      : undefined;
 
     try {
       // Send real email through the normal pipeline — goes out via SMTP,
@@ -299,6 +314,7 @@ export async function executeWarmupRound(scheduleId: string) {
         text: body,
         html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.6;color:#333;"><p>${body}</p></div>`,
         tags: { _warmup: "true", _warmup_schedule: schedule.id, _warmup_day: String(schedule.currentDay) },
+        ...(scheduledAt ? { scheduled_at: scheduledAt.toISOString() } : {}),
       });
 
       const emailId = !result.cached ? (result.response as any)?.id : undefined;
@@ -345,9 +361,7 @@ export async function executeWarmupRound(scheduleId: string) {
     currentDay: nextDay,
     sentToday: sentCount,
     targetToday: nextTarget,
-    totalSent: schedule.totalSent + sentCount,
-    totalOpens: schedule.totalOpens,
-    totalReplies: schedule.totalReplies,
+    totalSent: sql`${warmupSchedules.totalSent} + ${sentCount}`,
     lastRunAt: new Date(),
     status: isComplete ? "completed" : "active",
     completedAt: isComplete ? new Date() : null,
@@ -366,7 +380,7 @@ export function formatWarmupResponse(schedule: typeof warmupSchedules.$inferSele
     id: schedule.id,
     domain_id: schedule.domainId,
     status: schedule.status,
-    current_day: schedule.currentDay,
+    current_day: Math.min(schedule.currentDay, schedule.totalDays),
     total_days: schedule.totalDays,
     sent_today: schedule.sentToday,
     target_today: schedule.targetToday,

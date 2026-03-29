@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db/index.js";
-import { emails, emailEvents } from "../db/schema/index.js";
+import { emails, emailEvents, warmupEmails, warmupSchedules } from "../db/schema/index.js";
 import { isRedisConfigured } from "../queues/index.js";
 import { getConfig } from "../config/index.js";
 
@@ -46,6 +46,26 @@ export async function recordOpen(emailId: string) {
         email_id: emailId,
         timestamp: new Date().toISOString(),
       });
+    } catch {}
+  }
+
+  // Update warmup open tracking if this is a warmup email
+  if (email.tags?.["_warmup"] === "true") {
+    try {
+      const db = getDb();
+      const now = new Date();
+      const [warmupEmail] = await db
+        .update(warmupEmails)
+        .set({ opened: true, openedAt: now })
+        .where(eq(warmupEmails.emailId, emailId))
+        .returning({ scheduleId: warmupEmails.scheduleId });
+
+      if (warmupEmail) {
+        await db
+          .update(warmupSchedules)
+          .set({ totalOpens: sql`${warmupSchedules.totalOpens} + 1`, updatedAt: now })
+          .where(eq(warmupSchedules.id, warmupEmail.scheduleId));
+      }
     } catch {}
   }
 }
