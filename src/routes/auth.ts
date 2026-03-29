@@ -1,8 +1,15 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import { getDb } from "../db/index.js";
+import { domains } from "../db/schema/index.js";
 import * as authService from "../services/auth.service.js";
+
+async function getOwnsDomains(accountId: string): Promise<boolean> {
+  const db = getDb();
+  const [result] = await db.select({ count: count() }).from(domains).where(eq(domains.accountId, accountId));
+  return Number(result.count) > 0;
+}
 
 export default async function authRoutes(app: FastifyInstance) {
   // Rate limit auth endpoints more aggressively
@@ -36,6 +43,7 @@ export default async function authRoutes(app: FastifyInstance) {
           name: account.name,
           email: account.email,
           role: account.role,
+          owns_domains: false,
         },
       });
   });
@@ -64,6 +72,7 @@ export default async function authRoutes(app: FastifyInstance) {
           name: account.name,
           email: account.email,
           role: account.role,
+          owns_domains: await getOwnsDomains(account.id),
         },
       });
   });
@@ -91,6 +100,7 @@ export default async function authRoutes(app: FastifyInstance) {
           name: account.name,
           email: account.email,
           role: account.role,
+          owns_domains: await getOwnsDomains(account.id),
         },
       });
     } catch {
@@ -108,7 +118,7 @@ export default async function authRoutes(app: FastifyInstance) {
     const { accounts } = await import("../db/schema/index.js");
     const [updated] = await db.update(accounts).set({ name, updatedAt: new Date() }).where(eq(accounts.id, decoded.id)).returning();
     if (!updated) throw new (await import("../lib/errors.js")).NotFoundError("Account");
-    return { data: { id: updated.id, name: updated.name, email: updated.email, role: updated.role } };
+    return { data: { id: updated.id, name: updated.name, email: updated.email, role: updated.role, owns_domains: await getOwnsDomains(updated.id) } };
   });
 
   // POST /auth/change-password
