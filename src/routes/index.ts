@@ -19,6 +19,7 @@ import draftRoutes from "./drafts.js";
 import threadRoutes from "./threads.js";
 import signatureRoutes from "./signatures.js";
 import addressBookRoutes from "./address-book.js";
+import teamRoutes from "./team.js";
 import { addSuppression, listSuppressions, removeSuppression, formatSuppressionResponse } from "../services/suppression.service.js";
 import { getAccountAnalytics } from "../services/analytics.service.js";
 
@@ -67,6 +68,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(threadRoutes, { prefix: "/v1/threads" });
   await app.register(signatureRoutes, { prefix: "/v1/signatures" });
   await app.register(addressBookRoutes, { prefix: "/v1/address-book" });
+  await app.register(teamRoutes, { prefix: "/v1/domains" });
 
   // Suppression routes
   await app.register(async (suppApp) => {

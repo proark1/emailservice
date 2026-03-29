@@ -49,14 +49,27 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
     throw new ValidationError("Invalid 'from' address — must contain a valid email (e.g., user@example.com)");
   }
 
-  // Validate sender domain belongs to account and is verified
+  // Validate sender domain — check team membership (not just ownership)
   const [domain] = await db
     .select()
     .from(domains)
-    .where(and(eq(domains.accountId, accountId), eq(domains.name, fromDomain)));
+    .where(eq(domains.name, fromDomain));
 
   if (!domain) {
-    throw new ValidationError(`Domain ${fromDomain} is not registered to your account`);
+    throw new ValidationError(`Domain ${fromDomain} is not registered`);
+  }
+
+  // Verify team access to this domain
+  const { hasDomainAccess, getMemberMailboxes } = await import("./team.service.js");
+  const hasAccess = await hasDomainAccess(accountId, domain.id);
+  if (!hasAccess) {
+    throw new ValidationError(`You do not have access to domain ${fromDomain}`);
+  }
+
+  // Check mailbox restriction for members
+  const allowedMailboxes = await getMemberMailboxes(accountId, domain.id);
+  if (allowedMailboxes && !allowedMailboxes.includes(from.address)) {
+    throw new ValidationError(`You are not authorized to send from ${from.address}. Allowed: ${allowedMailboxes.join(", ")}`);
   }
 
   if (domain.status !== "verified") {

@@ -16,6 +16,7 @@ import UsagePage from "./dashboard/UsagePage";
 import DeliverabilityPage from "./dashboard/DeliverabilityPage";
 import DraftsPage from "./dashboard/DraftsPage";
 import ContactsPage from "./dashboard/ContactsPage";
+import TeamPage from "./dashboard/TeamPage";
 
 const navSections = [
   { label: "", items: [
@@ -447,6 +448,7 @@ function Overview() {
 
 // --- DOMAINS with add/delete/verify + auto-setup ---
 function DomainsPage() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -765,6 +767,7 @@ function DomainsPage() {
                 <div className="flex gap-1">
                   <button onClick={() => openSetup(d)} className="px-2 py-1 text-[12px] text-violet-600 hover:bg-violet-50 rounded-lg">Setup</button>
                   <button onClick={() => verify(d.id)} className="px-2 py-1 text-[12px] text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg">Verify</button>
+                  <button onClick={() => navigate(`/dashboard/domains/${d.id}/team`)} className="px-2 py-1 text-[12px] text-blue-600 hover:bg-blue-50 rounded-lg">Team</button>
                   <button onClick={() => remove(d.id)} className="px-2 py-1 text-[12px] text-red-600 hover:bg-red-50 rounded-lg">Delete</button>
                 </div>
               </td>
@@ -1068,6 +1071,7 @@ export default function Dashboard() {
           <Route path="warmup" element={<WarmupPage />} />
           <Route path="deliverability" element={<DeliverabilityPage />} />
           <Route path="domains" element={<DomainsPage />} />
+          <Route path="domains/:domainId/team" element={<TeamPage />} />
           <Route path="api-keys" element={<ApiKeysPage />} />
           <Route path="webhooks" element={<WebhooksPage />} />
           <Route path="suppressions" element={<SuppressionsPage />} />

@@ -1243,6 +1243,106 @@ server.tool(
   },
 );
 
+// ---- Team Management --------------------------------------------------------
+
+server.tool(
+  "list_domain_members",
+  "List all members of a domain.",
+  {
+    domain_id: z.string().describe("Domain ID"),
+  },
+  async (params) => {
+    const res = await api("GET", `/v1/domains/${params.domain_id}/members`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "add_domain_member",
+  "Add a member to a domain or send an invitation if they don't have an account.",
+  {
+    domain_id: z.string().describe("Domain ID"),
+    email: z.string().describe("Member's email address"),
+    role: z.enum(["admin", "member"]).describe("Role: admin (can manage members) or member (send/receive only)"),
+    mailboxes: z.array(z.string()).optional().describe("Specific mailbox addresses this member can use (null = all)"),
+  },
+  async (params) => {
+    const { domain_id, ...body } = params;
+    const res = await api("POST", `/v1/domains/${domain_id}/members`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "update_domain_member",
+  "Update a domain member's role or mailbox permissions.",
+  {
+    domain_id: z.string().describe("Domain ID"),
+    member_id: z.string().describe("Member ID"),
+    role: z.enum(["admin", "member"]).optional().describe("New role"),
+    mailboxes: z.array(z.string()).optional().describe("Updated mailbox restrictions"),
+  },
+  async (params) => {
+    const { domain_id, member_id, ...body } = params;
+    const res = await api("PATCH", `/v1/domains/${domain_id}/members/${member_id}`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "remove_domain_member",
+  "Remove a member from a domain.",
+  {
+    domain_id: z.string().describe("Domain ID"),
+    member_id: z.string().describe("Member ID"),
+  },
+  async (params) => {
+    const res = await api("DELETE", `/v1/domains/${params.domain_id}/members/${params.member_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "list_domain_invitations",
+  "List pending invitations for a domain.",
+  {
+    domain_id: z.string().describe("Domain ID"),
+  },
+  async (params) => {
+    const res = await api("GET", `/v1/domains/${params.domain_id}/invitations`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "create_domain_invitation",
+  "Create an invitation for someone to join a domain.",
+  {
+    domain_id: z.string().describe("Domain ID"),
+    email: z.string().describe("Invitee's email address"),
+    role: z.enum(["admin", "member"]).describe("Role to assign"),
+    mailboxes: z.array(z.string()).optional().describe("Specific mailbox addresses"),
+  },
+  async (params) => {
+    const { domain_id, ...body } = params;
+    const res = await api("POST", `/v1/domains/${domain_id}/invitations`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "revoke_domain_invitation",
+  "Revoke a pending domain invitation.",
+  {
+    domain_id: z.string().describe("Domain ID"),
+    invitation_id: z.string().describe("Invitation ID"),
+  },
+  async (params) => {
+    const res = await api("DELETE", `/v1/domains/${params.domain_id}/invitations/${params.invitation_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------

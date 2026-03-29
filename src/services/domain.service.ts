@@ -1,6 +1,6 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
-import { domains, emails, inboundEmails } from "../db/schema/index.js";
+import { domains, emails, inboundEmails, domainMembers } from "../db/schema/index.js";
 import { generateDkimForDomain } from "./dkim.service.js";
 import { generateDnsRecords } from "./dns.service.js";
 import { getConfig, getMailHost } from "../config/index.js";
@@ -41,33 +41,50 @@ export async function createDomain(accountId: string, input: CreateDomainInput) 
     })
     .returning();
 
+  // Auto-create owner membership
+  await db.insert(domainMembers).values({
+    domainId: domain.id,
+    accountId,
+    role: "owner",
+  }).onConflictDoNothing();
+
   return domain;
 }
 
 export async function getDomain(accountId: string, domainId: string) {
   const db = getDb();
+  // Verify team access
+  const { hasDomainAccess } = await import("./team.service.js");
+  const hasAccess = await hasDomainAccess(accountId, domainId);
+
   const [domain] = await db
     .select()
     .from(domains)
-    .where(and(eq(domains.id, domainId), eq(domains.accountId, accountId)));
+    .where(eq(domains.id, domainId));
 
-  if (!domain) throw new NotFoundError("Domain");
+  if (!domain || !hasAccess) throw new NotFoundError("Domain");
   return domain;
 }
 
 export async function listDomains(accountId: string) {
   const db = getDb();
-  return db.select().from(domains).where(eq(domains.accountId, accountId));
+  const { getAccessibleDomainIds } = await import("./team.service.js");
+  const accessibleIds = await getAccessibleDomainIds(accountId);
+  if (accessibleIds.length === 0) return [];
+  return db.select().from(domains).where(inArray(domains.id, accessibleIds));
 }
 
 export async function deleteDomain(accountId: string, domainId: string) {
   const db = getDb();
 
-  // Verify domain exists and belongs to account
+  // Only domain owner can delete
+  const { requireDomainRole } = await import("./team.service.js");
+  await requireDomainRole(accountId, domainId, "owner");
+
   const [domain] = await db
     .select()
     .from(domains)
-    .where(and(eq(domains.id, domainId), eq(domains.accountId, accountId)));
+    .where(eq(domains.id, domainId));
 
   if (!domain) throw new NotFoundError("Domain");
 
@@ -82,7 +99,7 @@ export async function deleteDomain(accountId: string, domainId: string) {
   // Now delete
   const [deleted] = await db
     .delete(domains)
-    .where(and(eq(domains.id, domainId), eq(domains.accountId, accountId)))
+    .where(eq(domains.id, domainId))
     .returning();
 
   if (!deleted) throw new NotFoundError("Domain");

@@ -19,3 +19,5 @@ export { folders } from "./folders.js";
 export { emailSignatures } from "./email-signatures.js";
 export { addressBookContacts } from "./address-book-contacts.js";
 export { inboundAttachments } from "./inbound-attachments.js";
+export { domainMembers } from "./domain-members.js";
+export { domainInvitations } from "./domain-invitations.js";

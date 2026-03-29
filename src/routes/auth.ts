@@ -134,4 +134,15 @@ export default async function authRoutes(app: FastifyInstance) {
     await db.update(accounts).set({ passwordHash: newHash, updatedAt: new Date() }).where(eq(accounts.id, decoded.id));
     return { data: { success: true } };
   });
+
+  // Accept team invitation
+  app.post("/accept-invitation", async (request) => {
+    const { token } = z.object({ token: z.string().min(1) }).parse(request.body);
+    const jwt = request.cookies.token;
+    if (!jwt) throw new (await import("../lib/errors.js")).ForbiddenError("Login required to accept invitation");
+    const decoded = app.jwt.verify<{ id: string }>(jwt);
+    const { acceptInvitation } = await import("../services/team.service.js");
+    const invitation = await acceptInvitation(decoded.id, token);
+    return { data: { success: true, domain_id: invitation.domainId } };
+  });
 }

@@ -7,7 +7,14 @@ import type { ListInboxInput, UpdateInboxEmailInput, BulkActionInput } from "../
 
 export async function listInboxEmails(accountId: string, input: ListInboxInput) {
   const db = getDb();
-  const conditions: any[] = [eq(inboundEmails.accountId, accountId)];
+
+  // Build access condition: own emails OR emails on domains user is a member of
+  const { getAccessibleDomainIds } = await import("./team.service.js");
+  const accessibleIds = await getAccessibleDomainIds(accountId);
+  const accessCondition = accessibleIds.length > 0
+    ? or(eq(inboundEmails.accountId, accountId), inArray(inboundEmails.domainId, accessibleIds))!
+    : eq(inboundEmails.accountId, accountId);
+  const conditions: any[] = [accessCondition];
 
   // Folder filtering
   if (input.folder_slug === "trash") {

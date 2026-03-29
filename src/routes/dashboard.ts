@@ -1336,4 +1336,64 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const deleted = await addressBookService.deleteContact(request.account.id, request.params.id);
     return { data: addressBookService.formatAddressBookContactResponse(deleted) };
   });
+
+  // --- Team Management ---
+  app.get<{ Params: { id: string } }>("/domains/:id/members", async (request) => {
+    const teamService = await import("../services/team.service.js");
+    const members = await teamService.listDomainMembers(request.account.id, request.params.id);
+    return { data: members.map(teamService.formatMemberResponse) };
+  });
+
+  app.post<{ Params: { id: string } }>("/domains/:id/members", async (request, reply) => {
+    const teamService = await import("../services/team.service.js");
+    const { addMemberSchema } = await import("../schemas/team.schema.js");
+    const input = addMemberSchema.parse(request.body);
+    const result = await teamService.addDomainMember(request.account.id, request.params.id, input);
+    if (result.type === "added") {
+      return reply.status(201).send({ data: { type: "added", member_id: result.member.id } });
+    }
+    return reply.status(201).send({
+      data: { type: "invited", invitation: teamService.formatInvitationResponse(result.invitation) },
+    });
+  });
+
+  app.patch<{ Params: { id: string; memberId: string } }>("/domains/:id/members/:memberId", async (request) => {
+    const teamService = await import("../services/team.service.js");
+    const { updateMemberSchema } = await import("../schemas/team.schema.js");
+    const input = updateMemberSchema.parse(request.body);
+    const updated = await teamService.updateDomainMember(request.account.id, request.params.id, request.params.memberId, input);
+    return { data: updated };
+  });
+
+  app.delete<{ Params: { id: string; memberId: string } }>("/domains/:id/members/:memberId", async (request) => {
+    const teamService = await import("../services/team.service.js");
+    await teamService.removeDomainMember(request.account.id, request.params.id, request.params.memberId);
+    return { data: { success: true } };
+  });
+
+  app.get<{ Params: { id: string } }>("/domains/:id/invitations", async (request) => {
+    const teamService = await import("../services/team.service.js");
+    const invitations = await teamService.listInvitations(request.account.id, request.params.id);
+    return { data: invitations.map(teamService.formatInvitationResponse) };
+  });
+
+  app.post<{ Params: { id: string } }>("/domains/:id/invitations", async (request, reply) => {
+    const teamService = await import("../services/team.service.js");
+    const { createInvitationSchema } = await import("../schemas/team.schema.js");
+    const input = createInvitationSchema.parse(request.body);
+    const invitation = await teamService.createInvitation(request.account.id, request.params.id, input);
+    return reply.status(201).send({ data: teamService.formatInvitationResponse(invitation) });
+  });
+
+  app.delete<{ Params: { id: string; invitationId: string } }>("/domains/:id/invitations/:invitationId", async (request) => {
+    const teamService = await import("../services/team.service.js");
+    await teamService.revokeInvitation(request.account.id, request.params.id, request.params.invitationId);
+    return { data: { success: true } };
+  });
+
+  app.get("/my-memberships", async (request) => {
+    const teamService = await import("../services/team.service.js");
+    const memberships = await teamService.getMyMemberships(request.account.id);
+    return { data: memberships };
+  });
 }
