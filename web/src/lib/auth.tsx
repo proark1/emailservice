@@ -6,6 +6,7 @@ interface User {
   name: string;
   email: string;
   role: "user" | "admin";
+  owns_domains: boolean;
 }
 
 interface AuthContextType {
