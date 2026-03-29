@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { webhooks, webhookDeliveries, emailEvents } from "../db/schema/index.js";
 import { getWebhookDeliverQueue } from "../queues/index.js";
@@ -81,15 +81,15 @@ export async function dispatchEvent(
 ) {
   const db = getDb();
 
-  // Find all active webhooks for this account that subscribe to this event type
-  const accountWebhooks = await db
+  // Find active webhooks that subscribe to this specific event type (filtered at DB level)
+  const matching = await db
     .select()
     .from(webhooks)
-    .where(and(eq(webhooks.accountId, accountId), eq(webhooks.active, true)));
-
-  const matching = accountWebhooks.filter((wh) =>
-    (wh.events as string[]).includes(eventType),
-  );
+    .where(and(
+      eq(webhooks.accountId, accountId),
+      eq(webhooks.active, true),
+      sql`${webhooks.events}::jsonb @> ${JSON.stringify([eventType])}::jsonb`,
+    ));
 
   // Enqueue a delivery job for each matching webhook
   for (const webhook of matching) {

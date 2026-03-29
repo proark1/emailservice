@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { createAudienceSchema } from "../schemas/audience.schema.js";
 import { createContactSchema, updateContactSchema } from "../schemas/contact.schema.js";
 import * as audienceService from "../services/audience.service.js";
+import { paginationSchema } from "../lib/pagination.js";
 
 export default async function audienceRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
@@ -40,8 +41,9 @@ export default async function audienceRoutes(app: FastifyInstance) {
   });
 
   app.get<{ Params: { id: string } }>("/:id/contacts", async (request) => {
-    const list = await audienceService.listContacts(request.account.id, request.params.id);
-    return { data: list.map(audienceService.formatContactResponse) };
+    const pagination = paginationSchema.parse(request.query);
+    const result = await audienceService.listContacts(request.account.id, request.params.id, pagination);
+    return { data: result.data.map(audienceService.formatContactResponse), pagination: result.pagination };
   });
 
   app.get<{ Params: { id: string; contactId: string } }>("/:id/contacts/:contactId", async (request) => {

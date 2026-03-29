@@ -62,18 +62,20 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
     headers: (data.headers as Record<string, string>) || null,
   }).returning();
 
-  // Store attachments
+  // Store attachments in parallel
   if (data.attachments && data.attachments.length > 0) {
     try {
       const { storeInboundAttachment } = await import("../services/attachment.service.js");
-      for (const att of data.attachments) {
-        await storeInboundAttachment(data.accountId, stored.id, {
-          filename: att.filename,
-          contentType: att.contentType,
-          size: att.size,
-          content: Buffer.from(att.content, "base64"),
-        });
-      }
+      await Promise.all(
+        data.attachments.map((att) =>
+          storeInboundAttachment(data.accountId, stored.id, {
+            filename: att.filename,
+            contentType: att.contentType,
+            size: att.size,
+            content: Buffer.from(att.content, "base64"),
+          }),
+        ),
+      );
     } catch (err) {
       console.error(`[inbound-email] Failed to store attachments for ${stored.id}:`, err);
     }
@@ -102,8 +104,9 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
 }
 
 export function createInboundEmailWorker() {
+  const concurrency = Number(process.env.INBOUND_CONCURRENCY) || 5;
   return new Worker("email.inbound", processInboundEmail, {
     connection: getRedisConnection(),
-    concurrency: 5,
+    concurrency,
   });
 }

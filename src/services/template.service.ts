@@ -1,7 +1,8 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, lt } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { templates } from "../db/schema/index.js";
 import { NotFoundError } from "../lib/errors.js";
+import { buildPaginatedResponse, type PaginationParams } from "../lib/pagination.js";
 import type { CreateTemplateInput, UpdateTemplateInput } from "../schemas/template.schema.js";
 
 function extractVariables(text: string): string[] {
@@ -80,13 +81,18 @@ export async function getTemplate(accountId: string, templateId: string) {
   return template;
 }
 
-export async function listTemplates(accountId: string) {
+export async function listTemplates(accountId: string, pagination: PaginationParams) {
   const db = getDb();
-  return db
+  const conditions = pagination.cursor
+    ? and(eq(templates.accountId, accountId), lt(templates.id, pagination.cursor))
+    : eq(templates.accountId, accountId);
+  const rows = await db
     .select()
     .from(templates)
-    .where(eq(templates.accountId, accountId))
-    .orderBy(desc(templates.updatedAt));
+    .where(conditions)
+    .orderBy(desc(templates.updatedAt))
+    .limit(pagination.limit + 1);
+  return buildPaginatedResponse(rows, pagination.limit);
 }
 
 export async function deleteTemplate(accountId: string, templateId: string) {

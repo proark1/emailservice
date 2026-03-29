@@ -30,4 +30,5 @@ export const broadcasts = pgTable("broadcasts", {
 }, (table) => [
   index("idx_broadcasts_account_id").on(table.accountId),
   index("idx_broadcasts_account_status").on(table.accountId, table.status),
+  index("idx_broadcasts_account_created").on(table.accountId, table.createdAt),
 ]);

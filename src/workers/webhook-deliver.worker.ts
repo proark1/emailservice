@@ -93,8 +93,9 @@ async function processWebhookDeliver(job: Job<WebhookDeliverJobData>) {
 }
 
 export function createWebhookDeliverWorker() {
+  const concurrency = Number(process.env.WEBHOOK_CONCURRENCY) || 5;
   return new Worker("webhook.deliver", processWebhookDeliver, {
     connection: getRedisConnection(),
-    concurrency: 5,
+    concurrency,
   });
 }

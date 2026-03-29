@@ -48,4 +48,7 @@ export const emails = pgTable("emails", {
   index("idx_emails_folder").on(table.accountId, table.folderId),
   index("idx_emails_thread").on(table.accountId, table.threadId),
   index("idx_emails_draft").on(table.accountId, table.isDraft),
+  index("idx_emails_domain_id").on(table.domainId),
+  index("idx_emails_account_created").on(table.accountId, table.createdAt),
+  index("idx_emails_account_status_created").on(table.accountId, table.status, table.createdAt),
 ]);

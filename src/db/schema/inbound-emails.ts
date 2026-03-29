@@ -33,4 +33,7 @@ export const inboundEmails = pgTable("inbound_emails", {
   index("idx_inbound_emails_folder").on(table.accountId, table.folderId, table.createdAt),
   index("idx_inbound_emails_thread").on(table.accountId, table.threadId),
   index("idx_inbound_emails_deleted").on(table.accountId, table.deletedAt),
+  index("idx_inbound_emails_domain_id").on(table.domainId),
+  index("idx_inbound_emails_is_read").on(table.accountId, table.isRead, table.createdAt),
+  index("idx_inbound_emails_is_starred").on(table.accountId, table.isStarred, table.createdAt),
 ]);

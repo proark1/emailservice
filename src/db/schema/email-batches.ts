@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, integer, index } from "drizzle-orm/pg-core";
 import { accounts } from "./accounts.js";
 
 export const batchStatusEnum = ["processing", "completed", "partial_failure", "failed"] as const;
@@ -13,4 +13,7 @@ export const emailBatches = pgTable("email_batches", {
   status: varchar("status", { length: 20 }).notNull().$type<BatchStatus>().default("processing"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("idx_email_batches_account_status").on(table.accountId, table.status),
+  index("idx_email_batches_account_created").on(table.accountId, table.createdAt),
+]);
