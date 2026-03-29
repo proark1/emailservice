@@ -88,6 +88,7 @@ export async function updateFolder(accountId: string, folderId: string, input: U
     .set(updateData)
     .where(and(eq(folders.id, folderId), eq(folders.accountId, accountId)))
     .returning();
+  if (!updated) throw new NotFoundError("Folder");
   return updated;
 }
 

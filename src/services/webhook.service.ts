@@ -39,9 +39,14 @@ export async function listWebhooks(accountId: string) {
 
 export async function updateWebhook(accountId: string, webhookId: string, input: UpdateWebhookInput) {
   const db = getDb();
+  const updateData: Record<string, any> = { updatedAt: new Date() };
+  if (input.url !== undefined) updateData.url = input.url;
+  if (input.events !== undefined) updateData.events = input.events;
+  if (input.active !== undefined) updateData.active = input.active;
+
   const [updated] = await db
     .update(webhooks)
-    .set({ ...input, updatedAt: new Date() })
+    .set(updateData)
     .where(and(eq(webhooks.id, webhookId), eq(webhooks.accountId, accountId)))
     .returning();
   if (!updated) throw new NotFoundError("Webhook");
@@ -92,13 +97,13 @@ export async function dispatchEvent(
   );
 
   // Enqueue a delivery job for each matching webhook
+  // Note: signingSecret is NOT included in job data — worker fetches it from DB at delivery time
   for (const webhook of matching) {
     await getWebhookDeliverQueue().add("deliver", {
       webhookId: webhook.id,
       emailEventId,
       eventType,
       payload,
-      signingSecret: webhook.signingSecret,
       url: webhook.url,
     }, {
       attempts: RETRY_DELAYS.length + 1,

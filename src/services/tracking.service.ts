@@ -96,7 +96,9 @@ export function decodeClickTrackingData(encoded: string): { emailId: string; url
       const payload = encoded.substring(0, dotIndex);
       const sig = encoded.substring(dotIndex + 1);
       const expected = crypto.createHmac("sha256", config.ENCRYPTION_KEY).update(payload).digest("base64url");
-      if (crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+      const sigBuf = Buffer.from(sig);
+      const expectedBuf = Buffer.from(expected);
+      if (sigBuf.length === expectedBuf.length && crypto.timingSafeEqual(sigBuf, expectedBuf)) {
         const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
         if (data.emailId && data.url) {
           return { emailId: data.emailId, url: data.url };

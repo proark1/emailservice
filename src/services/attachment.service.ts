@@ -4,6 +4,7 @@ import { inboundAttachments } from "../db/schema/index.js";
 import { NotFoundError } from "../lib/errors.js";
 import { getConfig } from "../config/index.js";
 import * as fs from "fs";
+import * as fsp from "fs/promises";
 import * as path from "path";
 import { randomUUID } from "crypto";
 
@@ -19,14 +20,16 @@ export async function storeInboundAttachment(
 ) {
   const storageDir = getStorageDir();
   const dir = path.join(storageDir, accountId);
-  fs.mkdirSync(dir, { recursive: true });
+  await fsp.mkdir(dir, { recursive: true });
 
   const fileId = randomUUID();
-  const ext = path.extname(attachment.filename) || "";
+  // Sanitize extension to prevent path traversal via malicious filenames
+  const rawExt = path.extname(path.basename(attachment.filename)) || "";
+  const ext = rawExt.replace(/[^a-zA-Z0-9.]/g, "");
   const storagePath = path.join(accountId, `${fileId}${ext}`);
   const fullPath = path.join(storageDir, storagePath);
 
-  fs.writeFileSync(fullPath, attachment.content);
+  await fsp.writeFile(fullPath, attachment.content);
 
   const db = getDb();
   const [stored] = await db

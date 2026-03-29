@@ -55,7 +55,14 @@ export function formatSuppressionResponse(suppression: typeof suppressions.$infe
 
 export async function processDeliveryFailure(accountId: string, email: string, reason: "bounce" | "complaint") {
   const db = getDb();
-  try { await addSuppression(accountId, email, reason); } catch {}
+  try {
+    await addSuppression(accountId, email, reason);
+  } catch (err: any) {
+    // ConflictError is expected if already suppressed — only log unexpected errors
+    if (err?.code !== "23505" && err?.constructor?.name !== "ConflictError") {
+      console.error(`[suppression] Failed to suppress ${email}:`, err);
+    }
+  }
   try {
     const { contacts, audiences } = await import("../db/schema/index.js");
     const accts = await db.select({ id: audiences.id }).from(audiences).where(eq(audiences.accountId, accountId));
@@ -63,5 +70,7 @@ export async function processDeliveryFailure(accountId: string, email: string, r
       await db.update(contacts).set({ subscribed: false, unsubscribedAt: new Date() })
         .where(and(inArray(contacts.audienceId, accts.map(a => a.id)), eq(contacts.email, email)));
     }
-  } catch {}
+  } catch (err) {
+    console.error(`[suppression] Failed to unsubscribe ${email} from audiences:`, err);
+  }
 }

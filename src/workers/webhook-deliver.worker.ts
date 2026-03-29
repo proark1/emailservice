@@ -1,7 +1,8 @@
 import { Worker, Job } from "bullmq";
+import { eq } from "drizzle-orm";
 import { getRedisConnection } from "../queues/index.js";
 import { getDb } from "../db/index.js";
-import { webhookDeliveries } from "../db/schema/index.js";
+import { webhookDeliveries, webhooks } from "../db/schema/index.js";
 import { signWebhookPayload } from "../lib/crypto.js";
 
 export interface WebhookDeliverJobData {
@@ -9,16 +10,25 @@ export interface WebhookDeliverJobData {
   emailEventId: string;
   eventType: string;
   payload: Record<string, unknown>;
-  signingSecret: string;
   url: string;
+  /** @deprecated signing secret is now fetched from DB at delivery time */
+  signingSecret?: string;
 }
 
 export const RETRY_DELAYS = [30_000, 120_000, 900_000, 3_600_000, 21_600_000]; // 30s, 2m, 15m, 1h, 6h
 
 async function processWebhookDeliver(job: Job<WebhookDeliverJobData>) {
-  const { webhookId, emailEventId, eventType, payload, signingSecret, url } = job.data;
+  const { webhookId, emailEventId, eventType, payload, url } = job.data;
   const db = getDb();
   const attempt = (job.attemptsMade || 0) + 1;
+
+  // Fetch signing secret from DB at delivery time (not stored in job data for security)
+  let signingSecret = job.data.signingSecret; // backwards compat with old queued jobs
+  if (!signingSecret) {
+    const [webhook] = await db.select({ signingSecret: webhooks.signingSecret }).from(webhooks).where(eq(webhooks.id, webhookId));
+    if (!webhook) return; // webhook was deleted
+    signingSecret = webhook.signingSecret;
+  }
 
   const timestamp = Math.floor(Date.now() / 1000);
   const body = JSON.stringify({

@@ -2,16 +2,10 @@ import { eq } from "drizzle-orm";
 import * as argon2 from "argon2";
 import { getDb } from "../db/index.js";
 import { accounts } from "../db/schema/index.js";
-import { ValidationError, UnauthorizedError, ConflictError } from "../lib/errors.js";
+import { ValidationError, UnauthorizedError, ConflictError, NotFoundError } from "../lib/errors.js";
 
 export async function register(name: string, email: string, password: string) {
   const db = getDb();
-
-  // Check if email exists
-  const existing = await db.select().from(accounts).where(eq(accounts.email, email));
-  if (existing.length > 0) {
-    throw new ConflictError("Unable to create account with this email");
-  }
 
   if (password.length < 8) {
     throw new ValidationError("Password must be at least 8 characters");
@@ -19,12 +13,18 @@ export async function register(name: string, email: string, password: string) {
 
   const passwordHash = await argon2.hash(password);
 
-  const [account] = await db
-    .insert(accounts)
-    .values({ name, email, passwordHash, role: "user" })
-    .returning();
-
-  return account;
+  try {
+    const [account] = await db
+      .insert(accounts)
+      .values({ name, email, passwordHash, role: "user" })
+      .returning();
+    return account;
+  } catch (error: any) {
+    if (error.code === "23505") {
+      throw new ConflictError("Unable to create account with this email");
+    }
+    throw error;
+  }
 }
 
 export async function login(email: string, password: string) {
@@ -67,6 +67,7 @@ export async function updateAccountRole(accountId: string, role: "user" | "admin
     .set({ role, updatedAt: new Date() })
     .where(eq(accounts.id, accountId))
     .returning();
+  if (!updated) throw new NotFoundError("Account");
   return updated;
 }
 

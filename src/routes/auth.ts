@@ -126,8 +126,9 @@ export default async function authRoutes(app: FastifyInstance) {
     const [account] = await db.select().from(accounts).where(eq(accounts.id, decoded.id));
     if (!account) throw new (await import("../lib/errors.js")).NotFoundError("Account");
 
+    if (!account.passwordHash) throw new (await import("../lib/errors.js")).ValidationError("Account does not have a password set");
     const argon2 = await import("argon2");
-    const valid = await argon2.verify(account.passwordHash!, current_password);
+    const valid = await argon2.verify(account.passwordHash, current_password);
     if (!valid) throw new (await import("../lib/errors.js")).ValidationError("Current password is incorrect");
 
     const newHash = await argon2.hash(new_password);

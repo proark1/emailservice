@@ -1,4 +1,4 @@
-import { eq, and, or, isNull, inArray } from "drizzle-orm";
+import { eq, and, or, isNull, inArray, gt } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { domainMembers, domainInvitations, domains, accounts } from "../db/schema/index.js";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../lib/errors.js";
@@ -198,7 +198,10 @@ export async function updateDomainMember(
   if (member.role === "owner") throw new ValidationError("Cannot modify the domain owner");
 
   const updateData: Record<string, any> = { updatedAt: new Date() };
-  if (input.role !== undefined) updateData.role = input.role;
+  if (input.role !== undefined) {
+    if ((input.role as string) === "owner") throw new ValidationError("Cannot assign owner role — ownership is set at domain creation");
+    updateData.role = input.role;
+  }
   if (input.mailboxes !== undefined) updateData.mailboxes = input.mailboxes;
 
   const [updated] = await db
@@ -325,6 +328,7 @@ export async function listInvitations(accountId: string, domainId: string) {
       and(
         eq(domainInvitations.domainId, domainId),
         isNull(domainInvitations.acceptedAt),
+        or(isNull(domainInvitations.expiresAt), gt(domainInvitations.expiresAt, new Date())),
       ),
     )
     .orderBy(domainInvitations.createdAt);
