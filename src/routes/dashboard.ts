@@ -11,7 +11,7 @@ import * as broadcastService from "../services/broadcast.service.js";
 import * as warmupService from "../services/warmup.service.js";
 import * as templateService from "../services/template.service.js";
 import { getDb } from "../db/index.js";
-import { emails, domains, apiKeys, webhooks, audiences, inboundEmails } from "../db/schema/index.js";
+import { emails, domains, apiKeys, webhooks, audiences, inboundEmails, folders } from "../db/schema/index.js";
 import { ForbiddenError } from "../lib/errors.js";
 import { getDnsVerifyQueue } from "../queues/index.js";
 import { getConfig } from "../config/index.js";
@@ -195,18 +195,175 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     return reply.status(201).send({ data: result.response });
   });
 
-  // --- Inbox (inbound emails) ---
+  // --- Inbox (inbound emails + folder-aware) ---
   app.get("/inbox", async (request) => {
     const db = getDb();
     const query = z.object({
       search: z.string().optional(),
       filter: z.enum(["all", "unread", "starred", "archived"]).optional().default("all"),
+      folder_slug: z.string().optional(),
       domain_id: z.string().uuid().optional(),
       page: z.coerce.number().int().min(1).optional().default(1),
       limit: z.coerce.number().int().min(1).max(100).optional().default(50),
     }).parse(request.query);
 
+    const offset = (query.page - 1) * query.limit;
+
+    // --- Sent folder: query the emails (outbound) table ---
+    if (query.folder_slug === "sent") {
+      const conditions: any[] = [
+        eq(emails.accountId, request.account.id),
+        eq(emails.isDraft, false),
+        isNull(emails.deletedAt),
+      ];
+      if (query.search) {
+        const pattern = `%${escapeIlike(query.search)}%`;
+        conditions.push(
+          or(
+            ilike(emails.fromAddress, pattern),
+            ilike(emails.subject, pattern),
+            sql`${emails.toAddresses}::text ILIKE ${pattern}`,
+          ),
+        );
+      }
+      if (query.domain_id) {
+        conditions.push(eq(emails.domainId, query.domain_id));
+      }
+      const whereClause = and(...conditions);
+      const [totalResult] = await db.select({ count: count() }).from(emails).where(whereClause);
+      const total = Number(totalResult.count);
+      const list = await db.select().from(emails).where(whereClause).orderBy(desc(emails.createdAt)).limit(query.limit).offset(offset);
+
+      // Normalize sent emails to match inbound email shape for the frontend
+      const normalized = list.map((e) => ({
+        id: e.id,
+        fromAddress: e.fromAddress,
+        fromName: e.fromName,
+        toAddress: (e.toAddresses as string[])?.join(", ") ?? "",
+        ccAddresses: e.ccAddresses,
+        subject: e.subject,
+        textBody: e.textBody,
+        htmlBody: e.htmlBody,
+        messageId: e.messageId,
+        inReplyTo: e.inReplyTo,
+        threadId: e.threadId,
+        references: e.references,
+        folderId: e.folderId,
+        isRead: true,
+        isStarred: false,
+        isArchived: false,
+        hasAttachments: (e.attachments as any[])?.length > 0 || false,
+        deletedAt: e.deletedAt,
+        createdAt: e.createdAt,
+        status: e.status,
+        _type: "sent" as const,
+      }));
+      return {
+        data: normalized,
+        pagination: { page: query.page, limit: query.limit, total, pages: Math.ceil(total / query.limit) },
+      };
+    }
+
+    // --- Drafts folder: query emails table where isDraft = true ---
+    if (query.folder_slug === "drafts") {
+      const conditions: any[] = [
+        eq(emails.accountId, request.account.id),
+        eq(emails.isDraft, true),
+        isNull(emails.deletedAt),
+      ];
+      if (query.search) {
+        const pattern = `%${escapeIlike(query.search)}%`;
+        conditions.push(
+          or(
+            ilike(emails.fromAddress, pattern),
+            ilike(emails.subject, pattern),
+            sql`${emails.toAddresses}::text ILIKE ${pattern}`,
+          ),
+        );
+      }
+      if (query.domain_id) {
+        conditions.push(eq(emails.domainId, query.domain_id));
+      }
+      const whereClause = and(...conditions);
+      const [totalResult] = await db.select({ count: count() }).from(emails).where(whereClause);
+      const total = Number(totalResult.count);
+      const list = await db.select().from(emails).where(whereClause).orderBy(desc(emails.createdAt)).limit(query.limit).offset(offset);
+
+      const normalized = list.map((e) => ({
+        id: e.id,
+        fromAddress: e.fromAddress,
+        fromName: e.fromName,
+        toAddress: (e.toAddresses as string[])?.join(", ") ?? "",
+        ccAddresses: e.ccAddresses,
+        subject: e.subject,
+        textBody: e.textBody,
+        htmlBody: e.htmlBody,
+        messageId: e.messageId,
+        inReplyTo: e.inReplyTo,
+        threadId: e.threadId,
+        references: e.references,
+        folderId: e.folderId,
+        isRead: true,
+        isStarred: false,
+        isArchived: false,
+        hasAttachments: (e.attachments as any[])?.length > 0 || false,
+        deletedAt: e.deletedAt,
+        createdAt: e.createdAt,
+        status: e.status,
+        _type: "draft" as const,
+      }));
+      return {
+        data: normalized,
+        pagination: { page: query.page, limit: query.limit, total, pages: Math.ceil(total / query.limit) },
+      };
+    }
+
+    // --- Trash / Spam / Archive: query inbound_emails filtered by folder ---
+    if (query.folder_slug === "trash" || query.folder_slug === "spam" || query.folder_slug === "archive") {
+      const [folder] = await db.select().from(folders)
+        .where(and(eq(folders.accountId, request.account.id), eq(folders.slug, query.folder_slug)));
+      if (folder) {
+        const conditions: any[] = [
+          eq(inboundEmails.accountId, request.account.id),
+          eq(inboundEmails.folderId, folder.id),
+        ];
+        if (query.search) {
+          const pattern = `%${escapeIlike(query.search)}%`;
+          conditions.push(
+            or(
+              ilike(inboundEmails.fromAddress, pattern),
+              ilike(inboundEmails.fromName, pattern),
+              ilike(inboundEmails.subject, pattern),
+            ),
+          );
+        }
+        if (query.domain_id) {
+          conditions.push(eq(inboundEmails.domainId, query.domain_id));
+        }
+        const whereClause = and(...conditions);
+        const [totalResult] = await db.select({ count: count() }).from(inboundEmails).where(whereClause);
+        const total = Number(totalResult.count);
+        const list = await db.select().from(inboundEmails).where(whereClause).orderBy(desc(inboundEmails.createdAt)).limit(query.limit).offset(offset);
+        return {
+          data: list,
+          pagination: { page: query.page, limit: query.limit, total, pages: Math.ceil(total / query.limit) },
+        };
+      }
+      // Folder not found — return empty
+      return { data: [], pagination: { page: 1, limit: query.limit, total: 0, pages: 0 } };
+    }
+
+    // --- Default: inbox folder (inbound emails) ---
     const conditions: any[] = [eq(inboundEmails.accountId, request.account.id)];
+
+    // For explicit inbox folder, filter by inbox folder to exclude trash/spam/archive
+    if (!query.folder_slug || query.folder_slug === "inbox") {
+      const [inboxFolder] = await db.select().from(folders)
+        .where(and(eq(folders.accountId, request.account.id), eq(folders.slug, "inbox")));
+      if (inboxFolder) {
+        conditions.push(eq(inboundEmails.folderId, inboxFolder.id));
+      }
+    }
 
     if (query.search) {
       const pattern = `%${escapeIlike(query.search)}%`;
@@ -232,7 +389,6 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     }
 
     const whereClause = and(...conditions);
-    const offset = (query.page - 1) * query.limit;
 
     const [totalResult] = await db.select({ count: count() }).from(inboundEmails).where(whereClause);
     const total = Number(totalResult.count);

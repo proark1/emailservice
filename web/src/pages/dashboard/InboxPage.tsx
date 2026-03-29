@@ -186,6 +186,12 @@ export default function InboxPage() {
   // Thread view
   const [threadMessages, setThreadMessages] = useState<any[]>([]);
   const [showThread, setShowThread] = useState(false);
+  // Compose
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeForm, setComposeForm] = useState({ from: "", to: "", cc: "", bcc: "", subject: "", html: "" });
+  const [showCcBcc, setShowCcBcc] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [composeError, setComposeError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const { showError, toast } = useToast();
 
@@ -480,6 +486,40 @@ export default function InboxPage() {
     fetchEmails(next, search, filter, true, domainFilter);
   };
 
+  /* ---- compose ---- */
+  const resetCompose = () => {
+    setComposeForm({ from: "", to: "", cc: "", bcc: "", subject: "", html: "" });
+    setShowCcBcc(false);
+    setComposeError("");
+  };
+
+  const handleComposeSend = async () => {
+    setComposeError("");
+    setSending(true);
+    try {
+      const htmlContent = composeForm.html ? wrapEmailHtml(composeForm.html) : undefined;
+      const body: Record<string, any> = {
+        from: composeForm.from,
+        to: composeForm.to,
+        subject: composeForm.subject,
+        html: htmlContent,
+        text: htmlContent ? undefined : " ",
+      };
+      if (composeForm.cc.trim()) body.cc = composeForm.cc;
+      if (composeForm.bcc.trim()) body.bcc = composeForm.bcc;
+      await post("/dashboard/emails", body);
+      setComposeOpen(false);
+      resetCompose();
+      if (activeFolder === "sent") {
+        fetchEmails(1, search, filter, false, domainFilter);
+      }
+    } catch (e: any) {
+      setComposeError(e.message || "Failed to send");
+    } finally {
+      setSending(false);
+    }
+  };
+
   /* ---- iframe auto-height ---- */
   const onIframeLoad = () => {
     try {
@@ -492,6 +532,7 @@ export default function InboxPage() {
 
   const unreadCount = items.filter((e) => !e.is_read).length;
   const isTrash = activeFolder === "trash";
+  const isSentOrDrafts = activeFolder === "sent" || activeFolder === "drafts";
   const folderIcons: Record<string, string> = { inbox: "M2.25 13.5h3.86", sent: "M6 12L3.269", drafts: "M16.862 4.487", trash: "M14.74 9", spam: "M12 9v3.75", archive: "M20.25 7.5" };
 
   /* ================================================================
@@ -559,13 +600,24 @@ export default function InboxPage() {
                 </span>
               )}
             </div>
-            <button
-              onClick={() => fetchEmails(page, search, filter)}
-              className="p-1.5 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-              title="Refresh"
-            >
-              <RefreshIcon />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => { resetCompose(); setComposeOpen(true); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-medium text-white bg-violet-600 hover:bg-violet-700 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Compose
+              </button>
+              <button
+                onClick={() => fetchEmails(page, search, filter)}
+                className="p-1.5 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                title="Refresh"
+              >
+                <RefreshIcon />
+              </button>
+            </div>
           </div>
 
           {/* search */}
@@ -665,9 +717,9 @@ export default function InboxPage() {
                     />
                     {/* avatar */}
                     <div
-                      className={`w-9 h-9 rounded-full bg-gradient-to-br ${avatarColor(email.from)} border border-gray-200 dark:border-gray-700 flex items-center justify-center text-[11px] font-semibold shrink-0 mt-0.5`}
+                      className={`w-9 h-9 rounded-full bg-gradient-to-br ${avatarColor(isSentOrDrafts ? email.to : email.from)} border border-gray-200 dark:border-gray-700 flex items-center justify-center text-[11px] font-semibold shrink-0 mt-0.5`}
                     >
-                      {getInitials(email.from_name, email.from)}
+                      {getInitials(isSentOrDrafts ? null : email.from_name, isSentOrDrafts ? email.to : email.from)}
                     </div>
 
                     {/* text content */}
@@ -680,7 +732,7 @@ export default function InboxPage() {
                               !email.is_read ? "font-semibold text-gray-900 dark:text-gray-100" : "text-gray-600 dark:text-gray-400"
                             }`}
                           >
-                            {email.from_name || email.from}
+                            {isSentOrDrafts ? `To: ${email.to}` : (email.from_name || email.from)}
                           </span>
                         </div>
                         <span className="text-[11px] text-gray-400 shrink-0 ml-2">{timeAgo(email.created_at)}</span>
@@ -692,7 +744,7 @@ export default function InboxPage() {
                       </p>
 
                       <div className="flex items-center justify-between mt-1">
-                        <p className="text-[11px] text-gray-400 truncate">to: {email.to}</p>
+                        <p className="text-[11px] text-gray-400 truncate">{isSentOrDrafts ? `from: ${email.from}` : `to: ${email.to}`}</p>
                         <button
                           onClick={(ev) => toggleStar(email.id, email.is_starred, ev)}
                           className={`p-0.5 rounded transition-opacity ${
@@ -1018,6 +1070,130 @@ export default function InboxPage() {
       </div>
       {confirmDialog}
       {toast}
+
+      {/* ====================== COMPOSE MODAL ====================== */}
+      <Modal
+        open={composeOpen}
+        onClose={() => { setComposeOpen(false); setComposeError(""); }}
+        title="Compose Email"
+      >
+        <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+          {composeError && (
+            <div className="px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px] flex items-start gap-2">
+              <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+              {composeError}
+            </div>
+          )}
+
+          {verifiedDomains.length === 0 && (
+            <div className="px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-[13px] flex items-start gap-2">
+              <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              No verified domains found. You need a verified domain to send emails.
+            </div>
+          )}
+
+          <div>
+            <Input
+              label="From"
+              placeholder={verifiedDomains.length > 0 ? `you@${verifiedDomains[0]?.name}` : "you@yourdomain.com"}
+              value={composeForm.from}
+              onChange={(e) => setComposeForm({ ...composeForm, from: (e.target as HTMLInputElement).value })}
+            />
+            {verifiedDomains.length > 0 && (
+              <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                <span className="text-[11px] text-gray-400">Domains:</span>
+                {verifiedDomains.map((d: any) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => {
+                      const localPart = composeForm.from.split("@")[0] || "you";
+                      setComposeForm({ ...composeForm, from: `${localPart}@${d.name}` });
+                    }}
+                    className="text-[11px] text-violet-600 hover:text-violet-700 font-medium cursor-pointer transition-colors"
+                  >
+                    {d.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <Input
+            label="To"
+            placeholder="recipient@example.com (comma-separated)"
+            value={composeForm.to}
+            onChange={(e) => setComposeForm({ ...composeForm, to: (e.target as HTMLInputElement).value })}
+          />
+
+          {!showCcBcc ? (
+            <button
+              type="button"
+              onClick={() => setShowCcBcc(true)}
+              className="text-[12px] text-violet-600 hover:text-violet-700 font-medium transition-colors cursor-pointer"
+            >
+              + Add CC / BCC
+            </button>
+          ) : (
+            <>
+              <Input
+                label="CC"
+                placeholder="cc@example.com (comma-separated)"
+                value={composeForm.cc}
+                onChange={(e) => setComposeForm({ ...composeForm, cc: (e.target as HTMLInputElement).value })}
+              />
+              <Input
+                label="BCC"
+                placeholder="bcc@example.com (comma-separated)"
+                value={composeForm.bcc}
+                onChange={(e) => setComposeForm({ ...composeForm, bcc: (e.target as HTMLInputElement).value })}
+              />
+            </>
+          )}
+
+          <Input
+            label="Subject"
+            placeholder="Email subject"
+            value={composeForm.subject}
+            onChange={(e) => setComposeForm({ ...composeForm, subject: (e.target as HTMLInputElement).value })}
+          />
+
+          <div>
+            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Body</label>
+            <RichEditor
+              value={composeForm.html}
+              onChange={(html) => setComposeForm({ ...composeForm, html })}
+              placeholder="Write your email content..."
+              minHeight="180px"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+            <Button onClick={handleComposeSend} disabled={sending || !composeForm.from || !composeForm.to || !composeForm.subject}>
+              {sending ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                  </svg>
+                  Send Email
+                </>
+              )}
+            </Button>
+            <Button variant="secondary" onClick={() => { setComposeOpen(false); setComposeError(""); }}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
