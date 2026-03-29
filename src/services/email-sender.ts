@@ -58,6 +58,29 @@ function createTransport() {
 }
 
 /**
+ * Send a system notification email (e.g. invitation, team notification).
+ * Uses the same transport as outbound emails but does not create DB records.
+ */
+export async function sendSystemEmail(options: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}): Promise<void> {
+  const config = getConfig();
+  const transport = getOrCreateTransport();
+  const from = `noreply@${new URL(config.BASE_URL).hostname}`;
+
+  await transport.sendMail({
+    from,
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+    text: options.text,
+  });
+}
+
+/**
  * Send an email directly (no queue/Redis needed).
  * Used as fallback when Redis is unavailable, or called by the worker.
  */

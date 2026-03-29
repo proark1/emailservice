@@ -5,6 +5,8 @@ import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from ".
 import type { DomainRole } from "../db/schema/domain-members.js";
 import type { AddMemberInput, UpdateMemberInput, CreateInvitationInput } from "../schemas/team.schema.js";
 import { randomBytes } from "crypto";
+import { getConfig } from "../config/index.js";
+import { sendSystemEmail } from "./email-sender.js";
 
 const ROLE_HIERARCHY: Record<DomainRole, number> = { owner: 3, admin: 2, member: 1 };
 
@@ -167,6 +169,33 @@ export async function addDomainMember(accountId: string, domainId: string, input
       })
       .returning();
 
+    // Send notification email to the added user
+    const [domain] = await db.select().from(domains).where(eq(domains.id, domainId));
+    const [inviter] = await db.select().from(accounts).where(eq(accounts.id, accountId));
+    const domainName = domain?.name ?? "a domain";
+    const inviterName = inviter?.name || inviter?.email || "A team admin";
+    const config = getConfig();
+    const dashboardUrl = `${config.BASE_URL}/dashboard/domains`;
+
+    sendSystemEmail({
+      to: input.email,
+      subject: `You've been added to ${domainName}`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 0;">
+          <h2 style="color: #1f2937; margin-bottom: 16px;">You've been added to ${domainName}</h2>
+          <p style="color: #4b5563; line-height: 1.6;">
+            ${inviterName} added you as <strong>${input.role}</strong> on <strong>${domainName}</strong>.
+            You can now send and receive emails through this domain.
+          </p>
+          ${input.mailboxes?.length ? `<p style="color: #4b5563; line-height: 1.6;">Your permitted mailboxes: <strong>${input.mailboxes.join(", ")}</strong></p>` : ""}
+          <div style="margin-top: 24px;">
+            <a href="${dashboardUrl}" style="display: inline-block; padding: 10px 24px; background: #7c3aed; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 500;">Go to Dashboard</a>
+          </div>
+          <p style="color: #9ca3af; font-size: 13px; margin-top: 24px;">If you didn't expect this, you can ignore this email.</p>
+        </div>
+      `,
+    }).catch(() => {}); // Fire-and-forget — don't fail the add if email fails
+
     return { type: "added" as const, member };
   }
 
@@ -267,6 +296,34 @@ export async function createInvitation(accountId: string, domainId: string, inpu
       expiresAt,
     })
     .returning();
+
+  // Send invitation email
+  const [domain] = await db.select().from(domains).where(eq(domains.id, domainId));
+  const [inviter] = await db.select().from(accounts).where(eq(accounts.id, accountId));
+  const domainName = domain?.name ?? "a domain";
+  const inviterName = inviter?.name || inviter?.email || "A team admin";
+  const config = getConfig();
+  const acceptUrl = `${config.BASE_URL}/accept-invite/${token}`;
+
+  sendSystemEmail({
+    to: input.email,
+    subject: `You're invited to join ${domainName}`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 0;">
+        <h2 style="color: #1f2937; margin-bottom: 16px;">You're invited to ${domainName}</h2>
+        <p style="color: #4b5563; line-height: 1.6;">
+          ${inviterName} has invited you to join <strong>${domainName}</strong> as <strong>${input.role}</strong>.
+          Once you accept, you'll be able to send and receive emails through this domain.
+        </p>
+        ${input.mailboxes?.length ? `<p style="color: #4b5563; line-height: 1.6;">Permitted mailboxes: <strong>${input.mailboxes.join(", ")}</strong></p>` : ""}
+        <div style="margin-top: 24px;">
+          <a href="${acceptUrl}" style="display: inline-block; padding: 10px 24px; background: #7c3aed; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 500;">Accept Invitation</a>
+        </div>
+        <p style="color: #9ca3af; font-size: 13px; margin-top: 24px;">This invitation expires on ${expiresAt.toLocaleDateString()}. If you didn't expect this, you can ignore this email.</p>
+      </div>
+    `,
+    text: `${inviterName} has invited you to join ${domainName} as ${input.role}. Accept the invitation: ${acceptUrl} — This invitation expires on ${expiresAt.toLocaleDateString()}.`,
+  }).catch(() => {}); // Fire-and-forget
 
   return invitation;
 }
