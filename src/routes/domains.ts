@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { createDomainSchema } from "../schemas/domain.schema.js";
 import * as domainService from "../services/domain.service.js";
-import { getDnsVerifyQueue } from "../queues/index.js";
+import { isRedisConfigured, getDnsVerifyQueue } from "../queues/index.js";
 
 export default async function domainRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
@@ -14,7 +14,9 @@ export default async function domainRoutes(app: FastifyInstance) {
     const domain = await domainService.createDomain(request.account.id, input);
 
     // Queue initial DNS verification with 60s delay
-    await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() }, { delay: 60_000 });
+    if (isRedisConfigured()) {
+      await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() }, { delay: 60_000 }).catch(() => {});
+    }
 
     return reply.status(201).send({
       data: domainService.formatDomainResponse(domain),
@@ -42,7 +44,9 @@ export default async function domainRoutes(app: FastifyInstance) {
   // POST /v1/domains/:id/verify
   app.post<{ Params: { id: string } }>("/:id/verify", async (request) => {
     const domain = await domainService.getDomain(request.account.id, request.params.id);
-    await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() });
+    if (isRedisConfigured()) {
+      await getDnsVerifyQueue().add("dns-verify", { domainId: domain.id, attempt: 0, startedAt: Date.now() }).catch(() => {});
+    }
     return { data: { message: "Verification initiated" } };
   });
 }

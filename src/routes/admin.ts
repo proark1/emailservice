@@ -5,8 +5,8 @@ import * as adminAnalytics from "../services/admin-analytics.service.js";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, accounts, apiKeys, webhooks, webhookDeliveries, apiLogs } from "../db/schema/index.js";
 import { count, sql, desc, eq, and, ilike } from "drizzle-orm";
-import { ForbiddenError, NotFoundError } from "../lib/errors.js";
-import { getWebhookDeliverQueue } from "../queues/index.js";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors.js";
+import { isRedisConfigured, getWebhookDeliverQueue } from "../queues/index.js";
 import { RETRY_DELAYS } from "../workers/webhook-deliver.worker.js";
 
 export default async function adminRoutes(app: FastifyInstance) {
@@ -211,6 +211,10 @@ export default async function adminRoutes(app: FastifyInstance) {
     if (!webhook) throw new NotFoundError("Webhook");
 
     const requestBody = delivery.requestBody as { type?: string; data?: Record<string, unknown> } | null;
+
+    if (!isRedisConfigured()) {
+      throw new ValidationError("Redis is not configured — cannot queue webhook delivery");
+    }
 
     await getWebhookDeliverQueue().add("deliver", {
       webhookId: delivery.webhookId,

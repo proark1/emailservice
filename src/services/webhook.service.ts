@@ -1,7 +1,7 @@
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { webhooks, webhookDeliveries, emailEvents } from "../db/schema/index.js";
-import { getWebhookDeliverQueue } from "../queues/index.js";
+import { isRedisConfigured, getWebhookDeliverQueue } from "../queues/index.js";
 import { RETRY_DELAYS } from "../workers/webhook-deliver.worker.js";
 import { generateWebhookSecret } from "../lib/crypto.js";
 import { NotFoundError } from "../lib/errors.js";
@@ -98,6 +98,7 @@ export async function dispatchEvent(
 
   // Enqueue a delivery job for each matching webhook
   // Note: signingSecret is NOT included in job data — worker fetches it from DB at delivery time
+  if (!isRedisConfigured()) return;
   for (const webhook of matching) {
     await getWebhookDeliverQueue().add("deliver", {
       webhookId: webhook.id,
