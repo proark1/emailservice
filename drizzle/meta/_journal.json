@@ -78,6 +78,13 @@
       "when": 1774791438881,
       "tag": "0010_round_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1774821207603,
+      "tag": "0011_light_domino",
+      "breakpoints": true
     }
   ]
 }
