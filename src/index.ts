@@ -94,7 +94,6 @@ async function main() {
   await app.register(fastifyStatic, {
     root: frontendPath,
     prefix: "/",
-    decorateReply: false,
     wildcard: false,
   });
 
