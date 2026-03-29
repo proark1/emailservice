@@ -286,7 +286,7 @@ export async function acceptInvitation(accountId: string, token: string) {
   // Verify the accepting user's email matches
   const [account] = await db.select().from(accounts).where(eq(accounts.id, accountId));
   if (!account) throw new NotFoundError("Account");
-  if (account.email.toLowerCase() !== invitation.email.toLowerCase()) {
+  if (!account.email || !invitation.email || account.email.toLowerCase() !== invitation.email.toLowerCase()) {
     throw new ValidationError("This invitation was sent to a different email address");
   }
 

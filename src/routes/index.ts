@@ -68,7 +68,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(threadRoutes, { prefix: "/v1/threads" });
   await app.register(signatureRoutes, { prefix: "/v1/signatures" });
   await app.register(addressBookRoutes, { prefix: "/v1/address-book" });
-  await app.register(teamRoutes, { prefix: "/v1/domains" });
+  await app.register(teamRoutes, { prefix: "/v1/team" });
 
   // Suppression routes
   await app.register(async (suppApp) => {

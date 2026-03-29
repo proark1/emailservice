@@ -120,11 +120,22 @@ export function createInboundServer(): SMTPServer {
               } catch {}
             }
 
-            // Direct insert (no Redis)
+            // Direct insert (no Redis) — include all fields the worker would set
             const db = getDb();
-            await db.insert(inboundEmails).values({
+            let inboxFolderId: string | null = null;
+            try {
+              const { getFolderBySlug } = await import("../services/folder.service.js");
+              const folder = await getFolderBySlug(emailData.accountId, "inbox");
+              inboxFolderId = folder.id;
+            } catch {}
+            const { computeThreadId } = await import("../services/thread.service.js");
+            const threadId = computeThreadId(emailData.messageId, emailData.inReplyTo, emailData.references, emailData.subject);
+            const hasAttachments = attachmentData.length > 0;
+
+            const [stored] = await db.insert(inboundEmails).values({
               accountId: emailData.accountId,
               domainId: emailData.domainId,
+              folderId: inboxFolderId,
               fromAddress: emailData.from,
               fromName: emailData.fromName,
               toAddress: emailData.to,
@@ -134,8 +145,32 @@ export function createInboundServer(): SMTPServer {
               htmlBody: emailData.html || null,
               messageId: emailData.messageId,
               inReplyTo: emailData.inReplyTo,
+              threadId,
+              references: emailData.references.length > 0 ? emailData.references : null,
+              hasAttachments,
               headers: (emailData.headers as Record<string, string>) || null,
-            });
+            }).returning();
+
+            // Store attachments for direct insert too
+            if (hasAttachments && stored) {
+              try {
+                const { storeInboundAttachment } = await import("../services/attachment.service.js");
+                for (const att of attachmentData) {
+                  await storeInboundAttachment(emailData.accountId, stored.id, {
+                    filename: att.filename,
+                    contentType: att.contentType,
+                    size: att.size,
+                    content: Buffer.from(att.content, "base64"),
+                  });
+                }
+              } catch {}
+            }
+
+            // Auto-learn sender contact
+            try {
+              const { autoLearnContact } = await import("../services/address-book.service.js");
+              await autoLearnContact(emailData.accountId, emailData.from, emailData.fromName);
+            } catch {}
           }
 
           callback();

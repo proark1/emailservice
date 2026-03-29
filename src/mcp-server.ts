@@ -1252,7 +1252,7 @@ server.tool(
     domain_id: z.string().describe("Domain ID"),
   },
   async (params) => {
-    const res = await api("GET", `/v1/domains/${params.domain_id}/members`);
+    const res = await api("GET", `/v1/team/${params.domain_id}/members`);
     return { content: [{ type: "text" as const, text: formatResult(res) }] };
   },
 );
@@ -1268,7 +1268,7 @@ server.tool(
   },
   async (params) => {
     const { domain_id, ...body } = params;
-    const res = await api("POST", `/v1/domains/${domain_id}/members`, body);
+    const res = await api("POST", `/v1/team/${domain_id}/members`, body);
     return { content: [{ type: "text" as const, text: formatResult(res) }] };
   },
 );
@@ -1284,7 +1284,7 @@ server.tool(
   },
   async (params) => {
     const { domain_id, member_id, ...body } = params;
-    const res = await api("PATCH", `/v1/domains/${domain_id}/members/${member_id}`, body);
+    const res = await api("PATCH", `/v1/team/${domain_id}/members/${member_id}`, body);
     return { content: [{ type: "text" as const, text: formatResult(res) }] };
   },
 );
@@ -1297,7 +1297,7 @@ server.tool(
     member_id: z.string().describe("Member ID"),
   },
   async (params) => {
-    const res = await api("DELETE", `/v1/domains/${params.domain_id}/members/${params.member_id}`);
+    const res = await api("DELETE", `/v1/team/${params.domain_id}/members/${params.member_id}`);
     return { content: [{ type: "text" as const, text: formatResult(res) }] };
   },
 );
@@ -1309,7 +1309,7 @@ server.tool(
     domain_id: z.string().describe("Domain ID"),
   },
   async (params) => {
-    const res = await api("GET", `/v1/domains/${params.domain_id}/invitations`);
+    const res = await api("GET", `/v1/team/${params.domain_id}/invitations`);
     return { content: [{ type: "text" as const, text: formatResult(res) }] };
   },
 );
@@ -1325,7 +1325,7 @@ server.tool(
   },
   async (params) => {
     const { domain_id, ...body } = params;
-    const res = await api("POST", `/v1/domains/${domain_id}/invitations`, body);
+    const res = await api("POST", `/v1/team/${domain_id}/invitations`, body);
     return { content: [{ type: "text" as const, text: formatResult(res) }] };
   },
 );
@@ -1338,7 +1338,7 @@ server.tool(
     invitation_id: z.string().describe("Invitation ID"),
   },
   async (params) => {
-    const res = await api("DELETE", `/v1/domains/${params.domain_id}/invitations/${params.invitation_id}`);
+    const res = await api("DELETE", `/v1/team/${params.domain_id}/invitations/${params.invitation_id}`);
     return { content: [{ type: "text" as const, text: formatResult(res) }] };
   },
 );

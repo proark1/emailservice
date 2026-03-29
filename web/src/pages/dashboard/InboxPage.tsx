@@ -253,10 +253,10 @@ export default function InboxPage() {
     setPage(1);
   };
 
-  // Re-fetch when folder changes
+  // Re-fetch when folder changes (fetchEmails already depends on activeFolder)
   useEffect(() => {
-    fetchEmails(1, search, filter, false, domainFilter);
-  }, [activeFolder]); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchEmails(1, "", filter, false, domainFilter);
+  }, [fetchEmails]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---- search (debounced) ---- */
   const onSearchChange = (value: string) => {

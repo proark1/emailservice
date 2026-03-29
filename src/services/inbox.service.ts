@@ -75,12 +75,27 @@ export async function listInboxEmails(accountId: string, input: ListInboxInput) 
 
 export async function getInboxEmail(accountId: string, emailId: string) {
   const db = getDb();
+  const { getAccessibleDomainIds } = await import("./team.service.js");
+  const accessibleIds = await getAccessibleDomainIds(accountId);
+  const accessCondition = accessibleIds.length > 0
+    ? or(eq(inboundEmails.accountId, accountId), inArray(inboundEmails.domainId, accessibleIds))!
+    : eq(inboundEmails.accountId, accountId);
+
   const [email] = await db
     .select()
     .from(inboundEmails)
-    .where(and(eq(inboundEmails.id, emailId), eq(inboundEmails.accountId, accountId)));
+    .where(and(eq(inboundEmails.id, emailId), accessCondition));
   if (!email) throw new NotFoundError("Email");
   return email;
+}
+
+async function emailAccessCondition(accountId: string, emailId: string) {
+  const { getAccessibleDomainIds } = await import("./team.service.js");
+  const accessibleIds = await getAccessibleDomainIds(accountId);
+  const accessCheck = accessibleIds.length > 0
+    ? or(eq(inboundEmails.accountId, accountId), inArray(inboundEmails.domainId, accessibleIds))!
+    : eq(inboundEmails.accountId, accountId);
+  return and(eq(inboundEmails.id, emailId), accessCheck);
 }
 
 export async function updateInboxEmail(accountId: string, emailId: string, input: UpdateInboxEmailInput) {
@@ -89,22 +104,16 @@ export async function updateInboxEmail(accountId: string, emailId: string, input
   if (input.is_read !== undefined) updateData.isRead = input.is_read;
   if (input.is_starred !== undefined) updateData.isStarred = input.is_starred;
 
-  const [updated] = await db
-    .update(inboundEmails)
-    .set(updateData)
-    .where(and(eq(inboundEmails.id, emailId), eq(inboundEmails.accountId, accountId)))
-    .returning();
+  const condition = await emailAccessCondition(accountId, emailId);
+  const [updated] = await db.update(inboundEmails).set(updateData).where(condition).returning();
   if (!updated) throw new NotFoundError("Email");
   return updated;
 }
 
 export async function moveToFolder(accountId: string, emailId: string, folderId: string) {
   const db = getDb();
-  const [updated] = await db
-    .update(inboundEmails)
-    .set({ folderId, deletedAt: null })
-    .where(and(eq(inboundEmails.id, emailId), eq(inboundEmails.accountId, accountId)))
-    .returning();
+  const condition = await emailAccessCondition(accountId, emailId);
+  const [updated] = await db.update(inboundEmails).set({ folderId, deletedAt: null }).where(condition).returning();
   if (!updated) throw new NotFoundError("Email");
   return updated;
 }
@@ -112,11 +121,8 @@ export async function moveToFolder(accountId: string, emailId: string, folderId:
 export async function moveToTrash(accountId: string, emailId: string) {
   const trashFolder = await getFolderBySlug(accountId, "trash");
   const db = getDb();
-  const [updated] = await db
-    .update(inboundEmails)
-    .set({ folderId: trashFolder.id, deletedAt: new Date() })
-    .where(and(eq(inboundEmails.id, emailId), eq(inboundEmails.accountId, accountId)))
-    .returning();
+  const condition = await emailAccessCondition(accountId, emailId);
+  const [updated] = await db.update(inboundEmails).set({ folderId: trashFolder.id, deletedAt: new Date() }).where(condition).returning();
   if (!updated) throw new NotFoundError("Email");
   return updated;
 }
@@ -124,21 +130,16 @@ export async function moveToTrash(accountId: string, emailId: string) {
 export async function restoreFromTrash(accountId: string, emailId: string) {
   const inboxFolder = await getFolderBySlug(accountId, "inbox");
   const db = getDb();
-  const [updated] = await db
-    .update(inboundEmails)
-    .set({ folderId: inboxFolder.id, deletedAt: null })
-    .where(and(eq(inboundEmails.id, emailId), eq(inboundEmails.accountId, accountId)))
-    .returning();
+  const condition = await emailAccessCondition(accountId, emailId);
+  const [updated] = await db.update(inboundEmails).set({ folderId: inboxFolder.id, deletedAt: null }).where(condition).returning();
   if (!updated) throw new NotFoundError("Email");
   return updated;
 }
 
 export async function permanentDelete(accountId: string, emailId: string) {
   const db = getDb();
-  const [deleted] = await db
-    .delete(inboundEmails)
-    .where(and(eq(inboundEmails.id, emailId), eq(inboundEmails.accountId, accountId)))
-    .returning();
+  const condition = await emailAccessCondition(accountId, emailId);
+  const [deleted] = await db.delete(inboundEmails).where(condition).returning();
   if (!deleted) throw new NotFoundError("Email");
   return deleted;
 }
@@ -147,9 +148,15 @@ export async function bulkAction(accountId: string, input: BulkActionInput) {
   const db = getDb();
   const { ids, action, folder_id } = input;
 
+  const { getAccessibleDomainIds } = await import("./team.service.js");
+  const accessibleIds = await getAccessibleDomainIds(accountId);
+  const accessCondition = accessibleIds.length > 0
+    ? or(eq(inboundEmails.accountId, accountId), inArray(inboundEmails.domainId, accessibleIds))!
+    : eq(inboundEmails.accountId, accountId);
+
   const conditions = and(
     inArray(inboundEmails.id, ids),
-    eq(inboundEmails.accountId, accountId),
+    accessCondition,
   );
 
   switch (action) {

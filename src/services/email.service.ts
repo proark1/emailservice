@@ -77,7 +77,7 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
   }
 
   // Check domain is configured for sending
-  const mode = (domain as any).mode || "both";
+  const mode = domain.mode || "both";
   if (mode === "receive") {
     throw new ValidationError(`Domain ${fromDomain} is configured for receiving only. Update domain mode to "send" or "both" to send emails.`);
   }
