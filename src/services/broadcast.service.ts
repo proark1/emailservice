@@ -82,7 +82,7 @@ export async function createBroadcast(accountId: string, input: CreateBroadcastI
       replyTo: input.reply_to,
       headers: input.headers,
       tags: input.tags,
-      status: isScheduled ? "scheduled" : "sending",
+      status: "scheduled",
       totalCount: subscribedContacts.length,
       scheduledAt: input.scheduled_at ? new Date(input.scheduled_at) : null,
     })
