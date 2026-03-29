@@ -76,6 +76,8 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
       }
     } catch (err) {
       console.error(`[inbound-email] Failed to store attachments for ${stored.id}:`, err);
+      // Correct the hasAttachments flag since storage failed
+      await db.update(inboundEmails).set({ hasAttachments: false }).where(eq(inboundEmails.id, stored.id)).catch(() => {});
     }
   }
 
