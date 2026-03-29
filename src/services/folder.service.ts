@@ -112,6 +112,7 @@ export async function deleteFolder(accountId: string, folderId: string) {
     .delete(folders)
     .where(and(eq(folders.id, folderId), eq(folders.accountId, accountId)))
     .returning();
+  if (!deleted) throw new NotFoundError("Folder");
   return deleted;
 }
 

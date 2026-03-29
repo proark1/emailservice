@@ -120,7 +120,7 @@ export async function listDrafts(accountId: string, options: { limit?: number; c
 
   if (options.cursor) {
     const { lt } = await import("drizzle-orm");
-    const [cursorEmail] = await db.select({ updatedAt: emails.updatedAt }).from(emails).where(and(eq(emails.id, options.cursor), eq(emails.accountId, accountId)));
+    const [cursorEmail] = await db.select({ updatedAt: emails.updatedAt }).from(emails).where(and(eq(emails.id, options.cursor), eq(emails.accountId, accountId), eq(emails.isDraft, true)));
     if (cursorEmail) {
       conditions.push(lt(emails.updatedAt, cursorEmail.updatedAt));
     }
@@ -153,7 +153,7 @@ export async function sendDraft(accountId: string, draftId: string) {
     .where(and(eq(emails.id, draftId), eq(emails.accountId, accountId), eq(emails.isDraft, true)));
   if (!draft) throw new NotFoundError("Draft");
 
-  if (!draft.fromAddress || draft.fromAddress === "draft@placeholder") {
+  if (!draft.fromAddress || draft.fromAddress === "draft@placeholder" || !draft.fromAddress.includes("@")) {
     throw new ValidationError("Draft must have a valid 'from' address before sending");
   }
   if (!draft.toAddresses || (draft.toAddresses as string[]).length === 0) {
