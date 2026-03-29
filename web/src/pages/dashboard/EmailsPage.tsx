@@ -15,8 +15,8 @@ import {
   CopyButton,
   Dot,
   useConfirmDialog,
-  useToast,
 } from "../../components/ui";
+import { useToast } from "../../components/Toast";
 
 /* ---------- types ---------- */
 
@@ -133,9 +133,9 @@ export default function EmailsPage() {
   const [previewMode, setPreviewMode] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(600);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
 
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const verifiedDomains = domains.filter((d) => d.status === "verified");
   const hasDomains = verifiedDomains.length > 0;
 
@@ -274,6 +274,7 @@ export default function EmailsPage() {
       if (form.bcc.trim()) body.bcc = form.bcc.split(",").map((s: string) => s.trim()).filter(Boolean).join(",");
       if (form.scheduledAt) body.scheduled_at = new Date(form.scheduledAt).toISOString();
       await post("/dashboard/emails", body);
+      toast("Email sent");
       setComposeOpen(false);
       resetCompose();
       loadEmails();
@@ -492,7 +493,7 @@ export default function EmailsPage() {
                       setDetailEmail(null);
                       loadEmails();
                       loadCounts();
-                    } catch (e: any) { showError(e.message); }
+                    } catch (e: any) { toast(e.message, "error"); }
                   }}>Retry Send</Button>
                 )}
                 {(detailEmail.status === "queued" && detailEmail.scheduledAt) && (
@@ -504,10 +505,11 @@ export default function EmailsPage() {
                       onConfirm: async () => {
                         try {
                           await del(`/dashboard/emails/${detailEmail.id}`);
+                          toast("Email cancelled");
                           setDetailEmail(null);
                           loadEmails();
                           loadCounts();
-                        } catch (e: any) { showError(e.message); }
+                        } catch (e: any) { toast(e.message, "error"); }
                       },
                     });
                   }}>Cancel Scheduled</Button>
@@ -803,7 +805,6 @@ export default function EmailsPage() {
         </div>
       </Modal>
       {confirmDialog}
-      {toast}
     </div>
   );
 }

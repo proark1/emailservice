@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api, post, patch, del } from "../../lib/api";
-import { PageHeader, Button, Modal, Input, Textarea, EmptyState, useConfirmDialog, useToast } from "../../components/ui";
+import { PageHeader, Button, Modal, Input, Textarea, EmptyState, useConfirmDialog } from "../../components/ui";
+import { useToast } from "../../components/Toast";
 
 interface Draft {
   id: string;
@@ -23,14 +24,14 @@ export default function DraftsPage() {
   const [form, setForm] = useState({ from: "", to: "", subject: "", html: "" });
   const [saving, setSaving] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
 
   const loadDrafts = async () => {
     try {
       const res = await api<{ data: Draft[] }>("/dashboard/drafts");
       setDrafts(res.data);
     } catch (err: any) {
-      showError(err.message);
+      toast(err.message, "error");
     } finally {
       setLoading(false);
     }
@@ -70,10 +71,11 @@ export default function DraftsPage() {
       } else {
         await post("/dashboard/drafts", body);
       }
+      toast("Draft saved");
       setComposeOpen(false);
       loadDrafts();
     } catch (err: any) {
-      showError(err.message);
+      toast(err.message, "error");
     } finally {
       setSaving(false);
     }
@@ -82,9 +84,10 @@ export default function DraftsPage() {
   const sendDraft = async (draftId: string) => {
     try {
       await post(`/dashboard/drafts/${draftId}/send`, {});
+      toast("Draft sent");
       loadDrafts();
     } catch (err: any) {
-      showError(err.message);
+      toast(err.message, "error");
     }
   };
 
@@ -96,9 +99,10 @@ export default function DraftsPage() {
       onConfirm: async () => {
         try {
           await del(`/dashboard/drafts/${draftId}`);
+          toast("Draft deleted");
           loadDrafts();
         } catch (err: any) {
-          showError(err.message);
+          toast(err.message, "error");
         }
       },
     });
@@ -125,7 +129,7 @@ export default function DraftsPage() {
       </Modal>
 
       {loading ? (
-        <div className="p-8 text-center text-gray-400">Loading...</div>
+        <div className="flex items-center justify-center py-12"><div className="w-5 h-5 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" /></div>
       ) : drafts.length === 0 ? (
         <EmptyState title="No drafts" desc="Saved drafts will appear here." action={<Button onClick={openNewDraft}>+ New Draft</Button>} />
       ) : (
@@ -159,7 +163,6 @@ export default function DraftsPage() {
       )}
 
       {confirmDialog}
-      {toast}
     </div>
   );
 }

@@ -10,8 +10,8 @@ import {
   Textarea,
   Modal,
   useConfirmDialog,
-  useToast,
 } from "../../components/ui";
+import { useToast } from "../../components/Toast";
 import { RichEditor, wrapEmailHtml } from "../../components/RichEditor";
 
 /* ---------- types ---------- */
@@ -67,7 +67,7 @@ export default function TemplatesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
 
   /* --- data loading --- */
 
@@ -112,6 +112,7 @@ export default function TemplatesPage() {
         html: form.html || undefined,
         text: form.text || undefined,
       });
+      toast("Template created");
       setCreateOpen(false);
       resetForm();
       loadTemplates();
@@ -147,6 +148,7 @@ export default function TemplatesPage() {
         html: form.html || undefined,
         text: form.text || undefined,
       });
+      toast("Template updated");
       setEditTemplate(null);
       resetForm();
       loadTemplates();
@@ -167,9 +169,10 @@ export default function TemplatesPage() {
       onConfirm: async () => {
         try {
           await del(`/dashboard/templates/${id}`);
+          toast("Template deleted");
           loadTemplates();
         } catch (e: any) {
-          showError(e.message || "Failed to delete template");
+          toast(e.message || "Failed to delete template", "error");
         }
       },
     });
@@ -454,7 +457,6 @@ export default function TemplatesPage() {
         )}
       </Modal>
       {confirmDialog}
-      {toast}
     </div>
   );
 }

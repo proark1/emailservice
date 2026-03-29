@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { api, post, patch, del } from "../../lib/api";
-import { Badge, EmptyState, Table, PageHeader, Button, Input, Modal, useConfirmDialog, useToast } from "../../components/ui";
+import { Badge, EmptyState, Table, PageHeader, Button, Input, Modal, useConfirmDialog } from "../../components/ui";
+import { useToast } from "../../components/Toast";
 
 interface Audience {
   id: string;
@@ -25,7 +26,7 @@ export default function AudiencesPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
 
   const loadAudiences = () => {
     api("/dashboard/audiences").then((r) => setAudiences(r.data)).catch(() => {});
@@ -37,6 +38,7 @@ export default function AudiencesPage() {
     setError(""); setCreating(true);
     try {
       await post("/dashboard/audiences", { name: createName });
+      toast("Audience created");
       setCreateOpen(false);
       setCreateName("");
       loadAudiences();
@@ -50,7 +52,7 @@ export default function AudiencesPage() {
       message: "This audience and all its contacts will be permanently removed.",
       confirmLabel: "Delete",
       onConfirm: async () => {
-        try { await del(`/dashboard/audiences/${id}`); } catch (e: any) { showError(e.message || "Delete failed"); }
+        try { await del(`/dashboard/audiences/${id}`); toast("Audience deleted"); } catch (e: any) { toast(e.message || "Delete failed", "error"); }
         loadAudiences();
       },
     });
@@ -104,7 +106,6 @@ export default function AudiencesPage() {
         </div>
       )}
       {confirmDialog}
-      {toast}
     </div>
   );
 }
@@ -126,7 +127,7 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; total: number } | null>(null);
   const [importError, setImportError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
 
   const loadContacts = () => {
     api(`/dashboard/audiences/${audience.id}/contacts`).then((r) => setContacts(r.data)).catch(() => {});
@@ -149,6 +150,7 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
     setError(""); setAdding(true);
     try {
       await post(`/dashboard/audiences/${audience.id}/contacts`, addForm);
+      toast("Contact added");
       setAddOpen(false);
       setAddForm({ email: "", first_name: "", last_name: "" });
       loadContacts();
@@ -179,7 +181,7 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
       message: "This contact will be removed from the audience.",
       confirmLabel: "Remove",
       onConfirm: async () => {
-        try { await del(`/dashboard/audiences/${audience.id}/contacts/${contactId}`); } catch (e: any) { showError(e.message || "Delete failed"); }
+        try { await del(`/dashboard/audiences/${audience.id}/contacts/${contactId}`); toast("Contact removed"); } catch (e: any) { toast(e.message || "Delete failed", "error"); }
         loadContacts();
       },
     });
@@ -342,7 +344,6 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
         </Table>
       )}
       {confirmDialog}
-      {toast}
     </div>
   );
 }

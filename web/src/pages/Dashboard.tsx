@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Link, Routes, Route, NavLink, useNavigate } from "react-router-dom";
+import { Link, Routes, Route, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { api, post, del } from "../lib/api";
-import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Textarea, Modal, CopyButton, Dot, useConfirmDialog, useToast } from "../components/ui";
+import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Textarea, Modal, CopyButton, Dot, useConfirmDialog } from "../components/ui";
+import { useToast } from "../components/Toast";
 import { patch } from "../lib/api";
 import InboxPage from "./dashboard/InboxPage";
 import EmailsPage from "./dashboard/EmailsPage";
@@ -54,7 +55,7 @@ function SearchBar() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any>(null);
   const [open, setOpen] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -193,7 +194,7 @@ function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => void }) {
               )}
               <div className="space-y-0.5">
                 {section.items.map((item) => (
-                  <NavLink key={item.to} to={item.to} end={"end" in item ? item.end : undefined} onClick={onToggle} className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150 ${isActive ? "bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 border-l-[3px] border-violet-500 -ml-[3px]" : "text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-700"}`}>
+                  <NavLink key={item.to} to={item.to} end={"end" in item ? item.end : undefined} onClick={onToggle} className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${isActive ? "bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 border-l-[3px] border-violet-500 -ml-[3px]" : "text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-700"}`}>
                     {item.icon}{item.label}
                   </NavLink>
                 ))}
@@ -460,7 +461,7 @@ function DomainsPage() {
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<any>(null);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
   // Auto-setup state
   const [setupDomain, setSetupDomain] = useState<any>(null);
   const [detectedProvider, setDetectedProvider] = useState<string | null>(null);
@@ -478,6 +479,7 @@ function DomainsPage() {
     try {
       const res = await post("/dashboard/domains", { name, mode });
       setOpen(false); setName(""); setMode("both"); load();
+      toast("Domain created");
       // Immediately open setup for the new domain
       openSetup(res.data);
     }
@@ -539,7 +541,7 @@ function DomainsPage() {
       message: "DNS records and email history associated with this domain will be affected.",
       confirmLabel: "Delete",
       onConfirm: async () => {
-        try { await del(`/dashboard/domains/${id}`); } catch (e: any) { showError(e.message || "Delete failed"); }
+        try { await del(`/dashboard/domains/${id}`); toast("Domain deleted"); } catch (e: any) { toast(e.message || "Delete failed", "error"); }
         load();
       },
     });
@@ -779,7 +781,6 @@ function DomainsPage() {
         </Table>
       )}
       {confirmDialog}
-      {toast}
     </div>
   );
 }
@@ -793,14 +794,14 @@ function ApiKeysPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
 
   const load = () => api("/dashboard/api-keys").then((r) => setItems(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
 
   const create = async () => {
     setError(""); setLoading(true);
-    try { const res = await post("/dashboard/api-keys", { name }); setNewKey(res.data.key); setName(""); load(); }
+    try { const res = await post("/dashboard/api-keys", { name }); setNewKey(res.data.key); setName(""); load(); toast("API key created"); }
     catch (e: any) { setError(e.message || "Failed to create API key"); } finally { setLoading(false); }
   };
 
@@ -810,7 +811,7 @@ function ApiKeysPage() {
       message: "Any applications using this key will lose access immediately.",
       confirmLabel: "Revoke",
       onConfirm: async () => {
-        try { await del(`/dashboard/api-keys/${id}`); } catch (e: any) { showError(e.message || "Revoke failed"); }
+        try { await del(`/dashboard/api-keys/${id}`); toast("API key revoked"); } catch (e: any) { toast(e.message || "Revoke failed", "error"); }
         load();
       },
     });
@@ -851,7 +852,6 @@ function ApiKeysPage() {
         </Table>
       )}
       {confirmDialog}
-      {toast}
     </div>
   );
 }
@@ -867,7 +867,7 @@ function WebhooksPage() {
   const [deliveries, setDeliveries] = useState<any[]>([]);
   const [deliveriesLoading, setDeliveriesLoading] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
 
   const load = () => api("/dashboard/webhooks").then((r) => setItems(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -886,7 +886,7 @@ function WebhooksPage() {
     setError(""); setLoading(true);
     try {
       await post("/dashboard/webhooks", { url, events: ["email.sent", "email.delivered", "email.bounced", "email.opened", "email.clicked", "email.failed"] });
-      setOpen(false); setUrl(""); load();
+      setOpen(false); setUrl(""); load(); toast("Webhook created");
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   };
 
@@ -896,7 +896,7 @@ function WebhooksPage() {
       message: "This webhook will stop receiving event notifications immediately.",
       confirmLabel: "Delete",
       onConfirm: async () => {
-        try { await del(`/dashboard/webhooks/${id}`); } catch (e: any) { showError(e.message || "Delete failed"); }
+        try { await del(`/dashboard/webhooks/${id}`); toast("Webhook deleted"); } catch (e: any) { toast(e.message || "Delete failed", "error"); }
         load();
       },
     });
@@ -953,7 +953,6 @@ function WebhooksPage() {
         )}
       </Modal>
       {confirmDialog}
-      {toast}
     </div>
   );
 }
@@ -1035,15 +1034,14 @@ function ApiDocsPage() {
   );
 }
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
+
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("mailnowapi-theme");
-    if (saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-      document.documentElement.classList.add("dark");
-    }
-  }, []);
 
   return (
     <div className="flex min-h-screen bg-gray-50 antialiased">
@@ -1062,6 +1060,7 @@ export default function Dashboard() {
         <div className="w-8" /> {/* Spacer for centering */}
       </div>
       <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl overflow-y-auto pt-[4.5rem] lg:pt-8">
+        <ScrollToTop />
         <Routes>
           <Route index element={<Overview />} />
           <Route path="emails" element={<EmailsPage />} />

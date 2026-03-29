@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api, post, patch, del } from "../../lib/api";
-import { PageHeader, Button, Input, Modal, Badge, Table, EmptyState, Select, useConfirmDialog, useToast } from "../../components/ui";
+import { PageHeader, Button, Input, Modal, Badge, Table, EmptyState, Select, useConfirmDialog } from "../../components/ui";
+import { useToast } from "../../components/Toast";
 
 type Member = {
   id: string;
@@ -36,7 +37,7 @@ export default function TeamPage() {
   const [editForm, setEditForm] = useState({ role: "member", mailboxes: "" });
   const [saving, setSaving] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
 
   const loadData = async () => {
     try {
@@ -49,7 +50,7 @@ export default function TeamPage() {
       setInvitations(invRes.data);
       if (domainRes?.data) setDomainName(domainRes.data.name);
     } catch (err: any) {
-      showError(err.message);
+      toast(err.message, "error");
     } finally {
       setLoading(false);
     }
@@ -65,11 +66,12 @@ export default function TeamPage() {
         body.mailboxes = form.mailboxes.split(",").map((s) => s.trim()).filter(Boolean);
       }
       await post(`/dashboard/domains/${domainId}/members`, body);
+      toast("Invitation sent");
       setAddOpen(false);
       setForm({ email: "", role: "member", mailboxes: "" });
       loadData();
     } catch (err: any) {
-      showError(err.message);
+      toast(err.message, "error");
     } finally {
       setSaving(false);
     }
@@ -86,10 +88,11 @@ export default function TeamPage() {
         body.mailboxes = null;
       }
       await patch(`/dashboard/domains/${domainId}/members/${editMember.id}`, body);
+      toast("Role updated");
       setEditMember(null);
       loadData();
     } catch (err: any) {
-      showError(err.message);
+      toast(err.message, "error");
     } finally {
       setSaving(false);
     }
@@ -103,8 +106,9 @@ export default function TeamPage() {
       onConfirm: async () => {
         try {
           await del(`/dashboard/domains/${domainId}/members/${member.id}`);
+          toast("Member removed");
           loadData();
-        } catch (err: any) { showError(err.message); }
+        } catch (err: any) { toast(err.message, "error"); }
       },
     });
   };
@@ -118,7 +122,7 @@ export default function TeamPage() {
         try {
           await del(`/dashboard/domains/${domainId}/invitations/${inv.id}`);
           loadData();
-        } catch (err: any) { showError(err.message); }
+        } catch (err: any) { toast(err.message, "error"); }
       },
     });
   };
@@ -201,7 +205,7 @@ export default function TeamPage() {
       </Modal>
 
       {loading ? (
-        <div className="p-8 text-center text-gray-400">Loading...</div>
+        <div className="flex items-center justify-center py-12"><div className="w-5 h-5 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" /></div>
       ) : (
         <div className="space-y-6">
           {/* Members */}
@@ -261,7 +265,6 @@ export default function TeamPage() {
       )}
 
       {confirmDialog}
-      {toast}
     </div>
   );
 }

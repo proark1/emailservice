@@ -106,7 +106,7 @@ export default function SuppressionsPage() {
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-gray-400 text-sm">Loading...</div>
+        <div className="flex items-center justify-center py-12"><div className="w-5 h-5 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" /></div>
       ) : filtered.length === 0 ? (
         <EmptyState
           title={search ? "No matching suppressions" : "No suppressions"}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api, post, del } from "../../lib/api";
-import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Textarea, Modal, useConfirmDialog, useToast } from "../../components/ui";
+import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Textarea, Modal, useConfirmDialog } from "../../components/ui";
+import { useToast } from "../../components/Toast";
 import { RichEditor, wrapEmailHtml } from "../../components/RichEditor";
 
 interface Broadcast {
@@ -42,7 +43,7 @@ export default function BroadcastsPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
 
   const loadBroadcasts = () => {
     api("/dashboard/broadcasts").then((r) => setBroadcasts(r.data)).catch(() => {});
@@ -76,6 +77,7 @@ export default function BroadcastsPage() {
       if (form.html.trim()) body.html = wrapEmailHtml(form.html);
       if (form.text.trim()) body.text = form.text;
       await post("/dashboard/broadcasts", body);
+      toast("Broadcast created");
       setCreateOpen(false);
       loadBroadcasts();
     } catch (e: any) { setError(e.message); }
@@ -88,7 +90,7 @@ export default function BroadcastsPage() {
       message: "This broadcast and its send history will be permanently removed.",
       confirmLabel: "Delete",
       onConfirm: async () => {
-        try { await del(`/dashboard/broadcasts/${id}`); } catch (e: any) { showError(e.message || "Delete failed"); }
+        try { await del(`/dashboard/broadcasts/${id}`); toast("Broadcast deleted"); } catch (e: any) { toast(e.message || "Delete failed", "error"); }
         loadBroadcasts();
       },
     });
@@ -283,7 +285,6 @@ export default function BroadcastsPage() {
         </Table>
       )}
       {confirmDialog}
-      {toast}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api, post, del } from "../../lib/api";
-import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Modal, useConfirmDialog, useToast } from "../../components/ui";
+import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Modal, useConfirmDialog } from "../../components/ui";
+import { useToast } from "../../components/Toast";
 
 interface Domain {
   id: string;
@@ -70,7 +71,7 @@ export default function WarmupPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
 
   const loadWarmups = () => {
     api("/dashboard/warmup").then((r) => setWarmups(r.data)).catch(() => {});
@@ -116,6 +117,7 @@ export default function WarmupPage() {
       if (form.total_days !== 30) body.total_days = form.total_days;
       if (form.from_address.trim()) body.from_address = form.from_address;
       await post("/dashboard/warmup", body);
+      toast("Warmup started");
       setCreateOpen(false);
       loadWarmups();
     } catch (e: any) { setError(e.message); }
@@ -123,12 +125,12 @@ export default function WarmupPage() {
   };
 
   const pauseWarmup = async (id: string) => {
-    try { await post(`/dashboard/warmup/${id}/pause`, {}); } catch (e: any) { showError(e.message || "Pause failed"); }
+    try { await post(`/dashboard/warmup/${id}/pause`, {}); toast("Warmup paused"); } catch (e: any) { toast(e.message || "Pause failed", "error"); }
     loadWarmups();
   };
 
   const resumeWarmup = async (id: string) => {
-    try { await post(`/dashboard/warmup/${id}/resume`, {}); } catch (e: any) { showError(e.message || "Resume failed"); }
+    try { await post(`/dashboard/warmup/${id}/resume`, {}); toast("Warmup resumed"); } catch (e: any) { toast(e.message || "Resume failed", "error"); }
     loadWarmups();
   };
 
@@ -138,7 +140,7 @@ export default function WarmupPage() {
       message: "This cannot be undone. The warmup schedule will be permanently stopped.",
       confirmLabel: "Cancel Warmup",
       onConfirm: async () => {
-        try { await del(`/dashboard/warmup/${id}`); } catch (e: any) { showError(e.message || "Cancel failed"); }
+        try { await del(`/dashboard/warmup/${id}`); toast("Warmup cancelled"); } catch (e: any) { toast(e.message || "Cancel failed", "error"); }
         loadWarmups();
       },
     });
@@ -392,7 +394,6 @@ export default function WarmupPage() {
         </div>
       )}
       {confirmDialog}
-      {toast}
     </div>
   );
 }

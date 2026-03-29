@@ -38,7 +38,7 @@ export default function UsagePage() {
     return (
       <div>
         <PageHeader title="Usage" desc="Monitor your email sending volume and resource usage" />
-        <div className="flex items-center justify-center py-16 text-[13px] text-gray-400">Loading...</div>
+        <div className="flex items-center justify-center py-16"><div className="w-5 h-5 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" /></div>
       </div>
     );
   }

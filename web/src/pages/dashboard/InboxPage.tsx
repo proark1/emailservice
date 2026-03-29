@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api, post, patch, del } from "../../lib/api";
-import { Badge, Button, Input, Textarea, Modal, useConfirmDialog, useToast } from "../../components/ui";
+import { Badge, Button, Input, Textarea, Modal, useConfirmDialog } from "../../components/ui";
+import { useToast } from "../../components/Toast";
 import { RichEditor, wrapEmailHtml } from "../../components/RichEditor";
 
 type InboxEmail = {
@@ -187,9 +188,9 @@ export default function InboxPage() {
   const [threadMessages, setThreadMessages] = useState<any[]>([]);
   const [showThread, setShowThread] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
 
-  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const verifiedDomains = domainsList.filter((d: any) => d.status === "verified");
@@ -313,7 +314,7 @@ export default function InboxPage() {
       const res = await api(`/dashboard/threads/${encodeURIComponent(threadId)}`);
       setThreadMessages(res.data?.messages ?? []);
       setShowThread(true);
-    } catch (e: any) { showError(e.message || "Failed to load thread"); }
+    } catch (e: any) { toast(e.message || "Failed to load thread", "error"); }
   };
 
   /* ---- actions ---- */
@@ -323,15 +324,16 @@ export default function InboxPage() {
       await patch(`/dashboard/inbox/${id}`, { isStarred: !current });
       setItems((prev) => prev.map((e) => (e.id === id ? { ...e, is_starred: !current } : e)));
       if (selected?.id === id) setSelected({ ...selected, is_starred: !current });
-    } catch (e: any) { showError(e.message || "Failed to update star"); }
+    } catch (e: any) { toast(e.message || "Failed to update star", "error"); }
   };
 
   const archiveEmail = async (id: string) => {
     try {
       await patch(`/dashboard/inbox/${id}`, { isArchived: true });
+      toast("Archived");
       setItems((prev) => prev.filter((e) => e.id !== id));
       if (selected?.id === id) setSelected(null);
-    } catch (e: any) { showError(e.message || "Failed to archive"); }
+    } catch (e: any) { toast(e.message || "Failed to archive", "error"); }
   };
 
   const deleteEmail = (id: string) => {
@@ -346,7 +348,8 @@ export default function InboxPage() {
             await del(`/dashboard/inbox/${id}`);
             setItems((prev) => prev.filter((e) => e.id !== id));
             if (selected?.id === id) setSelected(null);
-          } catch (e: any) { showError(e.message || "Failed to delete"); }
+          } catch (e: any) { toast(e.message || "Failed to delete", "error"); }
+
         },
       });
     } else {
@@ -354,10 +357,11 @@ export default function InboxPage() {
       (async () => {
         try {
           await del(`/dashboard/inbox/${id}`);
+          toast("Moved to trash");
           setItems((prev) => prev.filter((e) => e.id !== id));
           if (selected?.id === id) setSelected(null);
           fetchFolders(); // refresh unread counts
-        } catch (e: any) { showError(e.message || "Failed to move to trash"); }
+        } catch (e: any) { toast(e.message || "Failed to move to trash", "error"); }
       })();
     }
   };
@@ -365,10 +369,11 @@ export default function InboxPage() {
   const restoreEmail = async (id: string) => {
     try {
       await post(`/dashboard/inbox/${id}/restore`, {});
+      toast("Restored");
       setItems((prev) => prev.filter((e) => e.id !== id));
       if (selected?.id === id) setSelected(null);
       fetchFolders();
-    } catch (e: any) { showError(e.message || "Failed to restore"); }
+    } catch (e: any) { toast(e.message || "Failed to restore", "error"); }
   };
 
   const moveToFolder = async (id: string, folderId: string) => {
@@ -377,7 +382,7 @@ export default function InboxPage() {
       setItems((prev) => prev.filter((e) => e.id !== id));
       if (selected?.id === id) setSelected(null);
       fetchFolders();
-    } catch (e: any) { showError(e.message || "Failed to move"); }
+    } catch (e: any) { toast(e.message || "Failed to move", "error"); }
   };
 
   /* ---- bulk actions ---- */
@@ -408,11 +413,12 @@ export default function InboxPage() {
         action,
         folder_id: folderId,
       });
+      toast("Done");
       setSelectedIds(new Set());
       fetchEmails(1, search, filter, false, domainFilter);
       fetchFolders();
     } catch (e: any) {
-      showError(e.message || "Bulk action failed");
+      toast(e.message || "Bulk action failed", "error");
     } finally {
       setBulkActing(false);
     }
@@ -894,7 +900,7 @@ export default function InboxPage() {
                   <iframe
                     ref={iframeRef}
                     srcDoc={selected.html_body}
-                    sandbox=""
+                    sandbox="allow-same-origin"
                     title="Email preview"
                     className="w-full border-0 rounded-xl bg-white"
                     style={{ minHeight: "300px", height: "100%", colorScheme: "light" }}
@@ -1018,7 +1024,6 @@ export default function InboxPage() {
         )}
       </div>
       {confirmDialog}
-      {toast}
     </div>
   );
 }

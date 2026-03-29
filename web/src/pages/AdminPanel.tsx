@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Link, Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { api, post, patch, del } from "../lib/api";
-import { useConfirmDialog, useToast } from "../components/ui";
+import { useConfirmDialog } from "../components/ui";
+import { useToast } from "../components/Toast";
 
 // ---- Sidebar nav items ----
 const adminNav = [
@@ -230,7 +231,7 @@ function AdminAccounts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
   useEffect(() => {
     api("/admin/accounts")
       .then((r) => setAccounts(r.data))
@@ -243,7 +244,8 @@ function AdminAccounts() {
     try {
       await patch(`/admin/${id}/role`, { role: newRole });
       setAccounts((prev) => prev.map((a) => a.id === id ? { ...a, role: newRole } : a));
-    } catch (e: any) { showError(e.message || "Failed to update role"); }
+      toast("Role updated");
+    } catch (e: any) { toast(e.message || "Failed to update role", "error"); }
   };
   const removeAccount = (id: string) => {
     confirm({
@@ -254,7 +256,8 @@ function AdminAccounts() {
         try {
           await del(`/admin/${id}`);
           setAccounts((prev) => prev.filter((a) => a.id !== id));
-        } catch (e: any) { showError(e.message || "Failed to delete account"); }
+          toast("Account deleted");
+        } catch (e: any) { toast(e.message || "Failed to delete account", "error"); }
       },
     });
   };
@@ -278,7 +281,6 @@ function AdminAccounts() {
         </tr>
       ))}</tbody></table></div></div>
       {confirmDialog}
-      {toast}
     </div>
   );
 }
@@ -381,7 +383,7 @@ function AdminWarmups() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { toast } = useToast();
   useEffect(() => { api("/admin/warmups").then((r) => setWarmups(r.data)).catch((e: any) => setError(e.message || "Failed to load")).finally(() => setLoading(false)); }, []);
 
   const cancelWarmup = (id: string) => {
@@ -393,7 +395,8 @@ function AdminWarmups() {
         try {
           await post(`/admin/warmups/${id}/cancel`, {});
           setWarmups((prev) => prev.map((w) => w.id === id ? { ...w, status: "cancelled" } : w));
-        } catch (e: any) { showError(e.message || "Failed to cancel warmup"); }
+          toast("Warmup cancelled");
+        } catch (e: any) { toast(e.message || "Failed to cancel warmup", "error"); }
       },
     });
   };
@@ -445,7 +448,6 @@ function AdminWarmups() {
         ))}</tbody></table></div></div>
       )}
       {confirmDialog}
-      {toast}
     </div>
   );
 }
