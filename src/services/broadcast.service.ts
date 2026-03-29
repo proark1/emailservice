@@ -1,4 +1,4 @@
-import { eq, and, desc, lte, inArray } from "drizzle-orm";
+import { eq, and, desc, lte } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { broadcasts } from "../db/schema/index.js";
 import { contacts } from "../db/schema/index.js";
@@ -108,7 +108,7 @@ export async function executeBroadcast(broadcastId: string) {
   const [broadcast] = await db
     .update(broadcasts)
     .set({ status: "sending", updatedAt: new Date() })
-    .where(and(eq(broadcasts.id, broadcastId), inArray(broadcasts.status, ["scheduled", "sending"])))
+    .where(and(eq(broadcasts.id, broadcastId), eq(broadcasts.status, "scheduled")))
     .returning();
 
   if (!broadcast) throw new NotFoundError("Broadcast");

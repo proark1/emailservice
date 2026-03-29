@@ -29,7 +29,7 @@ export async function checkIdempotencyKey(
       ),
     );
 
-  if (existing && existing.responseStatus !== null) {
+  if (existing && existing.responseStatus !== 0) {
     return {
       status: existing.responseStatus,
       body: existing.responseBody,
@@ -50,11 +50,11 @@ export async function claimIdempotencyKey(
   const db = getDb();
   const expiresAt = new Date(Date.now() + TTL_HOURS * 3_600_000);
 
-  // Insert a placeholder row — if it already exists, another request owns it
+  // Insert a placeholder row (responseStatus=0 means "in progress") — if it already exists, another request owns it
   const result = await db.insert(idempotencyKeys).values({
     accountId,
     key,
-    responseStatus: null as any,
+    responseStatus: 0,
     responseBody: null,
     expiresAt,
   }).onConflictDoNothing().returning({ id: idempotencyKeys.id });
