@@ -21,4 +21,6 @@ export const webhookDeliveries = pgTable("webhook_deliveries", {
 }, (table) => [
   index("idx_webhook_deliveries_webhook_id").on(table.webhookId),
   index("idx_webhook_deliveries_status").on(table.status),
+  index("idx_webhook_deliveries_webhook_status").on(table.webhookId, table.status),
+  index("idx_webhook_deliveries_status_retry").on(table.status, table.nextRetryAt),
 ]);

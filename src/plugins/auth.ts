@@ -6,6 +6,10 @@ import { apiKeys, accounts } from "../db/schema/index.js";
 import { verifyApiKey, getKeyPrefix } from "../lib/crypto.js";
 import { UnauthorizedError } from "../lib/errors.js";
 
+// Throttle lastUsedAt updates: only write once per key per 5 minutes
+const LAST_USED_THROTTLE_MS = 5 * 60 * 1000;
+const lastUsedCache = new Map<string, number>();
+
 async function authPlugin(app: FastifyInstance) {
   app.decorateRequest("account", undefined as any);
   app.decorateRequest("apiKey", undefined as any);
@@ -55,12 +59,17 @@ async function authPlugin(app: FastifyInstance) {
       throw new UnauthorizedError("Account not found");
     }
 
-    // Update last used timestamp (fire and forget)
-    db.update(apiKeys)
-      .set({ lastUsedAt: new Date() })
-      .where(eq(apiKeys.id, matchedKey.id))
-      .execute()
-      .catch(() => {});
+    // Update last used timestamp (throttled — at most once per 5 minutes per key)
+    const now = Date.now();
+    const lastUpdated = lastUsedCache.get(matchedKey.id) ?? 0;
+    if (now - lastUpdated > LAST_USED_THROTTLE_MS) {
+      lastUsedCache.set(matchedKey.id, now);
+      db.update(apiKeys)
+        .set({ lastUsedAt: new Date() })
+        .where(eq(apiKeys.id, matchedKey.id))
+        .execute()
+        .catch(() => {});
+    }
 
     request.account = account;
     request.apiKey = matchedKey;

@@ -18,4 +18,5 @@ export const emailEvents = pgTable("email_events", {
 }, (table) => [
   index("idx_email_events_email_id").on(table.emailId),
   index("idx_email_events_account_type_created").on(table.accountId, table.type, table.createdAt),
+  index("idx_email_events_account_created").on(table.accountId, table.createdAt),
 ]);

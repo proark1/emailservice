@@ -13,4 +13,5 @@ export const inboundAttachments = pgTable("inbound_attachments", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("idx_inbound_attachments_email").on(table.inboundEmailId),
+  index("idx_inbound_attachments_account").on(table.accountId),
 ]);

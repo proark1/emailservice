@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { accounts } from "./accounts.js";
 import { emails } from "./emails.js";
 
@@ -14,4 +14,5 @@ export const suppressions = pgTable("suppressions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   uniqueIndex("idx_suppressions_account_email").on(table.accountId, table.email),
+  index("idx_suppressions_account_created").on(table.accountId, table.createdAt),
 ]);

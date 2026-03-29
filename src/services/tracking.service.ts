@@ -18,18 +18,17 @@ export function getTrackingPixel(): Buffer {
 export async function recordOpen(emailId: string) {
   const db = getDb();
 
-  // Increment open count
-  await db
+  // Increment open count and fetch the row in one round-trip
+  const [email] = await db
     .update(emails)
     .set({
       openCount: sql`${emails.openCount} + 1`,
       lastEventAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(emails.id, emailId));
+    .where(eq(emails.id, emailId))
+    .returning();
 
-  // Get account ID for event
-  const [email] = await db.select().from(emails).where(eq(emails.id, emailId));
   if (!email) return;
 
   const [event] = await db.insert(emailEvents).values({
@@ -54,16 +53,17 @@ export async function recordOpen(emailId: string) {
 export async function recordClick(emailId: string, url: string) {
   const db = getDb();
 
-  await db
+  // Increment click count and fetch the row in one round-trip
+  const [email] = await db
     .update(emails)
     .set({
       clickCount: sql`${emails.clickCount} + 1`,
       lastEventAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(emails.id, emailId));
+    .where(eq(emails.id, emailId))
+    .returning();
 
-  const [email] = await db.select().from(emails).where(eq(emails.id, emailId));
   if (!email) return;
 
   const [event] = await db.insert(emailEvents).values({

@@ -17,23 +17,15 @@ export async function sendBatch(accountId: string, emailInputs: SendEmailInput[]
     })
     .returning();
 
-  const results: Array<{ success: boolean; data?: any; error?: string }> = [];
-  let sentCount = 0;
-  let failedCount = 0;
+  const settled = await Promise.allSettled(emailInputs.map((input) => sendEmail(accountId, input)));
 
-  for (const input of emailInputs) {
-    try {
-      const result = await sendEmail(accountId, input);
-      results.push({ success: true, data: result.response });
-      sentCount++;
-    } catch (error) {
-      results.push({
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-      failedCount++;
-    }
-  }
+  const results: Array<{ success: boolean; data?: any; error?: string }> = settled.map((r) => {
+    if (r.status === "fulfilled") return { success: true, data: r.value.response };
+    return { success: false, error: r.reason instanceof Error ? r.reason.message : "Unknown error" };
+  });
+
+  const sentCount = results.filter((r) => r.success).length;
+  const failedCount = results.filter((r) => !r.success).length;
 
   // Update batch status
   const status = failedCount === 0

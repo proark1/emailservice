@@ -6,8 +6,15 @@ import { emails, emailEvents, domains } from "../db/schema/index.js";
 import { getDkimPrivateKey } from "./dkim.service.js";
 import { transformHtml } from "../lib/html-transform.js";
 import { getConfig } from "../config/index.js";
+import { encryptPrivateKey } from "../lib/crypto.js";
+import { processDeliveryFailure } from "./suppression.service.js";
 
 let _transport: nodemailer.Transporter | null = null;
+
+// Cache decrypted DKIM keys to avoid AES-GCM decryption on every send
+const DKIM_CACHE_TTL_MS = 10 * 60 * 1000;
+interface DkimCacheEntry { privateKey: string; domainName: string; keySelector: string; expiresAt: number }
+const dkimCache = new Map<string, DkimCacheEntry>();
 
 function getOrCreateTransport(): nodemailer.Transporter {
   if (!_transport) _transport = createTransport();
@@ -67,16 +74,23 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
   if (!email) return;
 
   try {
-    // Load domain for DKIM
+    // Load domain for DKIM (cache decrypted key to avoid per-send AES-GCM decryption)
     let dkimConfig = undefined;
     if (email.domainId) {
-      const [domain] = await db.select().from(domains).where(eq(domains.id, email.domainId));
-      if (domain?.dkimPrivateKey && domain.dkimSelector) {
-        try {
-          const privateKey = getDkimPrivateKey(domain.dkimPrivateKey);
-          dkimConfig = { domainName: domain.name, keySelector: domain.dkimSelector, privateKey };
-        } catch (err) {
-          console.error(`[email-sender] Failed to load DKIM key for domain ${domain.name}:`, err);
+      const now = Date.now();
+      const cached = dkimCache.get(email.domainId);
+      if (cached && cached.expiresAt > now) {
+        dkimConfig = { domainName: cached.domainName, keySelector: cached.keySelector, privateKey: cached.privateKey };
+      } else {
+        const [domain] = await db.select().from(domains).where(eq(domains.id, email.domainId));
+        if (domain?.dkimPrivateKey && domain.dkimSelector) {
+          try {
+            const privateKey = getDkimPrivateKey(domain.dkimPrivateKey);
+            dkimConfig = { domainName: domain.name, keySelector: domain.dkimSelector, privateKey };
+            dkimCache.set(email.domainId, { privateKey, domainName: domain.name, keySelector: domain.dkimSelector, expiresAt: now + DKIM_CACHE_TTL_MS });
+          } catch (err) {
+            console.error(`[email-sender] Failed to load DKIM key for domain ${domain.name}:`, err);
+          }
         }
       }
     }
@@ -99,7 +113,6 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
     if (email.toAddresses?.length) {
       const recipientEmail = Array.isArray(email.toAddresses) ? email.toAddresses[0] : email.toAddresses;
       // Encrypt unsubscribe data to prevent accountId/email leakage
-      const { encryptPrivateKey } = await import("../lib/crypto.js");
       const encodedData = encodeURIComponent(encryptPrivateKey(JSON.stringify({ a: accountId, e: recipientEmail }), config.ENCRYPTION_KEY));
       unsubscribeHeaders["List-Unsubscribe"] = `<${config.BASE_URL}/unsubscribe/${encodedData}>, <mailto:unsubscribe@${fromDomain}>`;
     }
@@ -218,7 +231,6 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
 
     if (errorMessage.includes("550") || errorMessage.includes("bounce") || errorMessage.includes("rejected") || errorMessage.includes("undeliverable")) {
       try {
-        const { processDeliveryFailure } = await import("./suppression.service.js");
         for (const addr of (email.toAddresses || [])) {
           await processDeliveryFailure(accountId, addr, "bounce");
         }

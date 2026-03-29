@@ -12,8 +12,9 @@ async function processEmailSend(job: Job<EmailSendJobData>) {
 }
 
 export function createEmailSendWorker() {
+  const concurrency = Number(process.env.EMAIL_SEND_CONCURRENCY) || 10;
   return new Worker("email.send", processEmailSend, {
     connection: getRedisConnection(),
-    concurrency: 10,
+    concurrency,
   });
 }

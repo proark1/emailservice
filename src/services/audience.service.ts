@@ -1,7 +1,8 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt, desc } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { audiences, contacts } from "../db/schema/index.js";
 import { NotFoundError, ConflictError } from "../lib/errors.js";
+import { buildPaginatedResponse, type PaginationParams } from "../lib/pagination.js";
 import type { CreateAudienceInput } from "../schemas/audience.schema.js";
 import type { CreateContactInput, UpdateContactInput } from "../schemas/contact.schema.js";
 
@@ -68,10 +69,19 @@ export async function createContact(accountId: string, audienceId: string, input
   }
 }
 
-export async function listContacts(accountId: string, audienceId: string) {
+export async function listContacts(accountId: string, audienceId: string, pagination: PaginationParams) {
   await getAudience(accountId, audienceId);
   const db = getDb();
-  return db.select().from(contacts).where(eq(contacts.audienceId, audienceId));
+  const conditions = pagination.cursor
+    ? and(eq(contacts.audienceId, audienceId), gt(contacts.id, pagination.cursor))
+    : eq(contacts.audienceId, audienceId);
+  const rows = await db
+    .select()
+    .from(contacts)
+    .where(conditions)
+    .orderBy(contacts.id)
+    .limit(pagination.limit + 1);
+  return buildPaginatedResponse(rows, pagination.limit);
 }
 
 export async function getContact(accountId: string, audienceId: string, contactId: string) {

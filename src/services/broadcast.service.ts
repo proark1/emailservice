@@ -1,10 +1,11 @@
-import { eq, and, desc, lte } from "drizzle-orm";
+import { eq, and, desc, lte, lt } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { broadcasts } from "../db/schema/index.js";
 import { contacts } from "../db/schema/index.js";
 import { domains } from "../db/schema/index.js";
 import { audiences } from "../db/schema/index.js";
 import { NotFoundError, ValidationError } from "../lib/errors.js";
+import { buildPaginatedResponse, type PaginationParams } from "../lib/pagination.js";
 import { sendEmail } from "./email.service.js";
 import type { CreateBroadcastInput } from "../schemas/broadcast.schema.js";
 
@@ -131,21 +132,27 @@ export async function executeBroadcast(broadcastId: string) {
   let sentCount = 0;
   let failedCount = 0;
 
-  for (const contact of subscribedContacts) {
-    try {
-      await sendEmail(broadcast.accountId, {
-        from: fromString,
-        to: [contact.email],
-        subject: broadcast.subject,
-        html: broadcast.htmlBody ?? undefined,
-        text: broadcast.textBody ?? undefined,
-        reply_to: broadcast.replyTo ?? undefined,
-        headers: broadcast.headers ?? undefined,
-        tags: broadcast.tags ?? undefined,
-      });
-      sentCount++;
-    } catch {
-      failedCount++;
+  // Process contacts in batches to avoid overwhelming the queue/DB
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < subscribedContacts.length; i += BATCH_SIZE) {
+    const batch = subscribedContacts.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map((contact) =>
+        sendEmail(broadcast.accountId, {
+          from: fromString,
+          to: [contact.email],
+          subject: broadcast.subject,
+          html: broadcast.htmlBody ?? undefined,
+          text: broadcast.textBody ?? undefined,
+          reply_to: broadcast.replyTo ?? undefined,
+          headers: broadcast.headers ?? undefined,
+          tags: broadcast.tags ?? undefined,
+        }),
+      ),
+    );
+    for (const result of results) {
+      if (result.status === "fulfilled") sentCount++;
+      else failedCount++;
     }
   }
 
@@ -215,13 +222,18 @@ export async function getBroadcast(accountId: string, id: string) {
   return broadcast;
 }
 
-export async function listBroadcasts(accountId: string) {
+export async function listBroadcasts(accountId: string, pagination: PaginationParams) {
   const db = getDb();
-  return db
+  const conditions = pagination.cursor
+    ? and(eq(broadcasts.accountId, accountId), lt(broadcasts.id, pagination.cursor))
+    : eq(broadcasts.accountId, accountId);
+  const rows = await db
     .select()
     .from(broadcasts)
-    .where(eq(broadcasts.accountId, accountId))
-    .orderBy(desc(broadcasts.createdAt));
+    .where(conditions)
+    .orderBy(desc(broadcasts.createdAt))
+    .limit(pagination.limit + 1);
+  return buildPaginatedResponse(rows, pagination.limit);
 }
 
 export async function deleteBroadcast(accountId: string, id: string) {

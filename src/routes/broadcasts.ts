@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { createBroadcastSchema } from "../schemas/broadcast.schema.js";
 import * as broadcastService from "../services/broadcast.service.js";
+import { paginationSchema } from "../lib/pagination.js";
 
 export default async function broadcastRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
@@ -16,8 +17,9 @@ export default async function broadcastRoutes(app: FastifyInstance) {
 
   // GET /v1/broadcasts
   app.get("/", async (request) => {
-    const list = await broadcastService.listBroadcasts(request.account.id);
-    return { data: list.map(broadcastService.formatBroadcastResponse) };
+    const pagination = paginationSchema.parse(request.query);
+    const result = await broadcastService.listBroadcasts(request.account.id, pagination);
+    return { data: result.data.map(broadcastService.formatBroadcastResponse), pagination: result.pagination };
   });
 
   // GET /v1/broadcasts/:id

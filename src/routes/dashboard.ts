@@ -52,12 +52,14 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.get("/stats", async (request) => {
     const db = getDb();
     const id = request.account.id;
-    const [e] = await db.select({ count: count() }).from(emails).where(eq(emails.accountId, id));
-    const [d] = await db.select({ count: count() }).from(domains).where(eq(domains.accountId, id));
-    const [a] = await db.select({ count: count() }).from(apiKeys).where(and(eq(apiKeys.accountId, id), isNull(apiKeys.revokedAt)));
-    const [w] = await db.select({ count: count() }).from(webhooks).where(eq(webhooks.accountId, id));
-    const [au] = await db.select({ count: count() }).from(audiences).where(eq(audiences.accountId, id));
-    const [vd] = await db.select({ count: count() }).from(domains).where(and(eq(domains.accountId, id), eq(domains.status, "verified")));
+    const [[e], [d], [a], [w], [au], [vd]] = await Promise.all([
+      db.select({ count: count() }).from(emails).where(eq(emails.accountId, id)),
+      db.select({ count: count() }).from(domains).where(eq(domains.accountId, id)),
+      db.select({ count: count() }).from(apiKeys).where(and(eq(apiKeys.accountId, id), isNull(apiKeys.revokedAt))),
+      db.select({ count: count() }).from(webhooks).where(eq(webhooks.accountId, id)),
+      db.select({ count: count() }).from(audiences).where(eq(audiences.accountId, id)),
+      db.select({ count: count() }).from(domains).where(and(eq(domains.accountId, id), eq(domains.status, "verified"))),
+    ]);
     return { data: { emails: Number(e.count), domains: Number(d.count), verified_domains: Number(vd.count), api_keys: Number(a.count), webhooks: Number(w.count), audiences: Number(au.count) } };
   });
 
@@ -637,8 +639,10 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   });
 
   app.get<{ Params: { id: string } }>("/audiences/:id/contacts", async (request) => {
-    const list = await audienceService.listContacts(request.account.id, request.params.id);
-    return { data: list.map(audienceService.formatContactResponse) };
+    const { paginationSchema } = await import("../lib/pagination.js");
+    const pagination = paginationSchema.parse(request.query);
+    const result = await audienceService.listContacts(request.account.id, request.params.id, pagination);
+    return { data: result.data.map(audienceService.formatContactResponse), pagination: result.pagination };
   });
 
   app.post<{ Params: { id: string } }>("/audiences/:id/contacts", async (request, reply) => {
@@ -671,11 +675,12 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
   // CSV Export
   app.get<{ Params: { id: string } }>("/audiences/:id/contacts/export", async (request, reply) => {
+    const { contacts: contactsTable } = await import("../db/schema/index.js");
     const audience = await audienceService.getAudience(request.account.id, request.params.id);
-    const contacts = await audienceService.listContacts(request.account.id, request.params.id);
+    const allContacts = await getDb().select().from(contactsTable).where(eq(contactsTable.audienceId, audience.id));
 
     const header = "email,first_name,last_name,subscribed\n";
-    const rows = contacts.map(c => {
+    const rows = allContacts.map(c => {
       const formatted = audienceService.formatContactResponse(c);
       return `${formatted.email},${formatted.first_name || ""},${formatted.last_name || ""},${formatted.subscribed}`;
     }).join("\n");
@@ -719,8 +724,10 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
   // --- Broadcasts ---
   app.get("/broadcasts", async (request) => {
-    const list = await broadcastService.listBroadcasts(request.account.id);
-    return { data: list.map(broadcastService.formatBroadcastResponse) };
+    const { paginationSchema } = await import("../lib/pagination.js");
+    const pagination = paginationSchema.parse(request.query);
+    const result = await broadcastService.listBroadcasts(request.account.id, pagination);
+    return { data: result.data.map(broadcastService.formatBroadcastResponse), pagination: result.pagination };
   });
 
   app.post("/broadcasts", async (request, reply) => {
@@ -792,8 +799,10 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
   // --- Templates ---
   app.get("/templates", async (request) => {
-    const list = await templateService.listTemplates(request.account.id);
-    return { data: list.map(templateService.formatTemplateResponse) };
+    const { paginationSchema } = await import("../lib/pagination.js");
+    const pagination = paginationSchema.parse(request.query);
+    const result = await templateService.listTemplates(request.account.id, pagination);
+    return { data: result.data.map(templateService.formatTemplateResponse), pagination: result.pagination };
   });
 
   app.post("/templates", async (request, reply) => {

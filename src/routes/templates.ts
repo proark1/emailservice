@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { createTemplateSchema, updateTemplateSchema } from "../schemas/template.schema.js";
 import * as templateService from "../services/template.service.js";
+import { paginationSchema } from "../lib/pagination.js";
 
 export default async function templateRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
@@ -16,8 +17,9 @@ export default async function templateRoutes(app: FastifyInstance) {
 
   // GET /v1/templates
   app.get("/", async (request) => {
-    const list = await templateService.listTemplates(request.account.id);
-    return { data: list.map(templateService.formatTemplateResponse) };
+    const pagination = paginationSchema.parse(request.query);
+    const result = await templateService.listTemplates(request.account.id, pagination);
+    return { data: result.data.map(templateService.formatTemplateResponse), pagination: result.pagination };
   });
 
   // GET /v1/templates/:id
