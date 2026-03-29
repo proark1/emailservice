@@ -120,9 +120,9 @@ export async function listDrafts(accountId: string, options: { limit?: number; c
 
   if (options.cursor) {
     const { lt } = await import("drizzle-orm");
-    const [cursorEmail] = await db.select({ createdAt: emails.createdAt }).from(emails).where(eq(emails.id, options.cursor));
+    const [cursorEmail] = await db.select({ updatedAt: emails.updatedAt }).from(emails).where(and(eq(emails.id, options.cursor), eq(emails.accountId, accountId)));
     if (cursorEmail) {
-      conditions.push(lt(emails.createdAt, cursorEmail.createdAt));
+      conditions.push(lt(emails.updatedAt, cursorEmail.updatedAt));
     }
   }
 
@@ -183,6 +183,7 @@ export async function sendDraft(accountId: string, draftId: string) {
     sentFolderId = sentFolder.id;
   } catch {}
 
+  // Atomically transition draft → queued to prevent double-send race condition
   const [updated] = await db
     .update(emails)
     .set({
@@ -192,8 +193,10 @@ export async function sendDraft(accountId: string, draftId: string) {
       status: "queued",
       updatedAt: new Date(),
     })
-    .where(and(eq(emails.id, draftId), eq(emails.accountId, accountId)))
+    .where(and(eq(emails.id, draftId), eq(emails.accountId, accountId), eq(emails.isDraft, true)))
     .returning();
+
+  if (!updated) throw new ValidationError("Draft has already been sent or no longer exists");
 
   // Enqueue for sending
   const { isRedisConfigured, getEmailSendQueue } = await import("../queues/index.js");

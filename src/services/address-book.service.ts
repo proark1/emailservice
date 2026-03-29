@@ -1,4 +1,8 @@
 import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
+
+function escapeIlike(str: string): string {
+  return str.replace(/[%_\\]/g, (ch) => `\\${ch}`);
+}
 import { getDb } from "../db/index.js";
 import { addressBookContacts, inboundEmails } from "../db/schema/index.js";
 import { NotFoundError, ConflictError } from "../lib/errors.js";
@@ -30,11 +34,12 @@ export async function listContacts(accountId: string, search?: string) {
   const db = getDb();
   const conditions = [eq(addressBookContacts.accountId, accountId)];
   if (search) {
+    const escaped = escapeIlike(search);
     conditions.push(
       or(
-        ilike(addressBookContacts.email, `%${search}%`),
-        ilike(addressBookContacts.name, `%${search}%`),
-        ilike(addressBookContacts.company, `%${search}%`),
+        ilike(addressBookContacts.email, `%${escaped}%`),
+        ilike(addressBookContacts.name, `%${escaped}%`),
+        ilike(addressBookContacts.company, `%${escaped}%`),
       )!,
     );
   }
@@ -84,7 +89,7 @@ export async function deleteContact(accountId: string, contactId: string) {
 
 export async function autocomplete(accountId: string, query: string) {
   const db = getDb();
-  const q = `%${query}%`;
+  const q = `%${escapeIlike(query)}%`;
 
   // Search address book contacts
   const bookContacts = await db

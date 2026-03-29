@@ -1,4 +1,4 @@
-import { eq, and, desc, lte } from "drizzle-orm";
+import { eq, and, desc, lte, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { broadcasts } from "../db/schema/index.js";
 import { contacts } from "../db/schema/index.js";
@@ -104,18 +104,14 @@ export async function createBroadcast(accountId: string, input: CreateBroadcastI
 export async function executeBroadcast(broadcastId: string) {
   const db = getDb();
 
+  // Atomically claim the broadcast for sending — prevents duplicate execution
   const [broadcast] = await db
-    .select()
-    .from(broadcasts)
-    .where(eq(broadcasts.id, broadcastId));
-
-  if (!broadcast) throw new NotFoundError("Broadcast");
-
-  // Mark as sending
-  await db
     .update(broadcasts)
     .set({ status: "sending", updatedAt: new Date() })
-    .where(eq(broadcasts.id, broadcastId));
+    .where(and(eq(broadcasts.id, broadcastId), inArray(broadcasts.status, ["scheduled", "sending"])))
+    .returning();
+
+  if (!broadcast) throw new NotFoundError("Broadcast");
 
   // Get all subscribed contacts in the audience
   const subscribedContacts = await db

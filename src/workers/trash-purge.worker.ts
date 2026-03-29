@@ -4,7 +4,7 @@ import { getRedisConnection, getTrashPurgeQueue } from "../queues/index.js";
 import { getDb } from "../db/index.js";
 import { inboundEmails, emails, inboundAttachments } from "../db/schema/index.js";
 import { eq, inArray } from "drizzle-orm";
-import * as fs from "fs";
+import * as fs from "fs/promises";
 import * as path from "path";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -37,7 +37,12 @@ async function purgeTrash() {
     const storageDir = path.join(process.cwd(), "data", "attachments");
     for (const att of attachments) {
       try {
-        fs.unlinkSync(path.join(storageDir, att.storagePath));
+        // Sanitize path to prevent directory traversal
+        const resolvedPath = path.resolve(storageDir, att.storagePath);
+        if (!resolvedPath.startsWith(storageDir + path.sep)) {
+          continue;
+        }
+        await fs.unlink(resolvedPath);
       } catch {}
     }
 

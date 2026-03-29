@@ -1,4 +1,8 @@
 import { eq, and, desc, or, ilike, isNull, sql, inArray } from "drizzle-orm";
+
+function escapeIlike(str: string): string {
+  return str.replace(/[%_\\]/g, (ch) => `\\${ch}`);
+}
 import { getDb } from "../db/index.js";
 import { inboundEmails } from "../db/schema/index.js";
 import { NotFoundError, ValidationError } from "../lib/errors.js";
@@ -36,11 +40,12 @@ export async function listInboxEmails(accountId: string, input: ListInboxInput) 
     conditions.push(eq(inboundEmails.threadId, input.thread_id));
   }
   if (input.search) {
+    const escaped = escapeIlike(input.search);
     conditions.push(
       or(
-        ilike(inboundEmails.subject, `%${input.search}%`),
-        ilike(inboundEmails.fromAddress, `%${input.search}%`),
-        ilike(inboundEmails.fromName, `%${input.search}%`),
+        ilike(inboundEmails.subject, `%${escaped}%`),
+        ilike(inboundEmails.fromAddress, `%${escaped}%`),
+        ilike(inboundEmails.fromName, `%${escaped}%`),
       ),
     );
   }
@@ -152,35 +157,36 @@ export async function bulkAction(accountId: string, input: BulkActionInput) {
     eq(inboundEmails.accountId, accountId),
   );
 
+  let affected: { id: string }[] = [];
   switch (action) {
     case "mark_read":
-      await db.update(inboundEmails).set({ isRead: true }).where(conditions!);
+      affected = await db.update(inboundEmails).set({ isRead: true }).where(conditions!).returning({ id: inboundEmails.id });
       break;
     case "mark_unread":
-      await db.update(inboundEmails).set({ isRead: false }).where(conditions!);
+      affected = await db.update(inboundEmails).set({ isRead: false }).where(conditions!).returning({ id: inboundEmails.id });
       break;
     case "star":
-      await db.update(inboundEmails).set({ isStarred: true }).where(conditions!);
+      affected = await db.update(inboundEmails).set({ isStarred: true }).where(conditions!).returning({ id: inboundEmails.id });
       break;
     case "unstar":
-      await db.update(inboundEmails).set({ isStarred: false }).where(conditions!);
+      affected = await db.update(inboundEmails).set({ isStarred: false }).where(conditions!).returning({ id: inboundEmails.id });
       break;
     case "move_to_folder": {
       if (!folder_id) throw new ValidationError("folder_id is required for move_to_folder action");
-      await db.update(inboundEmails).set({ folderId: folder_id, deletedAt: null }).where(conditions!);
+      affected = await db.update(inboundEmails).set({ folderId: folder_id, deletedAt: null }).where(conditions!).returning({ id: inboundEmails.id });
       break;
     }
     case "move_to_trash": {
       const trashFolder = await getFolderBySlug(accountId, "trash");
-      await db.update(inboundEmails).set({ folderId: trashFolder.id, deletedAt: new Date() }).where(conditions!);
+      affected = await db.update(inboundEmails).set({ folderId: trashFolder.id, deletedAt: new Date() }).where(conditions!).returning({ id: inboundEmails.id });
       break;
     }
     case "permanent_delete":
-      await db.delete(inboundEmails).where(conditions!);
+      affected = await db.delete(inboundEmails).where(conditions!).returning({ id: inboundEmails.id });
       break;
   }
 
-  return { success: true, count: ids.length };
+  return { success: true, count: affected.length };
 }
 
 export function formatInboxEmailResponse(email: typeof inboundEmails.$inferSelect) {

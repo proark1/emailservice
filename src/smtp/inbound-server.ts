@@ -52,6 +52,9 @@ export function createInboundServer(): SMTPServer {
     onData(stream, session, callback) {
       const chunks: Buffer[] = [];
       stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+      stream.on("error", (err: Error) => {
+        callback(err);
+      });
       stream.on("end", async () => {
         try {
           const raw = Buffer.concat(chunks).toString("utf8");
@@ -74,6 +77,18 @@ export function createInboundServer(): SMTPServer {
             }
           }
 
+          // Extract References header (once, outside the loop)
+          const referencesRaw = parsed.references;
+          const references: string[] = Array.isArray(referencesRaw) ? referencesRaw : referencesRaw ? [referencesRaw] : [];
+
+          // Extract attachments (once, outside the loop)
+          const attachmentData = (parsed.attachments || []).map((att) => ({
+            filename: att.filename || "attachment",
+            contentType: att.contentType || "application/octet-stream",
+            size: att.size || 0,
+            content: att.content.toString("base64"),
+          }));
+
           // Process ALL recipients, not just the first one
           for (const rcpt of session.envelope.rcptTo) {
             const toAddress = rcpt.address;
@@ -82,18 +97,6 @@ export function createInboundServer(): SMTPServer {
 
             const domain = await lookupReceiveDomain(recipientDomain);
             if (!domain) continue;
-
-            // Extract References header
-          const referencesRaw = parsed.references;
-          const references: string[] = Array.isArray(referencesRaw) ? referencesRaw : referencesRaw ? [referencesRaw] : [];
-
-          // Extract attachments
-          const attachmentData = (parsed.attachments || []).map((att) => ({
-            filename: att.filename || "attachment",
-            contentType: att.contentType || "application/octet-stream",
-            size: att.size || 0,
-            content: att.content.toString("base64"),
-          }));
 
           const emailData = {
               accountId: domain.accountId,
@@ -134,6 +137,8 @@ export function createInboundServer(): SMTPServer {
               htmlBody: emailData.html || null,
               messageId: emailData.messageId,
               inReplyTo: emailData.inReplyTo,
+              references: emailData.references.length > 0 ? emailData.references : null,
+              hasAttachments: emailData.attachments.length > 0,
               headers: (emailData.headers as Record<string, string>) || null,
             });
           }

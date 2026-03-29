@@ -3,7 +3,7 @@ import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, suppressions } from "../db/schema/index.js";
 import { isRedisConfigured, getEmailSendQueue } from "../queues/index.js";
 import { transformHtml } from "../lib/html-transform.js";
-import { checkIdempotencyKey, storeIdempotencyKey } from "../lib/idempotency.js";
+import { checkIdempotencyKey, claimIdempotencyKey, storeIdempotencyKey } from "../lib/idempotency.js";
 import { ValidationError, NotFoundError } from "../lib/errors.js";
 import type { SendEmailInput } from "../schemas/email.schema.js";
 
@@ -23,6 +23,12 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
     const cached = await checkIdempotencyKey(accountId, input.idempotency_key);
     if (cached) {
       return { cached: true, response: cached };
+    }
+    // Atomically claim the key to prevent concurrent duplicate processing
+    const claimed = await claimIdempotencyKey(accountId, input.idempotency_key);
+    if (!claimed) {
+      // Another request is already processing this key — treat as duplicate
+      return { cached: true, response: null };
     }
   }
 
@@ -221,6 +227,11 @@ export async function listEmails(accountId: string, options: { limit: number; cu
   const db = getDb();
   const conditions = [eq(emails.accountId, accountId)];
 
+  // Filter by status if provided
+  if (options.status) {
+    conditions.push(eq(emails.status, options.status as any));
+  }
+
   // Cursor-based pagination: cursor is an email ID, fetch items created before it
   if (options.cursor) {
     const { lt } = await import("drizzle-orm");
@@ -253,7 +264,7 @@ export async function cancelScheduledEmail(accountId: string, emailId: string) {
 
   const [updated] = await db
     .update(emails)
-    .set({ status: "failed", updatedAt: new Date() })
+    .set({ status: "cancelled", updatedAt: new Date() })
     .where(and(eq(emails.id, emailId), eq(emails.accountId, accountId)))
     .returning();
 
@@ -262,8 +273,8 @@ export async function cancelScheduledEmail(accountId: string, emailId: string) {
   await db.insert(emailEvents).values({
     emailId: email.id,
     accountId,
-    type: "failed",
-    data: { reason: "cancelled" },
+    type: "cancelled",
+    data: { reason: "Cancelled by user" },
   });
 
   return updated;

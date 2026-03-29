@@ -39,15 +39,16 @@ async function processScheduledEmails(_job: Job) {
 
 export function createScheduledEmailWorker() {
   // Add a repeatable job that runs every 30 seconds
-  getScheduledEmailQueue().add(
-    "check-scheduled",
-    {},
-    {
-      repeat: { every: 30_000 },
+  getScheduledEmailQueue().upsertJobScheduler("scheduled-email-check", {
+    every: 30_000,
+  }, {
+    name: "check-scheduled",
+    data: {},
+    opts: {
       removeOnComplete: true,
       removeOnFail: true,
     },
-  ).catch((err) => {
+  }).catch((err) => {
     console.error("[scheduled-email] Failed to register repeating job:", err);
   });
 

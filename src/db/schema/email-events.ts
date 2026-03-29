@@ -4,7 +4,7 @@ import { accounts } from "./accounts.js";
 
 export const emailEventTypeEnum = [
   "queued", "sent", "delivered", "bounced", "soft_bounced",
-  "opened", "clicked", "complained", "failed", "deferred",
+  "opened", "clicked", "complained", "failed", "deferred", "cancelled",
 ] as const;
 export type EmailEventType = (typeof emailEventTypeEnum)[number];
 

@@ -7,12 +7,26 @@ import type { CreateSignatureInput, UpdateSignatureInput } from "../schemas/sign
 export async function createSignature(accountId: string, input: CreateSignatureInput) {
   const db = getDb();
 
-  // If setting as default, unset other defaults first
   if (input.is_default) {
-    await db
-      .update(emailSignatures)
-      .set({ isDefault: false })
-      .where(and(eq(emailSignatures.accountId, accountId), eq(emailSignatures.isDefault, true)));
+    // Wrap in transaction to prevent leaving account with no default if insert fails
+    const [signature] = await db.transaction(async (tx) => {
+      await tx
+        .update(emailSignatures)
+        .set({ isDefault: false })
+        .where(and(eq(emailSignatures.accountId, accountId), eq(emailSignatures.isDefault, true)));
+
+      return tx
+        .insert(emailSignatures)
+        .values({
+          accountId,
+          name: input.name,
+          htmlBody: input.html_body,
+          textBody: input.text_body,
+          isDefault: true,
+        })
+        .returning();
+    });
+    return signature;
   }
 
   const [signature] = await db
@@ -22,7 +36,7 @@ export async function createSignature(accountId: string, input: CreateSignatureI
       name: input.name,
       htmlBody: input.html_body,
       textBody: input.text_body,
-      isDefault: input.is_default ?? false,
+      isDefault: false,
     })
     .returning();
   return signature;
@@ -46,18 +60,29 @@ export async function getSignature(accountId: string, signatureId: string) {
 export async function updateSignature(accountId: string, signatureId: string, input: UpdateSignatureInput) {
   const db = getDb();
 
-  if (input.is_default) {
-    await db
-      .update(emailSignatures)
-      .set({ isDefault: false })
-      .where(and(eq(emailSignatures.accountId, accountId), eq(emailSignatures.isDefault, true)));
-  }
-
   const updateData: Record<string, any> = { updatedAt: new Date() };
   if (input.name !== undefined) updateData.name = input.name;
   if (input.html_body !== undefined) updateData.htmlBody = input.html_body;
   if (input.text_body !== undefined) updateData.textBody = input.text_body;
   if (input.is_default !== undefined) updateData.isDefault = input.is_default;
+
+  if (input.is_default) {
+    // Wrap in transaction to prevent leaving account with no default if update fails
+    const [updated] = await db.transaction(async (tx) => {
+      await tx
+        .update(emailSignatures)
+        .set({ isDefault: false })
+        .where(and(eq(emailSignatures.accountId, accountId), eq(emailSignatures.isDefault, true)));
+
+      return tx
+        .update(emailSignatures)
+        .set(updateData)
+        .where(and(eq(emailSignatures.id, signatureId), eq(emailSignatures.accountId, accountId)))
+        .returning();
+    });
+    if (!updated) throw new NotFoundError("Signature");
+    return updated;
+  }
 
   const [updated] = await db
     .update(emailSignatures)

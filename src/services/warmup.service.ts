@@ -279,8 +279,6 @@ export async function executeWarmupRound(scheduleId: string) {
   const target = schedule.rampSchedule[schedule.currentDay - 1] || 2;
   const recipients = getWarmupRecipients(domain.name);
   let sentCount = 0;
-  let openCount = 0;
-  let replyCount = 0;
 
   // Spread sends across the day with small random delays
   for (let i = 0; i < target; i++) {

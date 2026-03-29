@@ -35,9 +35,11 @@ export function createWarmupWorker() {
   });
 
   // Add a recurring job that runs every hour to check for warmup rounds
-  getWarmupQueue().add("warmup-check", {}, {
-    repeat: { every: 3_600_000 }, // every 60 minutes
-    jobId: "warmup-recurring",
+  getWarmupQueue().upsertJobScheduler("warmup-recurring", {
+    every: 3_600_000, // every 60 minutes
+  }, {
+    name: "warmup-check",
+    data: {},
   }).catch(() => {});
 
   return worker;

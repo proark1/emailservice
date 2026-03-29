@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import crypto from "node:crypto";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains } from "../db/schema/index.js";
 import { getDkimPrivateKey } from "./dkim.service.js";
@@ -61,7 +61,7 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
   const [email] = await db
     .update(emails)
     .set({ status: "sending", updatedAt: new Date() })
-    .where(and(eq(emails.id, emailId), inArray(emails.status, ["queued", "sending"])))
+    .where(and(eq(emails.id, emailId), eq(emails.status, "queued")))
     .returning();
 
   if (!email) return;

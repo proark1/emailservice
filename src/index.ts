@@ -117,10 +117,24 @@ async function main() {
     return reply.sendFile("index.html", frontendPath);
   });
 
+  // Start workers in-process if Redis is available
+  const { isRedisConfigured, closeQueues } = await import("./queues/index.js");
+  let workers: Array<{ close: () => Promise<void> }> = [];
+  if (isRedisConfigured()) {
+    const { startAllWorkers } = await import("./workers/index.js");
+    workers = startAllWorkers();
+    app.log.info("Background workers started (Redis connected)");
+  } else {
+    app.log.info("Running without Redis — emails will be sent directly (no queue)");
+  }
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     app.log.info(`Received ${signal}, shutting down...`);
     await app.close();
+    // Close workers before closing queues/Redis
+    await Promise.all(workers.map((w) => w.close().catch(() => {})));
+    await closeQueues().catch(() => {});
     const { closeDb } = await import("./db/index.js");
     await closeDb();
     process.exit(0);
@@ -128,16 +142,6 @@ async function main() {
 
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("SIGINT", () => shutdown("SIGINT"));
-
-  // Start workers in-process if Redis is available
-  const { isRedisConfigured } = await import("./queues/index.js");
-  if (isRedisConfigured()) {
-    const { startAllWorkers } = await import("./workers/index.js");
-    startAllWorkers();
-    app.log.info("Background workers started (Redis connected)");
-  } else {
-    app.log.info("Running without Redis — emails will be sent directly (no queue)");
-  }
 
   // Start SMTP servers in-process (inbound receiving + relay for users)
   try {

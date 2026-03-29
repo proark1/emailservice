@@ -10,13 +10,17 @@ import type { CreateDomainInput } from "../schemas/domain.schema.js";
 export async function createDomain(accountId: string, input: CreateDomainInput) {
   const db = getDb();
 
+  // Check if domain is already registered by ANY account (domains must be globally unique)
   const existing = await db
-    .select()
+    .select({ id: domains.id, accountId: domains.accountId })
     .from(domains)
-    .where(and(eq(domains.accountId, accountId), eq(domains.name, input.name)));
+    .where(eq(domains.name, input.name));
 
   if (existing.length > 0) {
-    throw new ConflictError(`Domain ${input.name} already exists`);
+    if (existing[0].accountId === accountId) {
+      throw new ConflictError(`Domain ${input.name} already exists in your account`);
+    }
+    throw new ConflictError(`Domain ${input.name} is already registered`);
   }
 
   const dkim = generateDkimForDomain();
@@ -135,7 +139,7 @@ export function formatDomainResponse(domain: typeof domains.$inferSelect) {
   // Build SPF value — regenerate with current config if the stored one is stale
   const currentSpf = domain.spfRecord && !domain.spfRecord.includes("localhost")
     ? domain.spfRecord
-    : (isHostConfigured ? `v=spf1 a mx include:${mxHost} ~all` : `v=spf1 a mx ~all`);
+    : (isHostConfigured ? `v=spf1 a mx include:${mxHost} -all` : `v=spf1 a mx -all`);
 
   const records: Array<{ type: string; name: string; value: string; purpose: string; verified: boolean }> = [];
 
