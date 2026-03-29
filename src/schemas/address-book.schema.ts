@@ -1,14 +1,14 @@
 import { z } from "zod";
 
 export const createAddressBookContactSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().max(255),
   name: z.string().max(255).optional(),
   company: z.string().max(255).optional(),
   notes: z.string().optional(),
 });
 
 export const updateAddressBookContactSchema = z.object({
-  email: z.string().email().optional(),
+  email: z.string().email().max(255).optional(),
   name: z.string().max(255).optional(),
   company: z.string().max(255).optional(),
   notes: z.string().optional(),

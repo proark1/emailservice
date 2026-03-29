@@ -5,8 +5,8 @@ const emailAddress = z.string().email();
 export const saveDraftSchema = z.object({
   from: z.string().min(1).optional(),
   to: z.array(emailAddress).optional(),
-  cc: z.array(emailAddress).optional(),
-  bcc: z.array(emailAddress).optional(),
+  cc: z.array(emailAddress).max(50).optional(),
+  bcc: z.array(emailAddress).max(50).optional(),
   reply_to: z.array(emailAddress).optional(),
   subject: z.string().max(998).optional(),
   html: z.string().optional(),

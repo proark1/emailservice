@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const createContactSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().max(255),
   first_name: z.string().max(255).optional(),
   last_name: z.string().max(255).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),

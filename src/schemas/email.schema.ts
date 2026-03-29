@@ -5,8 +5,8 @@ const emailAddress = z.string().email();
 export const sendEmailSchema = z.object({
   from: z.string().min(1), // "Name <email@example.com>" or "email@example.com"
   to: z.array(emailAddress).min(1).max(50),
-  cc: z.array(emailAddress).optional(),
-  bcc: z.array(emailAddress).optional(),
+  cc: z.array(emailAddress).max(50).optional(),
+  bcc: z.array(emailAddress).max(50).optional(),
   reply_to: z.array(emailAddress).optional(),
   subject: z.string().min(1).max(998),
   html: z.string().optional(),

@@ -24,7 +24,10 @@ export const bulkActionSchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(100),
   action: z.enum(["mark_read", "mark_unread", "star", "unstar", "move_to_folder", "move_to_trash", "permanent_delete"]),
   folder_id: z.string().uuid().optional(),
-});
+}).refine(
+  (d) => d.action !== "move_to_folder" || !!d.folder_id,
+  { message: "folder_id is required when action is move_to_folder", path: ["folder_id"] },
+);
 
 export type ListInboxInput = z.infer<typeof listInboxSchema>;
 export type UpdateInboxEmailInput = z.infer<typeof updateInboxEmailSchema>;
