@@ -68,7 +68,8 @@ export default async function inboxRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string; aid: string } }>("/:id/attachments/:aid", async (request, reply) => {
     const { metadata, stream } = await attachmentService.getAttachment(request.account.id, request.params.aid);
     reply.header("Content-Type", metadata.contentType);
-    reply.header("Content-Disposition", `attachment; filename="${metadata.filename}"`);
+    const safeFilename = metadata.filename.replace(/["\\\r\n]/g, "_");
+    reply.header("Content-Disposition", `attachment; filename="${safeFilename}"`);
     reply.header("Content-Length", metadata.size);
     return reply.send(stream);
   });

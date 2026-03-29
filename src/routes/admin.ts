@@ -179,7 +179,7 @@ export default async function adminRoutes(app: FastifyInstance) {
       .set({ status: "cancelled", completedAt: new Date(), updatedAt: new Date() })
       .where(eq(warmupSchedules.id, request.params.id))
       .returning();
-    if (!updated) throw new ForbiddenError("Warmup not found");
+    if (!updated) throw new NotFoundError("Warmup");
     return { data: { success: true } };
   });
 
@@ -240,7 +240,10 @@ export default async function adminRoutes(app: FastifyInstance) {
     const conditions: any[] = [];
     if (query.account_id) conditions.push(eq(apiLogs.accountId, query.account_id));
     if (query.method) conditions.push(eq(apiLogs.method, query.method.toUpperCase()));
-    if (query.path) conditions.push(ilike(apiLogs.path, `%${query.path}%`));
+    if (query.path) {
+      const escapedPath = query.path.replace(/[%_\\]/g, (c: string) => `\\${c}`);
+      conditions.push(ilike(apiLogs.path, `%${escapedPath}%`));
+    }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 

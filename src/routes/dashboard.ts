@@ -580,6 +580,20 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     let responseBody: string | null = null;
     let success = false;
 
+    // SSRF protection: block private/internal IPs
+    try {
+      const parsedUrl = new URL(webhook.url);
+      const hostname = parsedUrl.hostname;
+      const blockedHosts = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]", "169.254.169.254", "metadata.google.internal"];
+      const blockedPrefixes = ["10.", "0.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.", "192.168.", "fc00:", "fd00:", "fe80:"];
+      const blockedSuffixes = [".local", ".internal", ".localhost"];
+      if (blockedHosts.includes(hostname) || blockedPrefixes.some(p => hostname.startsWith(p)) || blockedSuffixes.some(s => hostname.endsWith(s))) {
+        return { data: { success: false, url: webhook.url, response_status: null, response_body: "Webhook URL targets a private/internal address" } };
+      }
+    } catch {
+      return { data: { success: false, url: webhook.url, response_status: null, response_body: "Invalid webhook URL" } };
+    }
+
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -674,14 +688,21 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const audience = await audienceService.getAudience(request.account.id, request.params.id);
     const contacts = await audienceService.listContacts(request.account.id, request.params.id);
 
+    const csvEscape = (v: string) => {
+      if (v.includes(",") || v.includes('"') || v.includes("\n")) {
+        return `"${v.replace(/"/g, '""')}"`;
+      }
+      return v;
+    };
     const header = "email,first_name,last_name,subscribed\n";
     const rows = contacts.map(c => {
       const formatted = audienceService.formatContactResponse(c);
-      return `${formatted.email},${formatted.first_name || ""},${formatted.last_name || ""},${formatted.subscribed}`;
+      return [formatted.email, formatted.first_name || "", formatted.last_name || "", String(formatted.subscribed)].map(csvEscape).join(",");
     }).join("\n");
 
     reply.header("Content-Type", "text/csv");
-    reply.header("Content-Disposition", `attachment; filename="${audience.name}-contacts.csv"`);
+    const safeName = audience.name.replace(/["\\\r\n]/g, "_");
+    reply.header("Content-Disposition", `attachment; filename="${safeName}-contacts.csv"`);
     return header + rows;
   });
 
@@ -825,7 +846,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const { q } = z.object({ q: z.string().min(1).max(200) }).parse(request.query);
     const db = getDb();
     const accountId = request.account.id;
-    const pattern = `%${q}%`;
+    const pattern = `%${escapeIlike(q)}%`;
     const limit = 5;
 
     // Search emails
@@ -1195,7 +1216,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const attachmentService = await import("../services/attachment.service.js");
     const { metadata, stream } = await attachmentService.getAttachment(request.account.id, request.params.aid);
     reply.header("Content-Type", metadata.contentType);
-    reply.header("Content-Disposition", `attachment; filename="${metadata.filename}"`);
+    const safeFilename = metadata.filename.replace(/["\\\r\n]/g, "_");
+    reply.header("Content-Disposition", `attachment; filename="${safeFilename}"`);
     reply.header("Content-Length", metadata.size);
     return reply.send(stream);
   });
