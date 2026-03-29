@@ -1,7 +1,8 @@
 import { eq, and, desc } from "drizzle-orm";
 import { getDb } from "../db/index.js";
-import { templates } from "../db/schema/index.js";
+import { templates, templateVersions } from "../db/schema/index.js";
 import { NotFoundError } from "../lib/errors.js";
+import { compileAndRender, renderPlainText, detectVariablesAdvanced } from "./template-engine.js";
 import type { CreateTemplateInput, UpdateTemplateInput } from "../schemas/template.schema.js";
 
 function extractVariables(text: string): string[] {
@@ -19,6 +20,11 @@ function extractAllVariables(input: { subject?: string | null; html?: string | n
   return extractVariables(allText);
 }
 
+function extractAllVariablesAdvanced(input: { subject?: string | null; html?: string | null; text?: string | null }): string[] {
+  const allText = [input.subject || "", input.html || "", input.text || ""].join(" ");
+  return detectVariablesAdvanced(allText);
+}
+
 export async function createTemplate(accountId: string, input: CreateTemplateInput) {
   const db = getDb();
   const variables = extractAllVariables({ subject: input.subject, html: input.html, text: input.text });
@@ -32,6 +38,8 @@ export async function createTemplate(accountId: string, input: CreateTemplateInp
       htmlBody: input.html || null,
       textBody: input.text || null,
       variables: JSON.stringify(variables),
+      type: input.type || "standard",
+      metadata: input.metadata ? JSON.stringify(input.metadata) : null,
     })
     .returning();
 
@@ -42,6 +50,9 @@ export async function updateTemplate(accountId: string, templateId: string, inpu
   const db = getDb();
 
   const existing = await getTemplate(accountId, templateId);
+
+  // Save current version before updating
+  await saveTemplateVersion(accountId, existing);
 
   const newHtml = input.html !== undefined ? input.html : existing.htmlBody;
   const newText = input.text !== undefined ? input.text : existing.textBody;
@@ -58,6 +69,8 @@ export async function updateTemplate(accountId: string, templateId: string, inpu
   if (input.subject !== undefined) updateFields.subject = input.subject;
   if (input.html !== undefined) updateFields.htmlBody = input.html;
   if (input.text !== undefined) updateFields.textBody = input.text;
+  if (input.type !== undefined) updateFields.type = input.type;
+  if (input.metadata !== undefined) updateFields.metadata = JSON.stringify(input.metadata);
 
   const [updated] = await db
     .update(templates)
@@ -134,8 +147,93 @@ export function formatTemplateResponse(template: typeof templates.$inferSelect) 
     html_body: template.htmlBody,
     text_body: template.textBody,
     variables: template.variables ? JSON.parse(template.variables) : [],
+    type: template.type,
+    metadata: template.metadata ? JSON.parse(template.metadata) : {},
     version: template.version,
     created_at: template.createdAt.toISOString(),
     updated_at: template.updatedAt.toISOString(),
+  };
+}
+
+// New: save a version snapshot before update
+export async function saveTemplateVersion(accountId: string, template: typeof templates.$inferSelect) {
+  const db = getDb();
+  const [version] = await db.insert(templateVersions).values({
+    templateId: template.id,
+    accountId,
+    version: template.version,
+    subject: template.subject,
+    htmlBody: template.htmlBody,
+    textBody: template.textBody,
+    variables: template.variables,
+  }).returning();
+  return version;
+}
+
+// New: list version history
+export async function listTemplateVersions(accountId: string, templateId: string) {
+  await getTemplate(accountId, templateId); // verify access
+  const db = getDb();
+  return db.select().from(templateVersions)
+    .where(and(eq(templateVersions.templateId, templateId), eq(templateVersions.accountId, accountId)))
+    .orderBy(desc(templateVersions.version));
+}
+
+// New: restore a version
+export async function restoreTemplateVersion(accountId: string, templateId: string, versionId: string) {
+  const db = getDb();
+  const [version] = await db.select().from(templateVersions)
+    .where(and(eq(templateVersions.id, versionId), eq(templateVersions.templateId, templateId), eq(templateVersions.accountId, accountId)));
+  if (!version) throw new NotFoundError("Template version");
+
+  const current = await getTemplate(accountId, templateId);
+  // Save current as a version first
+  await saveTemplateVersion(accountId, current);
+
+  const [updated] = await db.update(templates).set({
+    subject: version.subject,
+    htmlBody: version.htmlBody,
+    textBody: version.textBody,
+    variables: version.variables,
+    version: current.version + 1,
+    updatedAt: new Date(),
+  }).where(and(eq(templates.id, templateId), eq(templates.accountId, accountId))).returning();
+
+  return updated;
+}
+
+// New: render with Handlebars (advanced)
+export async function renderAdvancedTemplate(
+  accountId: string,
+  template: { subject?: string | null; htmlBody?: string | null; textBody?: string | null },
+  variables: Record<string, any>,
+): Promise<{ subject?: string; html?: string; text?: string }> {
+  // Load partials for this account
+  const db = getDb();
+  const partialRows = await db.select().from(templates)
+    .where(and(eq(templates.accountId, accountId), eq(templates.type, "partial")));
+  const partials: Record<string, string> = {};
+  for (const p of partialRows) {
+    partials[p.name] = p.htmlBody || p.textBody || "";
+  }
+
+  return {
+    subject: template.subject ? renderPlainText(template.subject, variables, partials) : undefined,
+    html: template.htmlBody ? compileAndRender(template.htmlBody, variables, partials) : undefined,
+    text: template.textBody ? renderPlainText(template.textBody, variables, partials) : undefined,
+  };
+}
+
+// New: format version response
+export function formatTemplateVersionResponse(v: typeof templateVersions.$inferSelect) {
+  return {
+    id: v.id,
+    template_id: v.templateId,
+    version: v.version,
+    subject: v.subject,
+    html_body: v.htmlBody,
+    text_body: v.textBody,
+    variables: v.variables ? JSON.parse(v.variables) : [],
+    created_at: v.createdAt.toISOString(),
   };
 }

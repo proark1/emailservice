@@ -10,6 +10,10 @@ import type { CreateDomainInput } from "../schemas/domain.schema.js";
 export async function createDomain(accountId: string, input: CreateDomainInput) {
   const db = getDb();
 
+  // Check quota
+  const { checkQuota } = await import("./usage.service.js");
+  await checkQuota(accountId, "domains");
+
   const existing = await db
     .select()
     .from(domains)

@@ -43,6 +43,8 @@ export function getScheduledEmailQueue() { return getQueue("email.scheduled"); }
 export function getInboundEmailQueue() { return getQueue("email.inbound"); }
 export function getWarmupQueue() { return getQueue("email.warmup"); }
 export function getTrashPurgeQueue() { return getQueue("trash.purge"); }
+export function getAnalyticsRollupQueue() { return getQueue("analytics.rollup"); }
+export function getBlacklistCheckQueue() { return getQueue("blacklist:check"); }
 
 export async function closeQueues() {
   const closePromises = Array.from(_queues.values()).map((q) => q.close());

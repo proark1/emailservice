@@ -5,6 +5,8 @@ import { createInboundEmailWorker } from "./inbound-email.worker.js";
 import { createScheduledEmailWorker } from "./scheduled-email.worker.js";
 import { createWarmupWorker } from "./warmup.worker.js";
 import { createTrashPurgeWorker } from "./trash-purge.worker.js";
+import { createAnalyticsRollupWorker } from "./analytics-rollup.worker.js";
+import { createBlacklistCheckWorker } from "./blacklist-check.worker.js";
 
 export function startAllWorkers() {
   const workers = [
@@ -15,6 +17,8 @@ export function startAllWorkers() {
     createScheduledEmailWorker(),
     createWarmupWorker(),
     createTrashPurgeWorker(),
+    createAnalyticsRollupWorker(),
+    createBlacklistCheckWorker(),
   ];
 
   console.log(`Started ${workers.length} workers:`);
@@ -25,6 +29,8 @@ export function startAllWorkers() {
   console.log("  - email.scheduled (concurrency: 1)");
   console.log("  - email.warmup (concurrency: 1, recurring: 60m)");
   console.log("  - trash.purge (concurrency: 1, recurring: 6h)");
+  console.log("  - analytics.rollup (concurrency: 1, recurring: 24h)");
+  console.log("  - blacklist:check (concurrency: 2)");
 
   return workers;
 }

@@ -9,6 +9,9 @@ export const templates = pgTable("templates", {
   htmlBody: text("html_body"),
   textBody: text("text_body"),
   variables: text("variables"), // JSON array of variable names like ["first_name", "company"]
+  type: varchar("type", { length: 20 }).notNull().default("standard"),
+  parentId: uuid("parent_id"),
+  metadata: text("metadata"),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -31,6 +31,10 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().optional(),
+  // Stripe billing
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   // Railway / Render / Cloud Run provide these
   RAILWAY_PUBLIC_DOMAIN: z.string().optional(),
   RENDER_EXTERNAL_HOSTNAME: z.string().optional(),

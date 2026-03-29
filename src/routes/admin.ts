@@ -227,6 +227,53 @@ export default async function adminRoutes(app: FastifyInstance) {
     return { data: { success: true, delivery_id: delivery.id } };
   });
 
+  // --- Plan management ---
+
+  app.get("/plans", async () => {
+    const { listPlans, formatPlanResponse } = await import("../services/billing.service.js");
+    const planList = await listPlans(false);
+    return { data: planList.map(formatPlanResponse) };
+  });
+
+  app.post("/plans", async (request, reply) => {
+    const { createPlanSchema } = await import("../schemas/billing.schema.js");
+    const { createPlan, formatPlanResponse } = await import("../services/billing.service.js");
+    const input = createPlanSchema.parse(request.body);
+    const plan = await createPlan(input);
+    return reply.status(201).send({ data: formatPlanResponse(plan) });
+  });
+
+  app.patch<{ Params: { id: string } }>("/plans/:id", async (request) => {
+    const { updatePlanSchema } = await import("../schemas/billing.schema.js");
+    const { updatePlan, formatPlanResponse } = await import("../services/billing.service.js");
+    const input = updatePlanSchema.parse(request.body);
+    const plan = await updatePlan(request.params.id, input);
+    return { data: formatPlanResponse(plan) };
+  });
+
+  app.post<{ Params: { id: string } }>("/accounts/:id/assign-plan", async (request) => {
+    const { plan_id } = z.object({ plan_id: z.string().uuid() }).parse(request.body);
+    const { subscriptions } = await import("../db/schema/index.js");
+    const db = getDb();
+    await db.insert(subscriptions).values({
+      accountId: request.params.id,
+      planId: plan_id,
+      status: "active",
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    }).onConflictDoUpdate({
+      target: [subscriptions.accountId],
+      set: {
+        planId: plan_id,
+        status: "active",
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(),
+      },
+    });
+    return { data: { success: true } };
+  });
+
   app.get("/analytics/api-logs", async (request) => {
     const query = z.object({
       limit: z.coerce.number().int().min(1).max(200).default(100),

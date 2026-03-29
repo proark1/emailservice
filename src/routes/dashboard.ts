@@ -1396,4 +1396,77 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const memberships = await teamService.getMyMemberships(request.account.id);
     return { data: memberships };
   });
+
+  // GET /dashboard/analytics/timeseries
+  app.get("/analytics/timeseries", async (request) => {
+    const { timeSeriesQuerySchema } = await import("../schemas/analytics.schema.js");
+    const query = timeSeriesQuerySchema.parse(request.query);
+    const { getTimeSeries } = await import("../services/user-analytics.service.js");
+    const data = await getTimeSeries(request.account.id, {
+      startDate: query.start_date,
+      endDate: query.end_date,
+      granularity: query.granularity,
+      domainId: query.domain_id,
+    });
+    return { data };
+  });
+
+  // GET /dashboard/analytics/domains
+  app.get("/analytics/domains", async (request) => {
+    const { dateRangeQuerySchema } = await import("../schemas/analytics.schema.js");
+    const query = dateRangeQuerySchema.parse(request.query);
+    const { getDomainBreakdown } = await import("../services/user-analytics.service.js");
+    const data = await getDomainBreakdown(request.account.id, query.start_date, query.end_date);
+    return { data };
+  });
+
+  // GET /dashboard/analytics/funnel
+  app.get("/analytics/funnel", async (request) => {
+    const { dateRangeQuerySchema } = await import("../schemas/analytics.schema.js");
+    const query = dateRangeQuerySchema.parse(request.query);
+    const { getEventFunnel } = await import("../services/user-analytics.service.js");
+    const data = await getEventFunnel(request.account.id, query.start_date, query.end_date);
+    return { data };
+  });
+
+  // GET /dashboard/deliverability/blacklists
+  app.get("/deliverability/blacklists", async (request) => {
+    const { getLatestChecks, formatBlacklistCheckResponse } = await import("../services/blacklist.service.js");
+    const domainId = (request.query as any).domain_id;
+    const checks = await getLatestChecks(request.account.id, domainId);
+    return { data: checks.map(formatBlacklistCheckResponse) };
+  });
+
+  // POST /dashboard/deliverability/blacklists/check
+  app.post("/deliverability/blacklists/check", async (request) => {
+    const { domain_id } = (request.body as any);
+    if (!domain_id) throw new (await import("../lib/errors.js")).ValidationError("domain_id is required");
+    const { runFullCheck } = await import("../services/blacklist.service.js");
+    const results = await runFullCheck(request.account.id, domain_id);
+    return { data: results };
+  });
+
+  // GET /dashboard/deliverability/reputation
+  app.get("/deliverability/reputation", async (request) => {
+    const domainId = (request.query as any).domain_id;
+    const { calculateReputationScore } = await import("../services/reputation.service.js");
+    const score = await calculateReputationScore(request.account.id, domainId);
+    return { data: score };
+  });
+
+  // --- Email Validation (dashboard routes) ---
+
+  app.post("/email-validation", async (request) => {
+    const { email } = z.object({ email: z.string().email() }).parse(request.body);
+    const { validateEmail } = await import("../services/email-validation.service.js");
+    const result = await validateEmail(email, request.account.id);
+    return { data: result };
+  });
+
+  app.post("/email-validation/batch", async (request) => {
+    const { emails } = z.object({ emails: z.array(z.string().email()).min(1).max(100) }).parse(request.body);
+    const { validateBatch } = await import("../services/email-validation.service.js");
+    const results = await validateBatch(emails, request.account.id);
+    return { data: results };
+  });
 }

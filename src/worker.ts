@@ -11,7 +11,7 @@ async function main() {
 
   const shutdown = async () => {
     console.log("Shutting down workers...");
-    await Promise.all(workers.map((w) => w.close()));
+    await Promise.all(workers.filter((w) => w !== null).map((w) => w.close()));
     await closeQueues();
     await closeDb();
     process.exit(0);

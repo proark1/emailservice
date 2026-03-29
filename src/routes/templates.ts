@@ -38,4 +38,25 @@ export default async function templateRoutes(app: FastifyInstance) {
     const deleted = await templateService.deleteTemplate(request.account.id, request.params.id);
     return { data: templateService.formatTemplateResponse(deleted) };
   });
+
+  // POST /v1/templates/:id/render
+  app.post<{ Params: { id: string } }>("/:id/render", async (request) => {
+    const { renderTemplateSchema } = await import("../schemas/template.schema.js");
+    const input = renderTemplateSchema.parse(request.body);
+    const template = await templateService.getTemplate(request.account.id, request.params.id);
+    const rendered = await templateService.renderAdvancedTemplate(request.account.id, template, input.variables);
+    return { data: rendered };
+  });
+
+  // GET /v1/templates/:id/versions
+  app.get<{ Params: { id: string } }>("/:id/versions", async (request) => {
+    const versions = await templateService.listTemplateVersions(request.account.id, request.params.id);
+    return { data: versions.map(templateService.formatTemplateVersionResponse) };
+  });
+
+  // POST /v1/templates/:id/versions/:versionId/restore
+  app.post<{ Params: { id: string; versionId: string } }>("/:id/versions/:versionId/restore", async (request) => {
+    const restored = await templateService.restoreTemplateVersion(request.account.id, request.params.id, request.params.versionId);
+    return { data: templateService.formatTemplateResponse(restored) };
+  });
 }

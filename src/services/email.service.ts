@@ -82,6 +82,10 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
     throw new ValidationError(`Domain ${fromDomain} is configured for receiving only. Update domain mode to "send" or "both" to send emails.`);
   }
 
+  // Check quota
+  const { checkQuota, incrementUsage } = await import("./usage.service.js");
+  await checkQuota(accountId, "emails");
+
   // Check suppression list — only query addresses actually in the recipient list
   const allRecipients = [...input.to, ...(input.cc || []), ...(input.bcc || [])].map((r) => r.toLowerCase());
   const suppressedRows = await db
@@ -195,6 +199,9 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
     const { sendEmailDirect } = await import("./email-sender.js");
     sendEmailDirect(email.id, accountId).catch(() => {});
   }
+
+  // Increment usage
+  incrementUsage(accountId, "emailsSent", input.to.length).catch(() => {});
 
   const response = formatEmailResponse(email);
 

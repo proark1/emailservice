@@ -20,6 +20,8 @@ import threadRoutes from "./threads.js";
 import signatureRoutes from "./signatures.js";
 import addressBookRoutes from "./address-book.js";
 import teamRoutes from "./team.js";
+import emailValidationRoutes from "./email-validation.js";
+import billingRoutes from "./billing.js";
 import { addSuppression, listSuppressions, removeSuppression, formatSuppressionResponse } from "../services/suppression.service.js";
 import { getAccountAnalytics } from "../services/analytics.service.js";
 
@@ -52,6 +54,20 @@ export async function registerRoutes(app: FastifyInstance) {
   // Admin panel API (cookie auth + admin role)
   await app.register(adminRoutes, { prefix: "/admin" });
 
+  // Billing dashboard (cookie auth)
+  await app.register(billingRoutes, { prefix: "/dashboard/billing" });
+
+  // Stripe webhook (no auth — verified by Stripe signature)
+  app.post("/billing/webhook", {
+    config: { rawBody: true },
+  }, async (request, reply) => {
+    const { handleWebhook } = await import("../services/billing.service.js");
+    const signature = request.headers["stripe-signature"] as string;
+    if (!signature) return reply.status(400).send({ error: { type: "validation_error", message: "Missing stripe-signature header" } });
+    const result = await handleWebhook((request as any).rawBody || JSON.stringify(request.body), signature);
+    return reply.send({ data: result });
+  });
+
   // API v1 routes (API key auth)
   await app.register(apiKeyRoutes, { prefix: "/v1/api-keys" });
   await app.register(domainRoutes, { prefix: "/v1/domains" });
@@ -69,6 +85,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(signatureRoutes, { prefix: "/v1/signatures" });
   await app.register(addressBookRoutes, { prefix: "/v1/address-book" });
   await app.register(teamRoutes, { prefix: "/v1/team" });
+  await app.register(emailValidationRoutes, { prefix: "/v1/email-validations" });
 
   // Suppression routes
   await app.register(async (suppApp) => {

@@ -1,15 +1,46 @@
 import { useState, useEffect } from "react";
-import { api } from "../../lib/api";
+import { api, post } from "../../lib/api";
 import { PageHeader } from "../../components/ui";
+
+interface BlacklistCheck {
+  id: string;
+  target: string;
+  target_type: string;
+  blacklist_name: string;
+  listed: boolean;
+  listed_reason: string | null;
+  checked_at: string;
+}
+
+interface ReputationData {
+  overall_score: number;
+  breakdown: { category: string; score: number; weight: number; details: string }[];
+}
 
 export default function DeliverabilityPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [blacklists, setBlacklists] = useState<BlacklistCheck[]>([]);
+  const [reputation, setReputation] = useState<ReputationData | null>(null);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
-    api("/dashboard/deliverability").then((r) => setData(r.data)).catch((e: any) => setError(e.message || "Failed to load")).finally(() => setLoading(false));
+    Promise.all([
+      api("/dashboard/deliverability").then((r) => setData(r.data)).catch((e: any) => setError(e.message || "Failed to load")),
+      api("/dashboard/deliverability/blacklists").then((r) => setBlacklists(r.data)).catch(() => {}),
+      api("/dashboard/deliverability/reputation").then((r) => setReputation(r.data)).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
+
+  const runBlacklistCheck = async () => {
+    setChecking(true);
+    try {
+      const res = await post("/dashboard/deliverability/blacklists/check", {});
+      setBlacklists(res.data);
+    } catch {}
+    setChecking(false);
+  };
 
   if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" /></div>;
   if (error) return <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px]">{error}</div>;
@@ -18,6 +49,7 @@ export default function DeliverabilityPage() {
   const scoreColor = data.score >= 80 ? "text-emerald-600" : data.score >= 60 ? "text-amber-600" : "text-red-600";
   const scoreLabel = data.score >= 80 ? "Healthy" : data.score >= 60 ? "Needs Attention" : "Critical";
   const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
+  const listedCount = blacklists.filter((b) => b.listed).length;
 
   return (
     <div>
@@ -76,12 +108,68 @@ export default function DeliverabilityPage() {
         ))}
       </div>
 
+      {/* Blacklist Status */}
+      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-[14px] font-semibold text-gray-900">Blacklist Monitoring</h2>
+            <p className="text-[12px] text-gray-400 mt-0.5">
+              {listedCount > 0 ? `Listed on ${listedCount} blacklist${listedCount > 1 ? "s" : ""}` : blacklists.length > 0 ? "All clear — not listed on any blacklists" : "No checks yet"}
+            </p>
+          </div>
+          <button
+            onClick={runBlacklistCheck}
+            disabled={checking}
+            className="px-4 py-2 rounded-lg border border-gray-200 text-[13px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            {checking ? "Checking..." : "Check Now"}
+          </button>
+        </div>
+        {blacklists.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {blacklists.map((bl) => (
+              <div
+                key={bl.id}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-medium border ${bl.listed ? "bg-red-50 text-red-700 border-red-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}
+                title={bl.listed_reason || undefined}
+              >
+                {bl.blacklist_name}
+                <span className="ml-1.5">{bl.listed ? "\u2717" : "\u2713"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Reputation Breakdown */}
+      {reputation && (
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 mb-6">
+          <h2 className="text-[14px] font-semibold text-gray-900 mb-4">Reputation Breakdown</h2>
+          <div className="space-y-3">
+            {reputation.breakdown.map((item) => (
+              <div key={item.category} className="flex items-center gap-3">
+                <span className="text-[13px] text-gray-600 w-36 shrink-0">{item.category}</span>
+                <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${item.score >= 80 ? "bg-emerald-500" : item.score >= 50 ? "bg-amber-500" : "bg-red-500"}`}
+                    style={{ width: `${item.score}%` }}
+                  />
+                </div>
+                <span className="text-[13px] font-medium text-gray-700 w-10 text-right">{item.score}</span>
+                <span className="text-[11px] text-gray-400 w-16 text-right">wt: {item.weight}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Tips */}
-      {(data.rates.bounce >= 0.05 || data.rates.complaint >= 0.001) && (
+      {(data.rates.bounce >= 0.05 || data.rates.complaint >= 0.001 || listedCount > 0) && (
         <div className="mb-6 p-4 rounded-2xl border border-amber-200 bg-amber-50 space-y-2">
           <h3 className="text-[14px] font-semibold text-amber-700">Recommendations</h3>
           {data.rates.bounce >= 0.05 && <p className="text-[13px] text-amber-600">Your bounce rate ({pct(data.rates.bounce)}) is above 5%. Clean your contact lists and remove invalid addresses.</p>}
           {data.rates.complaint >= 0.001 && <p className="text-[13px] text-amber-600">Your complaint rate ({pct(data.rates.complaint)}) is above 0.1%. Review your sending practices and ensure recipients opted in.</p>}
+          {listedCount > 0 && <p className="text-[13px] text-amber-600">You are listed on {listedCount} blacklist{listedCount > 1 ? "s" : ""}. Visit the blacklist provider's website to request delisting.</p>}
         </div>
       )}
 
