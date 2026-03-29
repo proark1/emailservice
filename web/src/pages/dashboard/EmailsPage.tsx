@@ -60,7 +60,7 @@ type Domain = {
   status: string;
 };
 
-const STATUS_TABS = ["all", "queued", "scheduled", "sent", "delivered", "bounced", "failed"] as const;
+const STATUS_TABS = ["all", "queued", "scheduled", "sent", "delivered", "bounced", "failed", "cancelled"] as const;
 type StatusTab = (typeof STATUS_TABS)[number];
 
 /* ---------- helpers ---------- */
@@ -102,6 +102,7 @@ function eventDotClass(type: string): string {
     case "clicked": return "border-cyan-500 bg-cyan-500";
     case "complained": return "border-amber-500 bg-amber-500";
     case "deferred": return "border-yellow-400 bg-yellow-400";
+    case "cancelled": return "border-gray-500 bg-gray-500";
     default: return "border-gray-300 bg-gray-300";
   }
 }

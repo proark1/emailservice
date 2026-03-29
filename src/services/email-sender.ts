@@ -200,6 +200,20 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       type: "sent",
       data: { messageId: info.messageId },
     });
+
+    // Dispatch webhook for sent event
+    const { isRedisConfigured } = await import("../queues/index.js");
+    if (isRedisConfigured()) {
+      try {
+        const { dispatchEvent } = await import("./webhook.service.js");
+        await dispatchEvent(accountId, "email.sent", emailId, {
+          email_id: emailId,
+          to: email.toAddresses,
+          subject: email.subject,
+          message_id: info.messageId,
+        });
+      } catch {}
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
@@ -215,6 +229,20 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       type: "failed",
       data: { error: errorMessage },
     });
+
+    // Dispatch webhook for failed event
+    const { isRedisConfigured } = await import("../queues/index.js");
+    if (isRedisConfigured()) {
+      try {
+        const { dispatchEvent } = await import("./webhook.service.js");
+        await dispatchEvent(accountId, "email.failed", emailId, {
+          email_id: emailId,
+          to: email.toAddresses,
+          subject: email.subject,
+          error: errorMessage,
+        });
+      } catch {}
+    }
 
     if (errorMessage.includes("550") || errorMessage.includes("bounce") || errorMessage.includes("rejected") || errorMessage.includes("undeliverable")) {
       try {
