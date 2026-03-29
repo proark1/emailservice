@@ -208,7 +208,7 @@ export default function TeamPage() {
           <div>
             <h3 className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 mb-3">Members ({members.length})</h3>
             {members.length === 0 ? (
-              <EmptyState title="No members" description="Add team members to share this domain." />
+              <EmptyState title="No members" desc="Add team members to share this domain." />
             ) : (
               <Table headers={["User", "Role", "Mailboxes", "Joined", ""]}>
                 {members.map((m) => (

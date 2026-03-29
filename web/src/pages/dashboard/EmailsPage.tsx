@@ -269,8 +269,8 @@ export default function EmailsPage() {
         html: htmlContent,
         text: htmlContent ? undefined : " ",
       };
-      if (form.cc.trim()) body.cc = form.cc;
-      if (form.bcc.trim()) body.bcc = form.bcc;
+      if (form.cc.trim()) body.cc = form.cc.split(",").map((s: string) => s.trim()).filter(Boolean).join(",");
+      if (form.bcc.trim()) body.bcc = form.bcc.split(",").map((s: string) => s.trim()).filter(Boolean).join(",");
       if (form.scheduledAt) body.scheduled_at = new Date(form.scheduledAt).toISOString();
       await post("/dashboard/emails", body);
       setComposeOpen(false);

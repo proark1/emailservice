@@ -127,7 +127,7 @@ export default function DraftsPage() {
       {loading ? (
         <div className="p-8 text-center text-gray-400">Loading...</div>
       ) : drafts.length === 0 ? (
-        <EmptyState title="No drafts" description="Saved drafts will appear here." action={<Button onClick={openNewDraft}>+ New Draft</Button>} />
+        <EmptyState title="No drafts" desc="Saved drafts will appear here." action={<Button onClick={openNewDraft}>+ New Draft</Button>} />
       ) : (
         <div className="divide-y divide-gray-100 dark:divide-gray-800">
           {drafts.map((draft) => (

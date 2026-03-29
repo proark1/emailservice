@@ -124,7 +124,7 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
 export function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+    <button onClick={() => { navigator.clipboard.writeText(text).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
       className="text-[11px] text-gray-500 hover:text-violet-600 font-medium transition-colors">
       {copied ? "Copied!" : "Copy"}
     </button>

@@ -115,17 +115,24 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const input = z.object({
       from: z.string().min(1),
       to: z.string().min(1),
+      cc: z.string().optional(),
+      bcc: z.string().optional(),
       subject: z.string().min(1),
       html: z.string().optional(),
       text: z.string().optional(),
+      scheduled_at: z.string().datetime().optional(),
     }).refine((d) => d.html || d.text, {
       message: "At least one of html or text is required",
       path: ["html"],
     }).parse(request.body);
-    const toAddresses = input.to.split(",").map((e) => e.trim()).filter(Boolean);
+    const parseAddresses = (s: string) => s.split(",").map((e) => e.trim()).filter(Boolean);
+    const toAddresses = parseAddresses(input.to);
+    const ccAddresses = input.cc ? parseAddresses(input.cc) : undefined;
+    const bccAddresses = input.bcc ? parseAddresses(input.bcc) : undefined;
     // Validate each email address
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const invalidAddresses = toAddresses.filter((addr) => !emailRegex.test(addr));
+    const allAddresses = [...toAddresses, ...(ccAddresses || []), ...(bccAddresses || [])];
+    const invalidAddresses = allAddresses.filter((addr) => !emailRegex.test(addr));
     if (invalidAddresses.length > 0) {
       throw new (await import("../lib/errors.js")).ValidationError(`Invalid email address(es): ${invalidAddresses.join(", ")}`);
     }
@@ -135,9 +142,12 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const result = await emailService.sendEmail(request.account.id, {
       from: input.from,
       to: toAddresses,
+      cc: ccAddresses,
+      bcc: bccAddresses,
       subject: input.subject,
       html: input.html,
       text: input.text,
+      scheduled_at: input.scheduled_at,
     });
     return reply.status(201).send({ data: result.response });
   });
