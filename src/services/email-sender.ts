@@ -84,7 +84,7 @@ function createTransport() {
       port: config.SMTP_PORT || 587,
       secure: config.SMTP_SECURE === "true",
       auth: config.SMTP_USER ? { user: config.SMTP_USER, pass: config.SMTP_PASS } : undefined,
-      tls: isLocalRelay ? false as any : { rejectUnauthorized: false },
+      tls: isLocalRelay ? false as any : { rejectUnauthorized: true },
       ignoreTLS: isLocalRelay,
     });
   }

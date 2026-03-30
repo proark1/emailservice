@@ -36,7 +36,16 @@ function getQueue(name: string, opts?: Partial<QueueOptions>): Queue {
   return queue;
 }
 
-export function getEmailSendQueue() { return getQueue("email.send"); }
+export function getEmailSendQueue() {
+  return getQueue("email.send", {
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: "exponential", delay: 5000 },
+      removeOnComplete: { count: 1000 },
+      removeOnFail: { age: 24 * 3600 },
+    },
+  });
+}
 export function getWebhookDeliverQueue() { return getQueue("webhook.deliver"); }
 export function getDnsVerifyQueue() { return getQueue("dns.verify"); }
 export function getScheduledEmailQueue() { return getQueue("email.scheduled"); }

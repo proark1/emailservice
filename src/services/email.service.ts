@@ -185,7 +185,10 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
     } catch {
       // Queue failed, send directly
       const { sendEmailDirect } = await import("./email-sender.js");
-      sendEmailDirect(email.id, accountId).catch(() => {});
+      sendEmailDirect(email.id, accountId).catch((err) => {
+        console.error(`[email-send] Direct send failed for email ${email.id}:`, err?.message || err);
+        db.update(emails).set({ status: "failed" }).where(eq(emails.id, email.id)).catch(() => {});
+      });
     }
   } else if (delay > 0 && isRedisConfigured()) {
     // Scheduled emails need the queue
@@ -193,7 +196,10 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
   } else {
     // No Redis — send directly (async, don't block the response)
     const { sendEmailDirect } = await import("./email-sender.js");
-    sendEmailDirect(email.id, accountId).catch(() => {});
+    sendEmailDirect(email.id, accountId).catch((err) => {
+      console.error(`[email-send] Direct send failed for email ${email.id}:`, err?.message || err);
+      db.update(emails).set({ status: "failed" }).where(eq(emails.id, email.id)).catch(() => {});
+    });
   }
 
   const response = formatEmailResponse(email);
