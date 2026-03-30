@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
-import { Link, Routes, Route, NavLink, useNavigate } from "react-router-dom";
+import { Link, Routes, Route, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { api, post, del } from "../lib/api";
 import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Textarea, Modal, CopyButton, Dot, useConfirmDialog, useToast } from "../components/ui";
@@ -1055,6 +1055,8 @@ function ApiDocsPage() {
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("mailnowapi-theme");
@@ -1062,6 +1064,10 @@ export default function Dashboard() {
       document.documentElement.classList.add("dark");
     }
   }, []);
+
+  useEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+  }, [location.pathname]);
 
   return (
     <div className="flex min-h-screen bg-gray-50 antialiased">
@@ -1079,7 +1085,7 @@ export default function Dashboard() {
         </div>
         <div className="w-8" /> {/* Spacer for centering */}
       </div>
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl overflow-y-auto pt-[4.5rem] lg:pt-8">
+      <main ref={mainRef} className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl overflow-y-auto pt-[4.5rem] lg:pt-8">
         <Routes>
           <Route index element={<Overview />} />
           <Route path="mailboxes" element={<MailboxesPage />} />

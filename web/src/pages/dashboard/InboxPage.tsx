@@ -193,7 +193,7 @@ export default function InboxPage() {
   const [sending, setSending] = useState(false);
   const [composeError, setComposeError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { showError, showSuccess, toast } = useToast();
 
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -510,6 +510,7 @@ export default function InboxPage() {
       await post("/dashboard/emails", body);
       setComposeOpen(false);
       resetCompose();
+      showSuccess("Email sent successfully");
       if (activeFolder === "sent") {
         fetchEmails(1, search, filter, false, domainFilter);
       }
