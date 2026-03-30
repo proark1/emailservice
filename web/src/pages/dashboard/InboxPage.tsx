@@ -654,8 +654,8 @@ export default function InboxPage() {
                 onClick={() => onFilterChange(tab.key)}
                 className={`flex-1 px-2 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
                   filter === tab.key
-                    ? "bg-white text-gray-900 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
+                    ? "bg-white text-gray-900 shadow-sm dark:shadow-none"
+                    : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-200"
                 }`}
               >
                 {tab.label}

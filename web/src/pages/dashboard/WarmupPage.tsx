@@ -462,15 +462,15 @@ export default function WarmupPage() {
                           </td>
                           <td className="px-3 py-2 text-[12px] text-gray-500">{target}</td>
                           <td className="px-3 py-2 text-[12px] text-gray-500">
-                            {isCompleted || isToday ? (daily?.sent ?? 0) : <span className="text-gray-300">—</span>}
+                            {isCompleted || isToday ? (daily?.sent ?? 0) : <span className="text-gray-300 dark:text-gray-600">—</span>}
                           </td>
                           <td className="px-3 py-2 text-[12px] text-gray-500">
-                            {isCompleted || isToday ? (daily?.opened ?? 0) : <span className="text-gray-300">—</span>}
+                            {isCompleted || isToday ? (daily?.opened ?? 0) : <span className="text-gray-300 dark:text-gray-600">—</span>}
                           </td>
                           <td className="px-3 py-2 text-[12px] text-gray-500">
                             {(isCompleted || isToday) && daily && daily.sent > 0
                               ? `${Math.round((daily.inbox / daily.sent) * 100)}%`
-                              : <span className="text-gray-300">—</span>
+                              : <span className="text-gray-300 dark:text-gray-600">—</span>
                             }
                           </td>
                           <td className="px-3 py-2">

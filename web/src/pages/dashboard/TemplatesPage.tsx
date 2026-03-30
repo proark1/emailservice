@@ -230,7 +230,7 @@ export default function TemplatesPage() {
       ) : (
         <Table headers={["Name", "Subject", "Variables", "Version", "Last Updated", "Actions"]}>
           {templates.map((t) => (
-            <tr key={t.id} className="hover:bg-gray-50">
+            <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
               <td className="px-4 py-3 text-gray-900 text-[13px] font-medium">{t.name}</td>
               <td className="px-4 py-3 text-gray-600 text-[13px] max-w-[250px] truncate">{t.subject || "\u2014"}</td>
               <td className="px-4 py-3">
