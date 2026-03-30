@@ -266,14 +266,24 @@ export default function WarmupPage() {
       </Modal>
 
       {/* Stats Modal */}
-      <Modal open={statsOpen} onClose={() => setStatsOpen(false)} title="Warmup Stats">
+      <Modal open={statsOpen} onClose={() => setStatsOpen(false)} title="Warmup Details">
         {statsLoading && (
           <div className="py-8 text-center text-[13px] text-gray-500">Loading stats...</div>
         )}
         {!statsLoading && !statsData && (
           <div className="py-8 text-center text-[13px] text-gray-500">Failed to load stats.</div>
         )}
-        {statsData && (
+        {statsData && (() => {
+          const startDate = new Date(statsData.schedule.started_at);
+          const currentDay = statsData.schedule.current_day;
+          const ramp = statsData.schedule.ramp_schedule;
+          const totalDays = statsData.schedule.total_days;
+          const totalPlannedEmails = ramp.reduce((a, b) => a + b, 0);
+          const completionDate = new Date(startDate.getTime() + (totalDays - 1) * 86_400_000);
+          const domainName = domainNameById(statsData.schedule.domain_id);
+          const recipients = Array.from({ length: 5 }, (_, i) => `warmup-${i + 1}@${domainName}`);
+
+          return (
           <div className="space-y-4">
             {/* Summary Cards */}
             <div className="grid grid-cols-2 gap-3">
@@ -336,8 +346,8 @@ export default function WarmupPage() {
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
               <p className="text-[12px] font-medium text-gray-500 uppercase tracking-wider mb-3">Ramp Progress</p>
               <div className="flex items-end gap-[2px] h-16">
-                {statsData.schedule.ramp_schedule.map((target, i) => {
-                  const maxTarget = Math.max(...statsData.schedule.ramp_schedule);
+                {ramp.map((target, i) => {
+                  const maxTarget = Math.max(...ramp);
                   const heightPct = maxTarget > 0 ? (target / maxTarget) * 100 : 0;
                   const daily = statsData.daily.find((d) => d.day === i + 1);
                   const actualPct = daily && maxTarget > 0 ? (daily.sent / maxTarget) * 100 : 0;
@@ -354,7 +364,7 @@ export default function WarmupPage() {
               </div>
               <div className="flex justify-between text-[11px] text-gray-400 mt-2">
                 <span>Day 1</span>
-                <span>Day {statsData.schedule.total_days}</span>
+                <span>Day {totalDays}</span>
               </div>
             </div>
 
@@ -394,9 +404,94 @@ export default function WarmupPage() {
               </div>
             )}
 
+            {/* Long-Term Plan */}
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+              <div className="px-3 py-2.5 bg-gray-50/80 border-b border-gray-200 flex items-center justify-between">
+                <p className="text-[12px] font-medium text-gray-500 uppercase tracking-wider">Full Schedule Plan</p>
+                <p className="text-[11px] text-gray-400">
+                  {totalPlannedEmails.toLocaleString()} emails total &middot; ends {completionDate.toLocaleDateString()}
+                </p>
+              </div>
+              <div className="px-3 py-2 bg-gray-50/50 border-b border-gray-100 flex items-center gap-2 text-[11px] text-gray-500">
+                <span>Recipients:</span>
+                <span className="text-gray-600 font-mono">{recipients.slice(0, 3).join(", ")}{recipients.length > 3 ? ` +${recipients.length - 3} more` : ""}</span>
+              </div>
+              <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50/50 sticky top-0 z-10">
+                      <th className="text-left px-3 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wider">Day</th>
+                      <th className="text-left px-3 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                      <th className="text-left px-3 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wider">Target</th>
+                      <th className="text-left px-3 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wider">Sent</th>
+                      <th className="text-left px-3 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wider">Opens</th>
+                      <th className="text-left px-3 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wider">Inbox</th>
+                      <th className="text-left px-3 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {ramp.map((target, i) => {
+                      const dayNum = i + 1;
+                      const dayDate = new Date(startDate.getTime() + i * 86_400_000);
+                      const daily = statsData.daily.find((d) => d.day === dayNum);
+                      const isCompleted = dayNum < currentDay;
+                      const isToday = dayNum === currentDay && statsData.schedule.status === "active";
+                      const isFuture = dayNum > currentDay;
+
+                      return (
+                        <tr key={dayNum} className={isToday ? "bg-violet-50/50" : ""}>
+                          <td className="px-3 py-2 text-[12px] text-gray-900 font-medium">{dayNum}</td>
+                          <td className="px-3 py-2 text-[12px] text-gray-500 whitespace-nowrap">
+                            {dayDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                          </td>
+                          <td className="px-3 py-2 text-[12px] text-gray-500">{target}</td>
+                          <td className="px-3 py-2 text-[12px] text-gray-500">
+                            {isCompleted || isToday ? (daily?.sent ?? 0) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-[12px] text-gray-500">
+                            {isCompleted || isToday ? (daily?.opened ?? 0) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-[12px] text-gray-500">
+                            {(isCompleted || isToday) && daily && daily.sent > 0
+                              ? `${Math.round((daily.inbox / daily.sent) * 100)}%`
+                              : <span className="text-gray-300">—</span>
+                            }
+                          </td>
+                          <td className="px-3 py-2">
+                            {isCompleted && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                                Done
+                              </span>
+                            )}
+                            {isToday && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-600">
+                                <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
+                                Today
+                              </span>
+                            )}
+                            {isFuture && (
+                              <span className="text-[11px] text-gray-400">Scheduled</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {/* Plan summary footer */}
+              <div className="px-3 py-2.5 bg-gray-50/80 border-t border-gray-200 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500">
+                <span>From: <strong className="text-gray-700">{statsData.schedule.from_address}</strong></span>
+                <span>Started: <strong className="text-gray-700">{startDate.toLocaleDateString()}</strong></span>
+                <span>Est. completion: <strong className="text-gray-700">{completionDate.toLocaleDateString()}</strong></span>
+              </div>
+            </div>
+
             <Button variant="secondary" onClick={() => setStatsOpen(false)}>Close</Button>
           </div>
-        )}
+          );
+        })()}
       </Modal>
 
       {/* Warmups List */}
