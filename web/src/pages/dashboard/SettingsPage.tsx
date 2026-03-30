@@ -79,9 +79,7 @@ export default function SettingsPage() {
             onChange={(e) => setName(e.target.value)}
             placeholder="Your name"
           />
-          <Button onClick={handleSaveName} disabled={savingName}>
-            {savingName ? "Saving..." : "Save"}
-          </Button>
+          <Button onClick={handleSaveName} loading={savingName}>Save</Button>
         </div>
       </div>
 
@@ -110,9 +108,7 @@ export default function SettingsPage() {
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Repeat new password"
           />
-          <Button onClick={handleChangePassword} disabled={changingPassword}>
-            {changingPassword ? "Changing..." : "Change Password"}
-          </Button>
+          <Button onClick={handleChangePassword} loading={changingPassword}>Change Password</Button>
         </div>
       </div>
 

@@ -218,7 +218,7 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
     <div>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-3">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-2 rounded-xl border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-colors">
+          <button onClick={onBack} className="p-2 rounded-xl border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/50 dark:hover:text-gray-100 transition-colors">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></svg>
           </button>
           <div>
@@ -324,7 +324,7 @@ function AudienceDetail({ audience, onBack }: { audience: Audience; onBack: () =
       ) : (
         <Table headers={["Email", "First Name", "Last Name", "Status", "Actions"]}>
           {filteredContacts.map((c) => (
-            <tr key={c.id} className="hover:bg-gray-50">
+            <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
               <td className="px-4 py-3 text-gray-900 text-[13px] font-medium">{c.email}</td>
               <td className="px-4 py-3 text-gray-500 text-[13px]">{c.first_name || "—"}</td>
               <td className="px-4 py-3 text-gray-500 text-[13px]">{c.last_name || "—"}</td>

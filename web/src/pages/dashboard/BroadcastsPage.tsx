@@ -272,7 +272,7 @@ export default function BroadcastsPage() {
       ) : (
         <Table headers={["Name", "Audience", "Status", "Sent / Total", "Date"]}>
           {broadcasts.map((b) => (
-            <tr key={b.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => openDetail(b)}>
+            <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => openDetail(b)}>
               <td className="px-4 py-3 text-gray-900 text-[13px] font-medium">{b.name}</td>
               <td className="px-4 py-3 text-gray-500 text-[13px]">{audienceNameById(b.audience_id)}</td>
               <td className="px-4 py-3"><Badge variant={statusVariant(b.status)}>{b.status}</Badge></td>

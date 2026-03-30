@@ -115,7 +115,7 @@ export default function SuppressionsPage() {
       ) : (
         <Table headers={["Email", "Reason", "Date Added", "Actions"]}>
           {filtered.map((s) => (
-            <tr key={s.id} className="hover:bg-gray-50 transition-colors">
+            <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
               <td className="px-4 py-3 text-[13px] text-gray-900 font-mono">{s.email}</td>
               <td className="px-4 py-3"><Badge variant={reasonVariant(s.reason)}>{s.reason}</Badge></td>
               <td className="px-4 py-3 text-[13px] text-gray-500">{new Date(s.created_at).toLocaleDateString()}</td>

@@ -27,7 +27,7 @@ export default function DeliverabilityPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 flex flex-col items-center justify-center">
           <svg className="w-32 h-32" viewBox="0 0 120 120">
-            <circle cx="60" cy="60" r="50" fill="none" strokeWidth="8" stroke="#e5e7eb" />
+            <circle cx="60" cy="60" r="50" fill="none" strokeWidth="8" className="stroke-gray-200 dark:stroke-gray-700" />
             <circle cx="60" cy="60" r="50" fill="none" strokeWidth="8"
               stroke={data.score >= 80 ? "#10b981" : data.score >= 60 ? "#f59e0b" : "#ef4444"}
               strokeLinecap="round"
@@ -35,8 +35,8 @@ export default function DeliverabilityPage() {
               transform="rotate(-90 60 60)"
               className="transition-all duration-1000"
             />
-            <text x="60" y="55" textAnchor="middle" className="text-3xl font-bold fill-gray-900">{data.score}</text>
-            <text x="60" y="72" textAnchor="middle" className="text-[11px] fill-gray-500">out of 100</text>
+            <text x="60" y="55" textAnchor="middle" className="text-3xl font-bold fill-gray-900 dark:fill-gray-100">{data.score}</text>
+            <text x="60" y="72" textAnchor="middle" className="text-[11px] fill-gray-500 dark:fill-gray-400">out of 100</text>
           </svg>
           <p className="text-[13px] text-gray-500 mt-2">Reputation Score</p>
           <span className={`mt-2 px-3 py-1 rounded-full text-[12px] font-medium ${data.score >= 80 ? "bg-emerald-50 text-emerald-700" : data.score >= 60 ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{scoreLabel}</span>
@@ -97,7 +97,7 @@ export default function DeliverabilityPage() {
             <th className="text-right px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Opens</th>
           </tr></thead>
           <tbody className="divide-y divide-gray-100">{data.daily.map((d: any) => (
-            <tr key={d.date} className="hover:bg-gray-50">
+            <tr key={d.date} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
               <td className="px-4 py-2 text-[13px] text-gray-600 font-mono">{d.date}</td>
               <td className="px-4 py-2 text-[13px] text-emerald-600 text-right">{d.sent}</td>
               <td className="px-4 py-2 text-[13px] text-amber-600 text-right">{d.bounced}</td>
