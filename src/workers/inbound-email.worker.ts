@@ -1,9 +1,10 @@
 import { Worker, Job } from "bullmq";
-import { eq, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { getRedisConnection } from "../queues/index.js";
 import { dispatchEvent } from "../services/webhook.service.js";
 import { getDb } from "../db/index.js";
 import { inboundEmails, domains, emails, warmupEmails, warmupSchedules } from "../db/schema/index.js";
+import { REPLY_BODIES } from "../services/warmup.service.js";
 
 export interface InboundEmailJobData {
   accountId: string;
@@ -81,12 +82,13 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
     }
   }
 
-  // Auto-learn sender contact
-  try {
-    const { autoLearnContact } = await import("../services/address-book.service.js");
-    await autoLearnContact(data.accountId, data.from, data.fromName);
-  } catch {}
-
+  // Auto-learn sender contact — skip warmup system addresses (warmup@, warmup-N@)
+  if (!/^warmup(?:-\d+)?@/i.test(data.from)) {
+    try {
+      const { autoLearnContact } = await import("../services/address-book.service.js");
+      await autoLearnContact(data.accountId, data.from, data.fromName);
+    } catch {}
+  }
 
   // Detect replies to warmup emails (best-effort — don't fail the job)
   if (data.inReplyTo) {
@@ -117,6 +119,40 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
       }
     } catch (err) {
       console.error(`[inbound-email] Failed to record warmup reply for ${stored.id}:`, err);
+    }
+  }
+
+  // Auto-reply to warmup emails — creates genuine two-way mail flow, the strongest
+  // positive signal for inbox placement. Only reply to original sends (no inReplyTo),
+  // not to the auto-replies themselves, preventing reply loops.
+  const warmupToMatch = /^warmup-\d+@(.+)$/i.exec(data.to);
+  if (warmupToMatch && !data.inReplyTo && data.messageId) {
+    try {
+      const { sendEmail } = await import("../services/email.service.js");
+      const domainName = warmupToMatch[1];
+
+      const [activeSchedule] = await db
+        .select({ accountId: warmupSchedules.accountId })
+        .from(warmupSchedules)
+        .innerJoin(domains, eq(domains.id, warmupSchedules.domainId))
+        .where(and(eq(domains.name, domainName), eq(warmupSchedules.status, "active")))
+        .limit(1);
+
+      if (activeSchedule) {
+        // Random 5–30 min delay so the reply looks organic
+        const delayMs = (5 + Math.floor(Math.random() * 25)) * 60_000;
+        await sendEmail(activeSchedule.accountId, {
+          from: data.to,
+          to: [data.from],
+          subject: `Re: ${data.subject || "(no subject)"}`,
+          text: REPLY_BODIES[Math.floor(Math.random() * REPLY_BODIES.length)],
+          in_reply_to: data.messageId,
+          scheduled_at: new Date(Date.now() + delayMs).toISOString(),
+          tags: { _warmup_reply: "true" },
+        });
+      }
+    } catch (err) {
+      console.error(`[inbound-email] Failed to send warmup auto-reply for ${stored.id}:`, err);
     }
   }
 

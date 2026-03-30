@@ -56,7 +56,8 @@ const WARMUP_BODIES = [
 ];
 
 // Reply bodies — short, positive engagement signals
-const REPLY_BODIES = [
+// Exported so the inbound worker can send auto-replies when warmup emails arrive.
+export const REPLY_BODIES = [
   "Got it, thanks! Looks good to me.",
   "Great, I'll take a look. Thanks for sending this over!",
   "Makes sense — let's go with that approach.",
@@ -286,6 +287,7 @@ export async function executeWarmupRound(scheduleId: string) {
   const target = schedule.rampSchedule[schedule.currentDay - 1] || 2;
   const recipients = getWarmupRecipients(domain.name);
   let sentCount = 0;
+  let failCount = 0;
 
   // Spread sends across the day: up to 8 hours, min 20 min per email.
   // Each email is scheduled at an offset so ISPs see natural timing, not a burst.
@@ -337,6 +339,7 @@ export async function executeWarmupRound(scheduleId: string) {
 
       sentCount++;
     } catch {
+      failCount++;
       await db.insert(warmupEmails).values({
         scheduleId: schedule.id,
         accountId: schedule.accountId,
@@ -347,6 +350,20 @@ export async function executeWarmupRound(scheduleId: string) {
         status: "failed",
       }).catch(() => {});
     }
+  }
+
+  // Auto-pause if the majority of sends failed — something is wrong with the domain
+  // or mail server config. Don't advance the day; let the user investigate and resume.
+  // Only applies on days with meaningful volume (≥5 target) to avoid false triggers.
+  if (target >= 5 && failCount / target > 0.5) {
+    await db.update(warmupSchedules).set({
+      sentToday: sentCount,
+      totalSent: sql`${warmupSchedules.totalSent} + ${sentCount}`,
+      status: "paused",
+      lastRunAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(warmupSchedules.id, scheduleId));
+    return;
   }
 
   // Advance to next day
