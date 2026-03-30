@@ -1001,7 +1001,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     return reply.status(201).send({ data: mailboxService.formatMailboxResponse(mailbox) });
   });
 
-  app.put<{ Params: { id: string } }>("/mailboxes/:id", async (request) => {
+  app.patch<{ Params: { id: string } }>("/mailboxes/:id", async (request) => {
     const input = z.object({
       display_name: z.string().min(1).max(255).optional(),
       smtp_host: z.string().min(1).optional(),

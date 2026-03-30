@@ -71,8 +71,8 @@ export default async function mailboxRoutes(app: FastifyInstance) {
     return { data: mailboxService.formatMailboxResponse(mailbox) };
   });
 
-  // PUT /v1/mailboxes/:id
-  app.put<{ Params: { id: string } }>("/:id", async (request) => {
+  // PATCH /v1/mailboxes/:id
+  app.patch<{ Params: { id: string } }>("/:id", async (request) => {
     const input = updateMailboxSchema.parse(request.body);
     const mailbox = await mailboxService.updateMailbox(request.account.id, request.params.id, {
       displayName: input.display_name,
