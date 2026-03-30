@@ -1116,7 +1116,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const { q } = z.object({ q: z.string().min(1).max(200) }).parse(request.query);
     const db = getDb();
     const accountId = request.account.id;
-    const pattern = `%${q}%`;
+    const pattern = `%${escapeIlike(q)}%`;
     const limit = 5;
 
     // Search emails
