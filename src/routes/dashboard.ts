@@ -101,7 +101,30 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
     const [totalResult] = await db.select({ count: count() }).from(emails).where(whereClause);
     const total = Number(totalResult.count);
-    const data = await db.select().from(emails).where(whereClause).orderBy(desc(emails.createdAt)).limit(query.limit).offset(offset);
+    const data = await db.select({
+      id: emails.id,
+      accountId: emails.accountId,
+      domainId: emails.domainId,
+      folderId: emails.folderId,
+      fromAddress: emails.fromAddress,
+      fromName: emails.fromName,
+      toAddresses: emails.toAddresses,
+      ccAddresses: emails.ccAddresses,
+      bccAddresses: emails.bccAddresses,
+      replyTo: emails.replyTo,
+      subject: emails.subject,
+      tags: emails.tags,
+      status: emails.status,
+      scheduledAt: emails.scheduledAt,
+      sentAt: emails.sentAt,
+      deliveredAt: emails.deliveredAt,
+      lastEventAt: emails.lastEventAt,
+      openCount: emails.openCount,
+      clickCount: emails.clickCount,
+      messageId: emails.messageId,
+      isDraft: emails.isDraft,
+      createdAt: emails.createdAt,
+    }).from(emails).where(whereClause).orderBy(desc(emails.createdAt)).limit(query.limit).offset(offset);
 
     return {
       data,
@@ -156,7 +179,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
     const events = await db.select().from(emailEvents)
       .where(eq(emailEvents.emailId, request.params.id))
-      .orderBy(desc(emailEvents.createdAt));
+      .orderBy(desc(emailEvents.createdAt))
+      .limit(500);
 
     return { data: events.map(e => ({
       id: e.id,
@@ -855,25 +879,33 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const lines = csv.split("\n").map(l => l.trim()).filter(Boolean);
     const startIdx = lines[0]?.toLowerCase().includes("email") ? 1 : 0;
 
-    let imported = 0;
+    const { contacts: contactsTable } = await import("../db/schema/index.js");
+    const rows: { audienceId: string; email: string; firstName: string | null; lastName: string | null; subscribed: boolean }[] = [];
     let skipped = 0;
 
     for (let i = startIdx; i < lines.length; i++) {
       const parts = lines[i].split(",").map(p => p.trim().replace(/^"|"$/g, ""));
       const email = parts[0];
       if (!email || !email.includes("@")) { skipped++; continue; }
+      rows.push({
+        audienceId: audience.id,
+        email,
+        firstName: parts[1] || null,
+        lastName: parts[2] || null,
+        subscribed: parts[3] !== "false",
+      });
+    }
 
-      try {
-        await audienceService.createContact(request.account.id, request.params.id, {
-          email,
-          first_name: parts[1] || undefined,
-          last_name: parts[2] || undefined,
-          subscribed: parts[3] !== "false",
-        });
-        imported++;
-      } catch {
-        skipped++;
+    let imported = 0;
+    if (rows.length > 0) {
+      // Batch insert in chunks of 500, skip duplicates
+      const CHUNK = 500;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const chunk = rows.slice(i, i + CHUNK);
+        const result = await getDb().insert(contactsTable).values(chunk).onConflictDoNothing().returning({ id: contactsTable.id });
+        imported += result.length;
       }
+      skipped += rows.length - imported;
     }
 
     return reply.status(200).send({ data: { imported, skipped, total: lines.length - startIdx } });
@@ -1266,7 +1298,15 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       try { reply.raw.write(": ping\n\n"); } catch {}
     }, 30000);
 
+    // Auto-close after 5 minutes to prevent resource exhaustion
+    const maxDuration = setTimeout(() => {
+      clearInterval(interval);
+      clearInterval(ping);
+      try { reply.raw.end(); } catch {}
+    }, 5 * 60 * 1000);
+
     request.raw.on("close", () => {
+      clearTimeout(maxDuration);
       clearInterval(interval);
       clearInterval(ping);
     });

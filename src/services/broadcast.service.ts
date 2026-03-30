@@ -120,7 +120,7 @@ export async function executeBroadcast(broadcastId: string) {
 
   // Get all subscribed contacts in the audience
   const subscribedContacts = await db
-    .select()
+    .select({ email: contacts.email })
     .from(contacts)
     .where(and(eq(contacts.audienceId, broadcast.audienceId), eq(contacts.subscribed, true)));
 
