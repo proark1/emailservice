@@ -312,7 +312,23 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       const whereClause = and(...conditions);
       const [totalResult] = await db.select({ count: count() }).from(emails).where(whereClause);
       const total = Number(totalResult.count);
-      const list = await db.select().from(emails).where(whereClause).orderBy(desc(emails.createdAt)).limit(query.limit).offset(offset);
+      const list = await db.select({
+        id: emails.id,
+        fromAddress: emails.fromAddress,
+        fromName: emails.fromName,
+        toAddresses: emails.toAddresses,
+        ccAddresses: emails.ccAddresses,
+        subject: emails.subject,
+        status: emails.status,
+        messageId: emails.messageId,
+        inReplyTo: emails.inReplyTo,
+        threadId: emails.threadId,
+        references: emails.references,
+        folderId: emails.folderId,
+        attachments: emails.attachments,
+        deletedAt: emails.deletedAt,
+        createdAt: emails.createdAt,
+      }).from(emails).where(whereClause).orderBy(desc(emails.createdAt)).limit(query.limit).offset(offset);
 
       const normalized = list.map((e) => ({
         id: e.id,
@@ -321,8 +337,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         toAddress: (e.toAddresses as string[])?.join(", ") ?? "",
         ccAddresses: e.ccAddresses,
         subject: e.subject,
-        textBody: e.textBody,
-        htmlBody: e.htmlBody,
+        textBody: null,
+        htmlBody: null,
         messageId: e.messageId,
         inReplyTo: e.inReplyTo,
         threadId: e.threadId,
@@ -368,7 +384,15 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         const whereClause = and(...conditions);
         const [totalResult] = await db.select({ count: count() }).from(inboundEmails).where(whereClause);
         const total = Number(totalResult.count);
-        const list = await db.select().from(inboundEmails).where(whereClause).orderBy(desc(inboundEmails.createdAt)).limit(query.limit).offset(offset);
+        const list = await db.select({
+          id: inboundEmails.id, accountId: inboundEmails.accountId, domainId: inboundEmails.domainId,
+          folderId: inboundEmails.folderId, fromAddress: inboundEmails.fromAddress, fromName: inboundEmails.fromName,
+          toAddress: inboundEmails.toAddress, ccAddresses: inboundEmails.ccAddresses, subject: inboundEmails.subject,
+          messageId: inboundEmails.messageId, inReplyTo: inboundEmails.inReplyTo, threadId: inboundEmails.threadId,
+          references: inboundEmails.references, isRead: inboundEmails.isRead, isStarred: inboundEmails.isStarred,
+          isArchived: inboundEmails.isArchived, hasAttachments: inboundEmails.hasAttachments,
+          deletedAt: inboundEmails.deletedAt, createdAt: inboundEmails.createdAt,
+        }).from(inboundEmails).where(whereClause).orderBy(desc(inboundEmails.createdAt)).limit(query.limit).offset(offset);
         return {
           data: list,
           pagination: { page: query.page, limit: query.limit, total, pages: Math.ceil(total / query.limit) },
@@ -417,7 +441,15 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
     const [totalResult] = await db.select({ count: count() }).from(inboundEmails).where(whereClause);
     const total = Number(totalResult.count);
-    const list = await db.select().from(inboundEmails).where(whereClause).orderBy(desc(inboundEmails.createdAt)).limit(query.limit).offset(offset);
+    const list = await db.select({
+      id: inboundEmails.id, accountId: inboundEmails.accountId, domainId: inboundEmails.domainId,
+      folderId: inboundEmails.folderId, fromAddress: inboundEmails.fromAddress, fromName: inboundEmails.fromName,
+      toAddress: inboundEmails.toAddress, ccAddresses: inboundEmails.ccAddresses, subject: inboundEmails.subject,
+      messageId: inboundEmails.messageId, inReplyTo: inboundEmails.inReplyTo, threadId: inboundEmails.threadId,
+      references: inboundEmails.references, isRead: inboundEmails.isRead, isStarred: inboundEmails.isStarred,
+      isArchived: inboundEmails.isArchived, hasAttachments: inboundEmails.hasAttachments,
+      deletedAt: inboundEmails.deletedAt, createdAt: inboundEmails.createdAt,
+    }).from(inboundEmails).where(whereClause).orderBy(desc(inboundEmails.createdAt)).limit(query.limit).offset(offset);
 
     return {
       data: list,
