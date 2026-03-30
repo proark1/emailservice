@@ -1,4 +1,4 @@
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, gte } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { warmupSchedules, warmupEmails } from "../db/schema/index.js";
 import { domains, accounts } from "../db/schema/index.js";
@@ -98,6 +98,7 @@ function randomItem<T>(arr: T[]): T {
 export async function startWarmup(accountId: string, domainId: string, options?: {
   totalDays?: number;
   fromAddress?: string;
+  externalRecipients?: string[];
 }) {
   const db = getDb();
 
@@ -150,6 +151,7 @@ export async function startWarmup(accountId: string, domainId: string, options?:
     targetToday: rampSchedule[0],
     fromAddress,
     rampSchedule,
+    externalRecipients: options?.externalRecipients?.length ? options.externalRecipients : null,
     startedAt: new Date(),
   }).returning();
 
@@ -294,7 +296,15 @@ export async function executeWarmupRound(scheduleId: string) {
   if (!domain) return;
 
   const target = schedule.rampSchedule[schedule.currentDay - 1] || 2;
-  const recipients = getWarmupRecipients(domain.name);
+  // Merge internal mailboxes with any user-configured external addresses.
+  // External addresses (e.g. a personal Gmail) broaden the reputation signal
+  // and test deliverability to real mail providers. Internal mbox-N@ addresses
+  // benefit from auto-reply and inbox placement detection.
+  const internalRecipients = getWarmupRecipients(domain.name);
+  const recipients = [
+    ...internalRecipients,
+    ...(schedule.externalRecipients ?? []),
+  ];
   let sentCount = 0;
   let failCount = 0;
 
@@ -376,13 +386,34 @@ export async function executeWarmupRound(scheduleId: string) {
     return;
   }
 
-  // Advance to next day
-  const nextDay = schedule.currentDay + 1;
-  const nextTarget = nextDay <= schedule.totalDays
-    ? (schedule.rampSchedule[nextDay - 1] || 100)
-    : 0;
+  // Engagement-based ramp hold — if the 7-day rolling open rate is below 10%
+  // after the first week, don't advance to the next (higher) daily target.
+  // Stay at the current volume until engagement recovers. This prevents
+  // ramping into damaged reputation and gives ISPs time to build trust.
+  let holdRamp = false;
+  if (schedule.currentDay > 7) {
+    const [engStats] = await db.select({
+      opens: sql<number>`count(*) filter (where ${warmupEmails.opened} = true)::int`,
+      total: sql<number>`count(*)::int`,
+    }).from(warmupEmails)
+      .where(and(
+        eq(warmupEmails.scheduleId, scheduleId),
+        gte(warmupEmails.day, schedule.currentDay - 6),
+        eq(warmupEmails.status, "sent"),
+      ));
 
-  const isComplete = nextDay > schedule.totalDays;
+    if (engStats && engStats.total >= 10) {
+      holdRamp = (engStats.opens / engStats.total) < 0.10;
+    }
+  }
+
+  // Advance to next day (or hold if engagement is too low)
+  const nextDay = holdRamp ? schedule.currentDay : schedule.currentDay + 1;
+  const nextTarget = holdRamp
+    ? target  // repeat same volume tomorrow
+    : (nextDay <= schedule.totalDays ? (schedule.rampSchedule[nextDay - 1] || 100) : 0);
+
+  const isComplete = !holdRamp && nextDay > schedule.totalDays;
 
   await db.update(warmupSchedules).set({
     currentDay: nextDay,
@@ -454,6 +485,7 @@ export function formatWarmupResponse(schedule: typeof warmupSchedules.$inferSele
     progress_percent: progressPercent,
     from_address: schedule.fromAddress,
     ramp_schedule: schedule.rampSchedule,
+    extra_recipients: schedule.externalRecipients ?? [],
     started_at: schedule.startedAt.toISOString(),
     completed_at: schedule.completedAt?.toISOString() ?? null,
     created_at: schedule.createdAt.toISOString(),

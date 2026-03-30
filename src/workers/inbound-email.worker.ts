@@ -122,6 +122,34 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
     }
   }
 
+  // Detect inbox placement for warmup emails by reading SMTP spam headers.
+  // SpamAssassin (and compatible filters) set X-Spam-Status / X-Spam-Flag on
+  // every message — "Yes" means the mail was classified as spam before delivery.
+  // We record this so the warmup stats surface real inbox vs. spam rates.
+  const warmupInboundMatch = /^mbox-\d+@/i.test(data.to);
+  if (warmupInboundMatch && data.messageId && !data.inReplyTo) {
+    try {
+      const h = data.headers as Record<string, string | string[]>;
+      const spamStatus = String(h["x-spam-status"] ?? h["X-Spam-Status"] ?? "");
+      const spamFlag   = String(h["x-spam-flag"]   ?? h["X-Spam-Flag"]   ?? "");
+      const isSpam = spamStatus.toLowerCase().startsWith("yes") || spamFlag.toLowerCase() === "yes";
+
+      const [sentEmail] = await db
+        .select({ id: emails.id, tags: emails.tags })
+        .from(emails)
+        .where(eq(emails.messageId, data.messageId))
+        .limit(1);
+
+      if (sentEmail?.tags?.["_warmup"] === "true") {
+        await db.update(warmupEmails)
+          .set({ inboxPlacement: isSpam ? "spam" : "inbox" })
+          .where(eq(warmupEmails.emailId, sentEmail.id));
+      }
+    } catch (err) {
+      console.error(`[inbound-email] Failed to update warmup inbox placement for ${stored.id}:`, err);
+    }
+  }
+
   // Auto-reply to warmup emails — creates genuine two-way mail flow, the strongest
   // positive signal for inbox placement. Only reply to original sends (no inReplyTo),
   // not to the auto-replies themselves, preventing reply loops.

@@ -31,6 +31,11 @@ export const warmupSchedules = pgTable("warmup_schedules", {
   fromAddress: varchar("from_address", { length: 255 }).notNull(),
   /** Custom ramp schedule: array of daily targets [day1, day2, ...] */
   rampSchedule: jsonb("ramp_schedule").$type<number[]>().notNull(),
+  /** Optional external email addresses to include in the warmup send pool.
+   *  These are real mailboxes outside the domain (e.g. a Gmail test account).
+   *  Including external providers broadens the reputation signal beyond
+   *  the domain's own MX and tests deliverability to real mail providers. */
+  externalRecipients: jsonb("external_recipients").$type<string[]>(),
   /** When the warmup last ran (to prevent double-runs) */
   lastRunAt: timestamp("last_run_at", { withTimezone: true }),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
