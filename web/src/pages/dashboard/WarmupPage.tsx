@@ -282,7 +282,9 @@ export default function WarmupPage() {
           const totalPlannedEmails = ramp.reduce((a, b) => a + b, 0);
           const completionDate = new Date(startDate.getTime() + (totalDays - 1) * 86_400_000);
           const domainName = domainNameById(statsData.schedule.domain_id);
-          const recipients = Array.from({ length: 5 }, (_, i) => `warmup-${i + 1}@${domainName}`);
+          const internalRecipients = Array.from({ length: 5 }, (_, i) => `warmup-${i + 1}@${domainName}`);
+          const externalRecipients = statsData.schedule.extra_recipients || [];
+          const allRecipients = [...internalRecipients, ...externalRecipients];
 
           return (
           <div className="space-y-4">
@@ -329,18 +331,35 @@ export default function WarmupPage() {
               </div>
             )}
 
-            {/* From address + extra recipients */}
+            {/* From / Sending to */}
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-1.5">
               <div className="flex gap-2 text-[12px]">
                 <span className="text-gray-400 w-24 shrink-0">From</span>
                 <span className="text-gray-700 font-medium break-all">{statsData.schedule.from_address}</span>
               </div>
-              {statsData.schedule.extra_recipients.length > 0 && (
-                <div className="flex gap-2 text-[12px]">
-                  <span className="text-gray-400 w-24 shrink-0">Seed pool</span>
-                  <span className="text-gray-700 break-all">{statsData.schedule.extra_recipients.join(", ")}</span>
+              <div className="flex gap-2 text-[12px]">
+                <span className="text-gray-400 w-24 shrink-0">Sending to</span>
+                <div className="text-gray-700">
+                  {recipientsExpanded ? (
+                    <div className="flex flex-wrap gap-1">
+                      {allRecipients.map((r, i) => (
+                        <span key={i} className={`font-mono text-[11px] px-1.5 py-0.5 rounded ${i < internalRecipients.length ? "bg-gray-200 text-gray-600" : "bg-violet-100 text-violet-700"}`}>{r}</span>
+                      ))}
+                      <button onClick={() => setRecipientsExpanded(false)} className="text-[11px] text-violet-600 hover:text-violet-700 font-medium ml-1 cursor-pointer">Show less</button>
+                    </div>
+                  ) : (
+                    <span className="text-[12px]">
+                      <span className="font-mono">{allRecipients.slice(0, 2).join(", ")}</span>
+                      {allRecipients.length > 2 && (
+                        <button onClick={() => setRecipientsExpanded(true)} className="text-violet-600 hover:text-violet-700 font-medium ml-1 cursor-pointer">+{allRecipients.length - 2} more</button>
+                      )}
+                    </span>
+                  )}
+                  {externalRecipients.length > 0 && !recipientsExpanded && (
+                    <p className="text-[11px] text-gray-400 mt-0.5">{internalRecipients.length} internal + {externalRecipients.length} external</p>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Progress visualization */}
@@ -412,26 +431,6 @@ export default function WarmupPage() {
                 <p className="text-[11px] text-gray-400">
                   {totalPlannedEmails.toLocaleString()} emails total &middot; ends {completionDate.toLocaleDateString()}
                 </p>
-              </div>
-              <div className="px-3 py-2 bg-gray-50/50 border-b border-gray-100 text-[11px] text-gray-500">
-                <div className="flex items-center gap-2">
-                  <span className="shrink-0">Recipients:</span>
-                  {recipientsExpanded ? (
-                    <div className="flex flex-wrap gap-1">
-                      {recipients.map((r, i) => (
-                        <span key={i} className="text-gray-600 font-mono bg-gray-100 px-1.5 py-0.5 rounded">{r}</span>
-                      ))}
-                      <button onClick={() => setRecipientsExpanded(false)} className="text-violet-600 hover:text-violet-700 font-medium ml-1 cursor-pointer">Show less</button>
-                    </div>
-                  ) : (
-                    <span>
-                      <span className="text-gray-600 font-mono">{recipients.slice(0, 2).join(", ")}</span>
-                      {recipients.length > 2 && (
-                        <button onClick={() => setRecipientsExpanded(true)} className="text-violet-600 hover:text-violet-700 font-medium ml-1 cursor-pointer">+{recipients.length - 2} more</button>
-                      )}
-                    </span>
-                  )}
-                </div>
               </div>
               <div className="overflow-x-auto max-h-72 overflow-y-auto">
                 <table className="w-full text-sm">
