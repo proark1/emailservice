@@ -79,6 +79,7 @@ export default function WarmupPage() {
   });
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const [recipientsExpanded, setRecipientsExpanded] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const { showError, toast } = useToast();
 
@@ -266,7 +267,7 @@ export default function WarmupPage() {
       </Modal>
 
       {/* Stats Modal */}
-      <Modal open={statsOpen} onClose={() => setStatsOpen(false)} title="Warmup Details">
+      <Modal open={statsOpen} onClose={() => setStatsOpen(false)} title="Warmup Details" size="lg">
         {statsLoading && (
           <div className="py-8 text-center text-[13px] text-gray-500">Loading stats...</div>
         )}
@@ -412,9 +413,25 @@ export default function WarmupPage() {
                   {totalPlannedEmails.toLocaleString()} emails total &middot; ends {completionDate.toLocaleDateString()}
                 </p>
               </div>
-              <div className="px-3 py-2 bg-gray-50/50 border-b border-gray-100 flex items-center gap-2 text-[11px] text-gray-500">
-                <span>Recipients:</span>
-                <span className="text-gray-600 font-mono">{recipients.slice(0, 3).join(", ")}{recipients.length > 3 ? ` +${recipients.length - 3} more` : ""}</span>
+              <div className="px-3 py-2 bg-gray-50/50 border-b border-gray-100 text-[11px] text-gray-500">
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0">Recipients:</span>
+                  {recipientsExpanded ? (
+                    <div className="flex flex-wrap gap-1">
+                      {recipients.map((r, i) => (
+                        <span key={i} className="text-gray-600 font-mono bg-gray-100 px-1.5 py-0.5 rounded">{r}</span>
+                      ))}
+                      <button onClick={() => setRecipientsExpanded(false)} className="text-violet-600 hover:text-violet-700 font-medium ml-1 cursor-pointer">Show less</button>
+                    </div>
+                  ) : (
+                    <span>
+                      <span className="text-gray-600 font-mono">{recipients.slice(0, 2).join(", ")}</span>
+                      {recipients.length > 2 && (
+                        <button onClick={() => setRecipientsExpanded(true)} className="text-violet-600 hover:text-violet-700 font-medium ml-1 cursor-pointer">+{recipients.length - 2} more</button>
+                      )}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="overflow-x-auto max-h-72 overflow-y-auto">
                 <table className="w-full text-sm">
