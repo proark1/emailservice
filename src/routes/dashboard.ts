@@ -9,6 +9,7 @@ import * as emailService from "../services/email.service.js";
 import * as audienceService from "../services/audience.service.js";
 import * as broadcastService from "../services/broadcast.service.js";
 import * as warmupService from "../services/warmup.service.js";
+import * as mailboxService from "../services/mailbox.service.js";
 import * as templateService from "../services/template.service.js";
 import { getDb } from "../db/index.js";
 import { emails, domains, apiKeys, webhooks, audiences, inboundEmails, folders } from "../db/schema/index.js";
@@ -956,6 +957,94 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>("/warmup/:id", async (request) => {
     const schedule = await warmupService.cancelWarmup(request.account.id, request.params.id);
     return { data: warmupService.formatWarmupResponse(schedule) };
+  });
+
+  // --- Mailboxes ---
+
+  app.get("/mailboxes/providers", async () => {
+    return { data: mailboxService.PROVIDER_PRESETS };
+  });
+
+  app.get("/mailboxes", async (request) => {
+    const list = await mailboxService.listMailboxes(request.account.id);
+    return { data: list.map(mailboxService.formatMailboxResponse) };
+  });
+
+  app.post("/mailboxes", async (request, reply) => {
+    const input = z.object({
+      display_name: z.string().min(1).max(255),
+      email: z.string().email(),
+      provider: z.enum(["gmail", "outlook", "yahoo", "icloud", "custom"]).default("custom"),
+      smtp_host: z.string().min(1),
+      smtp_port: z.number().int().min(1).max(65535).default(587),
+      smtp_secure: z.boolean().default(false),
+      imap_host: z.string().min(1),
+      imap_port: z.number().int().min(1).max(65535).default(993),
+      imap_secure: z.boolean().default(true),
+      username: z.string().min(1),
+      password: z.string().min(1),
+    }).parse(request.body);
+
+    const mailbox = await mailboxService.createMailbox(request.account.id, {
+      displayName: input.display_name,
+      email: input.email,
+      provider: input.provider,
+      smtpHost: input.smtp_host,
+      smtpPort: input.smtp_port,
+      smtpSecure: input.smtp_secure,
+      imapHost: input.imap_host,
+      imapPort: input.imap_port,
+      imapSecure: input.imap_secure,
+      username: input.username,
+      password: input.password,
+    });
+    return reply.status(201).send({ data: mailboxService.formatMailboxResponse(mailbox) });
+  });
+
+  app.put<{ Params: { id: string } }>("/mailboxes/:id", async (request) => {
+    const input = z.object({
+      display_name: z.string().min(1).max(255).optional(),
+      smtp_host: z.string().min(1).optional(),
+      smtp_port: z.number().int().min(1).max(65535).optional(),
+      smtp_secure: z.boolean().optional(),
+      imap_host: z.string().min(1).optional(),
+      imap_port: z.number().int().min(1).max(65535).optional(),
+      imap_secure: z.boolean().optional(),
+      username: z.string().min(1).optional(),
+      password: z.string().min(1).optional(),
+    }).parse(request.body);
+
+    const mailbox = await mailboxService.updateMailbox(request.account.id, request.params.id, {
+      displayName: input.display_name,
+      smtpHost: input.smtp_host,
+      smtpPort: input.smtp_port,
+      smtpSecure: input.smtp_secure,
+      imapHost: input.imap_host,
+      imapPort: input.imap_port,
+      imapSecure: input.imap_secure,
+      username: input.username,
+      password: input.password,
+    });
+    return { data: mailboxService.formatMailboxResponse(mailbox) };
+  });
+
+  app.delete<{ Params: { id: string } }>("/mailboxes/:id", async (request, reply) => {
+    await mailboxService.deleteMailbox(request.account.id, request.params.id);
+    return reply.status(204).send();
+  });
+
+  app.post<{ Params: { id: string } }>("/mailboxes/:id/test", async (request) => {
+    const result = await mailboxService.testMailboxConnection(request.account.id, request.params.id);
+    return { data: result };
+  });
+
+  app.post<{ Params: { id: string } }>("/mailboxes/:id/sync", async (request) => {
+    const mailbox = await mailboxService.getMailbox(request.account.id, request.params.id);
+    const { getMailboxSyncQueue, isRedisConfigured } = await import("../queues/index.js");
+    if (isRedisConfigured()) {
+      await getMailboxSyncQueue().add("manual-sync", { mailboxId: mailbox.id });
+    }
+    return { data: { queued: true } };
   });
 
   // --- Templates ---

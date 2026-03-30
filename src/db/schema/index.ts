@@ -21,3 +21,4 @@ export { addressBookContacts } from "./address-book-contacts.js";
 export { inboundAttachments } from "./inbound-attachments.js";
 export { domainMembers } from "./domain-members.js";
 export { domainInvitations } from "./domain-invitations.js";
+export { connectedMailboxes } from "./connected-mailboxes.js";

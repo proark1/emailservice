@@ -99,6 +99,13 @@
       "when": 1774864097884,
       "tag": "0013_handy_wraith",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1774865992528,
+      "tag": "0014_mean_vision",
+      "breakpoints": true
     }
   ]
 }

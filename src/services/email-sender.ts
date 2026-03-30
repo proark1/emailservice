@@ -2,14 +2,55 @@ import nodemailer from "nodemailer";
 import crypto from "node:crypto";
 import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
-import { emails, emailEvents, domains } from "../db/schema/index.js";
+import { emails, emailEvents, domains, connectedMailboxes } from "../db/schema/index.js";
 import { getDkimPrivateKey } from "./dkim.service.js";
 import { transformHtml } from "../lib/html-transform.js";
 import { getConfig } from "../config/index.js";
 import { encryptPrivateKey } from "../lib/crypto.js";
 import { processDeliveryFailure } from "./suppression.service.js";
+import { getDecryptedPassword } from "./mailbox.service.js";
 
 let _transport: nodemailer.Transporter | null = null;
+
+// Per-mailbox transport cache keyed by mailbox ID.
+// Transports are lightweight so we cache indefinitely; they'll be evicted on
+// credential update (mailboxTransportCache.delete(id) in mailbox.service).
+const mailboxTransportCache = new Map<string, nodemailer.Transporter>();
+
+export function evictMailboxTransport(mailboxId: string) {
+  const t = mailboxTransportCache.get(mailboxId);
+  if (t) {
+    try { t.close(); } catch {}
+    mailboxTransportCache.delete(mailboxId);
+  }
+}
+
+async function getMailboxTransport(fromAddress: string, accountId: string): Promise<nodemailer.Transporter | null> {
+  const db = getDb();
+  const [mailbox] = await db.select().from(connectedMailboxes)
+    .where(and(
+      eq(connectedMailboxes.accountId, accountId),
+      eq(connectedMailboxes.email, fromAddress.toLowerCase()),
+      eq(connectedMailboxes.status, "active"),
+    ));
+
+  if (!mailbox) return null;
+
+  const cached = mailboxTransportCache.get(mailbox.id);
+  if (cached) return cached;
+
+  const password = getDecryptedPassword(mailbox);
+  const transport = nodemailer.createTransport({
+    host: mailbox.smtpHost,
+    port: mailbox.smtpPort,
+    secure: mailbox.smtpSecure,
+    auth: { user: mailbox.username, pass: password },
+    tls: { rejectUnauthorized: false },
+  });
+
+  mailboxTransportCache.set(mailbox.id, transport);
+  return transport;
+}
 
 // Cache decrypted DKIM keys to avoid AES-GCM decryption on every send
 const DKIM_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -193,7 +234,8 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       mergedHeaders["References"] = (email.references as string[]).join(" ");
     }
 
-    const transport = getOrCreateTransport();
+    // Use connected mailbox SMTP if the sender address matches one
+    const transport = (await getMailboxTransport(email.fromAddress, accountId)) ?? getOrCreateTransport();
     const info = await transport.sendMail({
       from: email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress,
       to: email.toAddresses,
