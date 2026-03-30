@@ -1,9 +1,10 @@
 import { Worker, Job } from "bullmq";
-import { eq } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { getRedisConnection } from "../queues/index.js";
 import { dispatchEvent } from "../services/webhook.service.js";
 import { getDb } from "../db/index.js";
-import { inboundEmails, domains } from "../db/schema/index.js";
+import { inboundEmails, domains, emails, warmupEmails, warmupSchedules } from "../db/schema/index.js";
+import { REPLY_BODIES } from "../services/warmup.service.js";
 
 export interface InboundEmailJobData {
   accountId: string;
@@ -81,12 +82,107 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
     }
   }
 
-  // Auto-learn sender contact
-  try {
-    const { autoLearnContact } = await import("../services/address-book.service.js");
-    await autoLearnContact(data.accountId, data.from, data.fromName);
-  } catch {}
+  // Auto-learn sender contact — skip warmup system addresses (noreply@, mbox-N@)
+  if (!/^(noreply|mbox-\d+)@/i.test(data.from)) {
+    try {
+      const { autoLearnContact } = await import("../services/address-book.service.js");
+      await autoLearnContact(data.accountId, data.from, data.fromName);
+    } catch {}
+  }
 
+  // Detect replies to warmup emails (best-effort — don't fail the job)
+  if (data.inReplyTo) {
+    try {
+      const db = getDb();
+      const now = new Date();
+
+      // Find the outbound warmup email this is replying to (single query)
+      const [sentEmail] = await db
+        .select({ id: emails.id, tags: emails.tags })
+        .from(emails)
+        .where(eq(emails.messageId, data.inReplyTo))
+        .limit(1);
+
+      if (sentEmail?.tags?.["_warmup"] === "true") {
+        const [warmupEmail] = await db
+          .update(warmupEmails)
+          .set({ replied: true, repliedAt: now })
+          .where(eq(warmupEmails.emailId, sentEmail.id))
+          .returning({ scheduleId: warmupEmails.scheduleId });
+
+        if (warmupEmail) {
+          await db
+            .update(warmupSchedules)
+            .set({ totalReplies: sql`${warmupSchedules.totalReplies} + 1`, updatedAt: now })
+            .where(eq(warmupSchedules.id, warmupEmail.scheduleId));
+        }
+      }
+    } catch (err) {
+      console.error(`[inbound-email] Failed to record warmup reply for ${stored.id}:`, err);
+    }
+  }
+
+  // Detect inbox placement for warmup emails by reading SMTP spam headers.
+  // SpamAssassin (and compatible filters) set X-Spam-Status / X-Spam-Flag on
+  // every message — "Yes" means the mail was classified as spam before delivery.
+  // We record this so the warmup stats surface real inbox vs. spam rates.
+  const warmupInboundMatch = /^mbox-\d+@/i.test(data.to);
+  if (warmupInboundMatch && data.messageId && !data.inReplyTo) {
+    try {
+      const h = data.headers as Record<string, string | string[]>;
+      const spamStatus = String(h["x-spam-status"] ?? h["X-Spam-Status"] ?? "");
+      const spamFlag   = String(h["x-spam-flag"]   ?? h["X-Spam-Flag"]   ?? "");
+      const isSpam = spamStatus.toLowerCase().startsWith("yes") || spamFlag.toLowerCase() === "yes";
+
+      const [sentEmail] = await db
+        .select({ id: emails.id, tags: emails.tags })
+        .from(emails)
+        .where(eq(emails.messageId, data.messageId))
+        .limit(1);
+
+      if (sentEmail?.tags?.["_warmup"] === "true") {
+        await db.update(warmupEmails)
+          .set({ inboxPlacement: isSpam ? "spam" : "inbox" })
+          .where(eq(warmupEmails.emailId, sentEmail.id));
+      }
+    } catch (err) {
+      console.error(`[inbound-email] Failed to update warmup inbox placement for ${stored.id}:`, err);
+    }
+  }
+
+  // Auto-reply to warmup emails — creates genuine two-way mail flow, the strongest
+  // positive signal for inbox placement. Only reply to original sends (no inReplyTo),
+  // not to the auto-replies themselves, preventing reply loops.
+  const warmupToMatch = /^mbox-\d+@(.+)$/i.exec(data.to);
+  if (warmupToMatch && !data.inReplyTo && data.messageId) {
+    try {
+      const { sendEmail } = await import("../services/email.service.js");
+      const domainName = warmupToMatch[1];
+
+      const [activeSchedule] = await db
+        .select({ accountId: warmupSchedules.accountId })
+        .from(warmupSchedules)
+        .innerJoin(domains, eq(domains.id, warmupSchedules.domainId))
+        .where(and(eq(domains.name, domainName), eq(warmupSchedules.status, "active")))
+        .limit(1);
+
+      if (activeSchedule) {
+        // Random 5–30 min delay so the reply looks organic
+        const delayMs = (5 + Math.floor(Math.random() * 25)) * 60_000;
+        await sendEmail(activeSchedule.accountId, {
+          from: data.to,
+          to: [data.from],
+          subject: `Re: ${data.subject || "(no subject)"}`,
+          text: REPLY_BODIES[Math.floor(Math.random() * REPLY_BODIES.length)],
+          in_reply_to: data.messageId,
+          scheduled_at: new Date(Date.now() + delayMs).toISOString(),
+          tags: { _warmup_reply: "true" },
+        });
+      }
+    } catch (err) {
+      console.error(`[inbound-email] Failed to send warmup auto-reply for ${stored.id}:`, err);
+    }
+  }
 
   // Fire webhook (best-effort — don't fail the job if dispatch errors)
   try {

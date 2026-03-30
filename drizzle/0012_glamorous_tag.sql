@@ -1,0 +1,1 @@
+ALTER TABLE "warmup_schedules" ADD COLUMN "external_recipients" jsonb;

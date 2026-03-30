@@ -1,7 +1,7 @@
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, gte } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { warmupSchedules, warmupEmails } from "../db/schema/index.js";
-import { domains } from "../db/schema/index.js";
+import { domains, accounts } from "../db/schema/index.js";
 import { NotFoundError, ValidationError, ConflictError } from "../lib/errors.js";
 import { sendEmail } from "./email.service.js";
 
@@ -56,7 +56,8 @@ const WARMUP_BODIES = [
 ];
 
 // Reply bodies — short, positive engagement signals
-const REPLY_BODIES = [
+// Exported so the inbound worker can send auto-replies when warmup emails arrive.
+export const REPLY_BODIES = [
   "Got it, thanks! Looks good to me.",
   "Great, I'll take a look. Thanks for sending this over!",
   "Makes sense — let's go with that approach.",
@@ -67,16 +68,22 @@ const REPLY_BODIES = [
   "Thanks! I'll review and circle back tomorrow morning.",
 ];
 
-// Warmup recipient addresses — sent to the user's own domain so the
+// Warmup recipient mailboxes — sent to the user's own domain so the
 // inbound SMTP server receives them, creating real mail flow.
-// This builds genuine sender reputation with receiving mail servers.
+// Using neutral names (mbox-N) rather than "warmup-N" avoids pattern
+// detection by spam filters that flag obvious warmup activity.
 function getWarmupRecipients(domainName: string): string[] {
   return [
-    `warmup-1@${domainName}`,
-    `warmup-2@${domainName}`,
-    `warmup-3@${domainName}`,
-    `warmup-4@${domainName}`,
-    `warmup-5@${domainName}`,
+    `mbox-1@${domainName}`,
+    `mbox-2@${domainName}`,
+    `mbox-3@${domainName}`,
+    `mbox-4@${domainName}`,
+    `mbox-5@${domainName}`,
+    `mbox-6@${domainName}`,
+    `mbox-7@${domainName}`,
+    `mbox-8@${domainName}`,
+    `mbox-9@${domainName}`,
+    `mbox-10@${domainName}`,
   ];
 }
 
@@ -91,6 +98,7 @@ function randomItem<T>(arr: T[]): T {
 export async function startWarmup(accountId: string, domainId: string, options?: {
   totalDays?: number;
   fromAddress?: string;
+  externalRecipients?: string[];
 }) {
   const db = getDb();
 
@@ -119,7 +127,10 @@ export async function startWarmup(accountId: string, domainId: string, options?:
   }
 
   const totalDays = options?.totalDays || 30;
-  const fromAddress = options?.fromAddress || `warmup@${domain.name}`;
+  // Default to noreply@ — users should override this with their actual
+  // production sending address so the warmup builds reputation for the
+  // right address. "warmup@" as a sender is a known spam-filter signal.
+  const fromAddress = options?.fromAddress || `noreply@${domain.name}`;
 
   // Generate ramp schedule for the specified number of days
   const rampSchedule = [];
@@ -140,6 +151,7 @@ export async function startWarmup(accountId: string, domainId: string, options?:
     targetToday: rampSchedule[0],
     fromAddress,
     rampSchedule,
+    externalRecipients: options?.externalRecipients?.length ? options.externalRecipients : null,
     startedAt: new Date(),
   }).returning();
 
@@ -170,8 +182,10 @@ export async function resumeWarmup(accountId: string, scheduleId: string) {
   if (!schedule) throw new NotFoundError("Warmup schedule");
   if (schedule.status !== "paused") throw new ValidationError("Warmup is not paused");
 
+  // Reset lastRunAt so the next hourly worker check runs a round immediately
+  // rather than waiting for the original pause time to become 20h old.
   const [updated] = await db.update(warmupSchedules)
-    .set({ status: "active", updatedAt: new Date() })
+    .set({ status: "active", lastRunAt: null, updatedAt: new Date() })
     .where(eq(warmupSchedules.id, scheduleId))
     .returning();
 
@@ -230,6 +244,17 @@ export async function getWarmupStats(accountId: string, scheduleId: string) {
     .groupBy(warmupEmails.day)
     .orderBy(warmupEmails.day);
 
+  // Aggregate inbox vs spam placement across all warmup emails
+  const [placementStats] = await db.select({
+    total_inbox: sql<number>`count(*) filter (where ${warmupEmails.inboxPlacement} = 'inbox')::int`,
+    total_spam:  sql<number>`count(*) filter (where ${warmupEmails.inboxPlacement} = 'spam')::int`,
+    total_placed: sql<number>`count(*) filter (where ${warmupEmails.inboxPlacement} != 'unknown')::int`,
+  }).from(warmupEmails).where(eq(warmupEmails.scheduleId, scheduleId));
+
+  const totalPlaced = placementStats?.total_placed ?? 0;
+  const totalInbox  = placementStats?.total_inbox  ?? 0;
+  const totalSpam   = placementStats?.total_spam   ?? 0;
+
   return {
     schedule: formatWarmupResponse(schedule),
     daily: dailyStats,
@@ -241,6 +266,9 @@ export async function getWarmupStats(accountId: string, scheduleId: string) {
       reply_rate: schedule.totalSent > 0 ? Math.round((schedule.totalReplies / schedule.totalSent) * 100) : 0,
       days_completed: schedule.currentDay - 1,
       days_remaining: Math.max(0, schedule.totalDays - schedule.currentDay + 1),
+      total_inbox: totalInbox,
+      total_spam: totalSpam,
+      inbox_rate: totalPlaced > 0 ? Math.round((totalInbox / totalPlaced) * 100) : null,
     },
   };
 }
@@ -271,22 +299,44 @@ export async function executeWarmupRound(scheduleId: string) {
     if (hoursSinceLastRun < 20) return;
   }
 
+  // Skip weekends — Mon–Fri traffic looks natural; weekend sends have lower
+  // engagement rates and can trigger bulk-mail classifiers for many ISPs.
+  const dayOfWeek = new Date().getDay(); // 0=Sun, 6=Sat
+  if (dayOfWeek === 0 || dayOfWeek === 6) return;
+
   // Look up the domain for recipient addresses
   const [domain] = await db.select().from(domains)
     .where(eq(domains.id, schedule.domainId));
   if (!domain) return;
 
   const target = schedule.rampSchedule[schedule.currentDay - 1] || 2;
-  const recipients = getWarmupRecipients(domain.name);
+  // Merge internal mailboxes with any user-configured external addresses.
+  // External addresses (e.g. a personal Gmail) broaden the reputation signal
+  // and test deliverability to real mail providers. Internal mbox-N@ addresses
+  // benefit from auto-reply and inbox placement detection.
+  const internalRecipients = getWarmupRecipients(domain.name);
+  const recipients = [
+    ...internalRecipients,
+    ...(schedule.externalRecipients ?? []),
+  ];
   let sentCount = 0;
-  let openCount = 0;
-  let replyCount = 0;
+  let failCount = 0;
 
-  // Spread sends across the day with small random delays
+  // Spread sends across the day: up to 8 hours, min 20 min per email.
+  // Each email is scheduled at an offset so ISPs see natural timing, not a burst.
+  const spreadMs = Math.min(target * 20 * 60_000, 8 * 3_600_000);
+  const intervalMs = target > 1 ? spreadMs / (target - 1) : 0;
+
   for (let i = 0; i < target; i++) {
-    const toAddress = recipients[i % recipients.length];
+    // Randomise which recipient gets this email
+    const toAddress = recipients[Math.floor(Math.random() * recipients.length)];
     const subject = randomItem(WARMUP_SUBJECTS);
     const body = randomItem(WARMUP_BODIES);
+
+    // Schedule each email staggered from now
+    const scheduledAt = intervalMs > 0
+      ? new Date(Date.now() + i * intervalMs)
+      : undefined;
 
     try {
       // Send real email through the normal pipeline — goes out via SMTP,
@@ -299,6 +349,7 @@ export async function executeWarmupRound(scheduleId: string) {
         text: body,
         html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.6;color:#333;"><p>${body}</p></div>`,
         tags: { _warmup: "true", _warmup_schedule: schedule.id, _warmup_day: String(schedule.currentDay) },
+        ...(scheduledAt ? { scheduled_at: scheduledAt.toISOString() } : {}),
       });
 
       const emailId = !result.cached ? (result.response as any)?.id : undefined;
@@ -321,6 +372,7 @@ export async function executeWarmupRound(scheduleId: string) {
 
       sentCount++;
     } catch {
+      failCount++;
       await db.insert(warmupEmails).values({
         scheduleId: schedule.id,
         accountId: schedule.accountId,
@@ -333,26 +385,96 @@ export async function executeWarmupRound(scheduleId: string) {
     }
   }
 
-  // Advance to next day
-  const nextDay = schedule.currentDay + 1;
-  const nextTarget = nextDay <= schedule.totalDays
-    ? (schedule.rampSchedule[nextDay - 1] || 100)
-    : 0;
+  // Auto-pause if the majority of sends failed — something is wrong with the domain
+  // or mail server config. Don't advance the day; let the user investigate and resume.
+  // Only applies on days with meaningful volume (≥5 target) to avoid false triggers.
+  if (target >= 5 && failCount / target > 0.5) {
+    await db.update(warmupSchedules).set({
+      sentToday: sentCount,
+      totalSent: sql`${warmupSchedules.totalSent} + ${sentCount}`,
+      status: "paused",
+      lastRunAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(warmupSchedules.id, scheduleId));
+    notifyWarmupStatusChange(schedule.accountId, domain.name, "paused", schedule.currentDay).catch(() => {});
+    return;
+  }
 
-  const isComplete = nextDay > schedule.totalDays;
+  // Engagement-based ramp hold — if the 7-day rolling open rate is below 10%
+  // after the first week, don't advance to the next (higher) daily target.
+  // Stay at the current volume until engagement recovers. This prevents
+  // ramping into damaged reputation and gives ISPs time to build trust.
+  let holdRamp = false;
+  if (schedule.currentDay > 7) {
+    const [engStats] = await db.select({
+      opens: sql<number>`count(*) filter (where ${warmupEmails.opened} = true)::int`,
+      total: sql<number>`count(*)::int`,
+    }).from(warmupEmails)
+      .where(and(
+        eq(warmupEmails.scheduleId, scheduleId),
+        gte(warmupEmails.day, schedule.currentDay - 6),
+        eq(warmupEmails.status, "sent"),
+      ));
+
+    if (engStats && engStats.total >= 10) {
+      holdRamp = (engStats.opens / engStats.total) < 0.10;
+    }
+  }
+
+  // Advance to next day (or hold if engagement is too low)
+  const nextDay = holdRamp ? schedule.currentDay : schedule.currentDay + 1;
+  const nextTarget = holdRamp
+    ? target  // repeat same volume tomorrow
+    : (nextDay <= schedule.totalDays ? (schedule.rampSchedule[nextDay - 1] || 100) : 0);
+
+  const isComplete = !holdRamp && nextDay > schedule.totalDays;
 
   await db.update(warmupSchedules).set({
     currentDay: nextDay,
     sentToday: sentCount,
     targetToday: nextTarget,
-    totalSent: schedule.totalSent + sentCount,
-    totalOpens: schedule.totalOpens,
-    totalReplies: schedule.totalReplies,
+    totalSent: sql`${warmupSchedules.totalSent} + ${sentCount}`,
+    rampHeld: holdRamp,
     lastRunAt: new Date(),
     status: isComplete ? "completed" : "active",
     completedAt: isComplete ? new Date() : null,
     updatedAt: new Date(),
   }).where(eq(warmupSchedules.id, scheduleId));
+
+  if (isComplete) {
+    notifyWarmupStatusChange(schedule.accountId, domain.name, "completed", schedule.totalDays).catch(() => {});
+  }
+}
+
+async function notifyWarmupStatusChange(
+  accountId: string,
+  domainName: string,
+  newStatus: "completed" | "paused",
+  currentDay: number,
+) {
+  const db = getDb();
+  const [account] = await db.select({ email: accounts.email, name: accounts.name })
+    .from(accounts)
+    .where(eq(accounts.id, accountId));
+  if (!account) return;
+
+  const { sendSystemEmail } = await import("./email-sender.js");
+
+  if (newStatus === "completed") {
+    await sendSystemEmail({
+      to: account.email,
+      subject: `Domain warmup complete — ${domainName}`,
+      text: `Your warmup for ${domainName} has finished successfully after ${currentDay} days. Your domain is now ready to send at full volume.`,
+      html: `<p>Your warmup for <strong>${domainName}</strong> has finished successfully after <strong>${currentDay} days</strong>.</p><p>Your domain is now ready to send at full volume.</p>`,
+    });
+  } else {
+    await sendSystemEmail({
+      to: account.email,
+      subject: `Domain warmup paused — ${domainName}`,
+      text: `Your warmup for ${domainName} was automatically paused on day ${currentDay} because more than half of the warmup emails failed to send. Please check your mail server configuration and DNS records, then resume the warmup from your dashboard.`,
+      html: `<p>Your warmup for <strong>${domainName}</strong> was automatically paused on <strong>day ${currentDay}</strong>.</p><p>More than half of the warmup emails failed to send. Please check your mail server configuration and DNS records, then resume the warmup from your dashboard.</p>`,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +488,7 @@ export function formatWarmupResponse(schedule: typeof warmupSchedules.$inferSele
     id: schedule.id,
     domain_id: schedule.domainId,
     status: schedule.status,
-    current_day: schedule.currentDay,
+    current_day: Math.min(schedule.currentDay, schedule.totalDays),
     total_days: schedule.totalDays,
     sent_today: schedule.sentToday,
     target_today: schedule.targetToday,
@@ -376,8 +498,10 @@ export function formatWarmupResponse(schedule: typeof warmupSchedules.$inferSele
     open_rate: schedule.totalSent > 0 ? Math.round((schedule.totalOpens / schedule.totalSent) * 100) : 0,
     reply_rate: schedule.totalSent > 0 ? Math.round((schedule.totalReplies / schedule.totalSent) * 100) : 0,
     progress_percent: progressPercent,
+    ramp_held: schedule.rampHeld,
     from_address: schedule.fromAddress,
     ramp_schedule: schedule.rampSchedule,
+    extra_recipients: schedule.externalRecipients ?? [],
     started_at: schedule.startedAt.toISOString(),
     completed_at: schedule.completedAt?.toISOString() ?? null,
     created_at: schedule.createdAt.toISOString(),

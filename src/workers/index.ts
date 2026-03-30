@@ -5,6 +5,7 @@ import { createInboundEmailWorker } from "./inbound-email.worker.js";
 import { createScheduledEmailWorker } from "./scheduled-email.worker.js";
 import { createWarmupWorker } from "./warmup.worker.js";
 import { createTrashPurgeWorker } from "./trash-purge.worker.js";
+import { createMailboxSyncWorker } from "./mailbox-sync.worker.js";
 
 export function startAllWorkers() {
   const workers = [
@@ -15,6 +16,7 @@ export function startAllWorkers() {
     createScheduledEmailWorker(),
     createWarmupWorker(),
     createTrashPurgeWorker(),
+    createMailboxSyncWorker(),
   ];
 
   console.log(`Started ${workers.length} workers:`);
@@ -25,6 +27,7 @@ export function startAllWorkers() {
   console.log("  - email.scheduled (concurrency: 1)");
   console.log("  - email.warmup (concurrency: 1, recurring: 60m)");
   console.log("  - trash.purge (concurrency: 1, recurring: 6h)");
+  console.log("  - mailbox.sync (concurrency: 1, recurring: 5m)");
 
   return workers;
 }
