@@ -1,7 +1,7 @@
 import { eq, and, desc, sql } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { warmupSchedules, warmupEmails } from "../db/schema/index.js";
-import { domains } from "../db/schema/index.js";
+import { domains, accounts } from "../db/schema/index.js";
 import { NotFoundError, ValidationError, ConflictError } from "../lib/errors.js";
 import { sendEmail } from "./email.service.js";
 
@@ -68,21 +68,22 @@ export const REPLY_BODIES = [
   "Thanks! I'll review and circle back tomorrow morning.",
 ];
 
-// Warmup recipient addresses — sent to the user's own domain so the
+// Warmup recipient mailboxes — sent to the user's own domain so the
 // inbound SMTP server receives them, creating real mail flow.
-// This builds genuine sender reputation with receiving mail servers.
+// Using neutral names (mbox-N) rather than "warmup-N" avoids pattern
+// detection by spam filters that flag obvious warmup activity.
 function getWarmupRecipients(domainName: string): string[] {
   return [
-    `warmup-1@${domainName}`,
-    `warmup-2@${domainName}`,
-    `warmup-3@${domainName}`,
-    `warmup-4@${domainName}`,
-    `warmup-5@${domainName}`,
-    `warmup-6@${domainName}`,
-    `warmup-7@${domainName}`,
-    `warmup-8@${domainName}`,
-    `warmup-9@${domainName}`,
-    `warmup-10@${domainName}`,
+    `mbox-1@${domainName}`,
+    `mbox-2@${domainName}`,
+    `mbox-3@${domainName}`,
+    `mbox-4@${domainName}`,
+    `mbox-5@${domainName}`,
+    `mbox-6@${domainName}`,
+    `mbox-7@${domainName}`,
+    `mbox-8@${domainName}`,
+    `mbox-9@${domainName}`,
+    `mbox-10@${domainName}`,
   ];
 }
 
@@ -125,7 +126,10 @@ export async function startWarmup(accountId: string, domainId: string, options?:
   }
 
   const totalDays = options?.totalDays || 30;
-  const fromAddress = options?.fromAddress || `warmup@${domain.name}`;
+  // Default to noreply@ — users should override this with their actual
+  // production sending address so the warmup builds reputation for the
+  // right address. "warmup@" as a sender is a known spam-filter signal.
+  const fromAddress = options?.fromAddress || `noreply@${domain.name}`;
 
   // Generate ramp schedule for the specified number of days
   const rampSchedule = [];
@@ -279,6 +283,11 @@ export async function executeWarmupRound(scheduleId: string) {
     if (hoursSinceLastRun < 20) return;
   }
 
+  // Skip weekends — Mon–Fri traffic looks natural; weekend sends have lower
+  // engagement rates and can trigger bulk-mail classifiers for many ISPs.
+  const dayOfWeek = new Date().getDay(); // 0=Sun, 6=Sat
+  if (dayOfWeek === 0 || dayOfWeek === 6) return;
+
   // Look up the domain for recipient addresses
   const [domain] = await db.select().from(domains)
     .where(eq(domains.id, schedule.domainId));
@@ -363,6 +372,7 @@ export async function executeWarmupRound(scheduleId: string) {
       lastRunAt: new Date(),
       updatedAt: new Date(),
     }).where(eq(warmupSchedules.id, scheduleId));
+    notifyWarmupStatusChange(schedule.accountId, domain.name, "paused", schedule.currentDay).catch(() => {});
     return;
   }
 
@@ -384,6 +394,41 @@ export async function executeWarmupRound(scheduleId: string) {
     completedAt: isComplete ? new Date() : null,
     updatedAt: new Date(),
   }).where(eq(warmupSchedules.id, scheduleId));
+
+  if (isComplete) {
+    notifyWarmupStatusChange(schedule.accountId, domain.name, "completed", schedule.totalDays).catch(() => {});
+  }
+}
+
+async function notifyWarmupStatusChange(
+  accountId: string,
+  domainName: string,
+  newStatus: "completed" | "paused",
+  currentDay: number,
+) {
+  const db = getDb();
+  const [account] = await db.select({ email: accounts.email, name: accounts.name })
+    .from(accounts)
+    .where(eq(accounts.id, accountId));
+  if (!account) return;
+
+  const { sendSystemEmail } = await import("./email-sender.js");
+
+  if (newStatus === "completed") {
+    await sendSystemEmail({
+      to: account.email,
+      subject: `Domain warmup complete — ${domainName}`,
+      text: `Your warmup for ${domainName} has finished successfully after ${currentDay} days. Your domain is now ready to send at full volume.`,
+      html: `<p>Your warmup for <strong>${domainName}</strong> has finished successfully after <strong>${currentDay} days</strong>.</p><p>Your domain is now ready to send at full volume.</p>`,
+    });
+  } else {
+    await sendSystemEmail({
+      to: account.email,
+      subject: `Domain warmup paused — ${domainName}`,
+      text: `Your warmup for ${domainName} was automatically paused on day ${currentDay} because more than half of the warmup emails failed to send. Please check your mail server configuration and DNS records, then resume the warmup from your dashboard.`,
+      html: `<p>Your warmup for <strong>${domainName}</strong> was automatically paused on <strong>day ${currentDay}</strong>.</p><p>More than half of the warmup emails failed to send. Please check your mail server configuration and DNS records, then resume the warmup from your dashboard.</p>`,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

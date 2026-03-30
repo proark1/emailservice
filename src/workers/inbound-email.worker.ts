@@ -82,8 +82,8 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
     }
   }
 
-  // Auto-learn sender contact — skip warmup system addresses (warmup@, warmup-N@)
-  if (!/^warmup(?:-\d+)?@/i.test(data.from)) {
+  // Auto-learn sender contact — skip warmup system addresses (noreply@, mbox-N@)
+  if (!/^(noreply|mbox-\d+)@/i.test(data.from)) {
     try {
       const { autoLearnContact } = await import("../services/address-book.service.js");
       await autoLearnContact(data.accountId, data.from, data.fromName);
@@ -125,7 +125,7 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
   // Auto-reply to warmup emails — creates genuine two-way mail flow, the strongest
   // positive signal for inbox placement. Only reply to original sends (no inReplyTo),
   // not to the auto-replies themselves, preventing reply loops.
-  const warmupToMatch = /^warmup-\d+@(.+)$/i.exec(data.to);
+  const warmupToMatch = /^mbox-\d+@(.+)$/i.exec(data.to);
   if (warmupToMatch && !data.inReplyTo && data.messageId) {
     try {
       const { sendEmail } = await import("../services/email.service.js");
