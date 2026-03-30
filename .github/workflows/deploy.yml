@@ -30,6 +30,12 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
+            echo "==> Installing dependencies (needed for db:migrate)..."
+            pnpm install --frozen-lockfile
+
+            echo "==> Running database migrations..."
+            pnpm db:migrate
+
             echo "==> Rebuilding containers..."
             docker compose -f deploy/docker-compose.prod.yml build
 
