@@ -1,0 +1,1 @@
+ALTER TABLE "warmup_schedules" ADD COLUMN "ramp_held" boolean DEFAULT false NOT NULL;

@@ -923,8 +923,13 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       domain_id: z.string().uuid(),
       total_days: z.number().int().min(7).max(90).optional(),
       from_address: z.string().optional(),
+      extra_recipients: z.array(z.string().email()).max(20).optional(),
     }).parse(request.body);
-    const schedule = await warmupService.startWarmup(request.account.id, input.domain_id, { totalDays: input.total_days, fromAddress: input.from_address });
+    const schedule = await warmupService.startWarmup(request.account.id, input.domain_id, {
+      totalDays: input.total_days,
+      fromAddress: input.from_address,
+      externalRecipients: input.extra_recipients,
+    });
     return reply.status(201).send({ data: warmupService.formatWarmupResponse(schedule) });
   });
 

@@ -630,11 +630,12 @@ server.tool(
 
 server.tool(
   "start_warmup",
-  "Start email warmup for a domain to build sender reputation. Gradually ramps up sending volume over the specified duration.",
+  "Start email warmup for a domain to build sender reputation. Sends Mon–Fri, ramps up volume, auto-detects inbox placement, and holds the ramp if open rate drops below 10%.",
   {
     domain_id: z.string().describe("Domain UUID to warm up"),
     total_days: z.number().optional().describe("Warmup duration in days (7-90, default 30)"),
-    from_address: z.string().optional().describe("From address for warmup emails (default: warmup@yourdomain.com)"),
+    from_address: z.string().optional().describe("From address for warmup emails — use your real production sending address (e.g. 'newsletter@yourdomain.com'). Accepts display name format: 'Name <email@domain.com>'. Default: noreply@yourdomain.com"),
+    extra_recipients: z.array(z.string().email()).max(20).optional().describe("Optional external email addresses to include in the warmup pool (e.g. a personal Gmail or Yahoo account). These broaden the reputation signal beyond your own MX and test real-world inbox placement."),
   },
   async (params) => {
     const res = await api("POST", "/v1/warmup", params);

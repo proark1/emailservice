@@ -244,6 +244,17 @@ export async function getWarmupStats(accountId: string, scheduleId: string) {
     .groupBy(warmupEmails.day)
     .orderBy(warmupEmails.day);
 
+  // Aggregate inbox vs spam placement across all warmup emails
+  const [placementStats] = await db.select({
+    total_inbox: sql<number>`count(*) filter (where ${warmupEmails.inboxPlacement} = 'inbox')::int`,
+    total_spam:  sql<number>`count(*) filter (where ${warmupEmails.inboxPlacement} = 'spam')::int`,
+    total_placed: sql<number>`count(*) filter (where ${warmupEmails.inboxPlacement} != 'unknown')::int`,
+  }).from(warmupEmails).where(eq(warmupEmails.scheduleId, scheduleId));
+
+  const totalPlaced = placementStats?.total_placed ?? 0;
+  const totalInbox  = placementStats?.total_inbox  ?? 0;
+  const totalSpam   = placementStats?.total_spam   ?? 0;
+
   return {
     schedule: formatWarmupResponse(schedule),
     daily: dailyStats,
@@ -255,6 +266,9 @@ export async function getWarmupStats(accountId: string, scheduleId: string) {
       reply_rate: schedule.totalSent > 0 ? Math.round((schedule.totalReplies / schedule.totalSent) * 100) : 0,
       days_completed: schedule.currentDay - 1,
       days_remaining: Math.max(0, schedule.totalDays - schedule.currentDay + 1),
+      total_inbox: totalInbox,
+      total_spam: totalSpam,
+      inbox_rate: totalPlaced > 0 ? Math.round((totalInbox / totalPlaced) * 100) : null,
     },
   };
 }
@@ -420,6 +434,7 @@ export async function executeWarmupRound(scheduleId: string) {
     sentToday: sentCount,
     targetToday: nextTarget,
     totalSent: sql`${warmupSchedules.totalSent} + ${sentCount}`,
+    rampHeld: holdRamp,
     lastRunAt: new Date(),
     status: isComplete ? "completed" : "active",
     completedAt: isComplete ? new Date() : null,
@@ -483,6 +498,7 @@ export function formatWarmupResponse(schedule: typeof warmupSchedules.$inferSele
     open_rate: schedule.totalSent > 0 ? Math.round((schedule.totalOpens / schedule.totalSent) * 100) : 0,
     reply_rate: schedule.totalSent > 0 ? Math.round((schedule.totalReplies / schedule.totalSent) * 100) : 0,
     progress_percent: progressPercent,
+    ramp_held: schedule.rampHeld,
     from_address: schedule.fromAddress,
     ramp_schedule: schedule.rampSchedule,
     extra_recipients: schedule.externalRecipients ?? [],

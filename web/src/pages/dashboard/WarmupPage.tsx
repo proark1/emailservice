@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { api, post, del } from "../../lib/api";
-import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Modal, useConfirmDialog, useToast } from "../../components/ui";
+import { Badge, statusVariant, EmptyState, PageHeader, Button, Input, Modal, useConfirmDialog, useToast } from "../../components/ui";
 
 interface Domain {
   id: string;
@@ -22,8 +22,10 @@ interface Warmup {
   open_rate: number;
   reply_rate: number;
   progress_percent: number;
+  ramp_held: boolean;
   from_address: string;
   ramp_schedule: number[];
+  extra_recipients: string[];
   started_at: string;
   completed_at?: string;
   created_at: string;
@@ -49,6 +51,9 @@ interface WarmupStats {
     reply_rate: number;
     days_completed: number;
     days_remaining: number;
+    total_inbox: number;
+    total_spam: number;
+    inbox_rate: number | null;
   };
 }
 
@@ -66,7 +71,12 @@ export default function WarmupPage() {
   const [statsOpen, setStatsOpen] = useState(false);
   const [statsData, setStatsData] = useState<WarmupStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-  const [form, setForm] = useState({ domain_id: "", total_days: 30, from_address: "" });
+  const [form, setForm] = useState({
+    domain_id: "",
+    total_days: 30,
+    from_address: "",
+    extra_recipients: "",
+  });
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
@@ -94,7 +104,8 @@ export default function WarmupPage() {
     setForm({
       domain_id: defaultDomain?.id || "",
       total_days: 30,
-      from_address: defaultDomain ? `warmup@${defaultDomain.name}` : "",
+      from_address: defaultDomain ? `noreply@${defaultDomain.name}` : "",
+      extra_recipients: "",
     });
     setError("");
     setCreateOpen(true);
@@ -105,7 +116,7 @@ export default function WarmupPage() {
     setForm({
       ...form,
       domain_id: domainId,
-      from_address: domain ? `warmup@${domain.name}` : "",
+      from_address: domain ? `noreply@${domain.name}` : "",
     });
   };
 
@@ -114,7 +125,12 @@ export default function WarmupPage() {
     try {
       const body: Record<string, any> = { domain_id: form.domain_id };
       if (form.total_days !== 30) body.total_days = form.total_days;
-      if (form.from_address.trim()) body.from_address = form.from_address;
+      if (form.from_address.trim()) body.from_address = form.from_address.trim();
+      const parsed = form.extra_recipients
+        .split(/[\n,]/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      if (parsed.length > 0) body.extra_recipients = parsed;
       await post("/dashboard/warmup", body);
       setCreateOpen(false);
       loadWarmups();
@@ -218,12 +234,27 @@ export default function WarmupPage() {
             </div>
           </div>
 
-          <Input
-            label="From address"
-            placeholder="warmup@yourdomain.com"
-            value={form.from_address}
-            onChange={(e) => setForm({ ...form, from_address: (e.target as HTMLInputElement).value })}
-          />
+          <div>
+            <Input
+              label="From address"
+              placeholder="noreply@yourdomain.com"
+              value={form.from_address}
+              onChange={(e) => setForm({ ...form, from_address: (e.target as HTMLInputElement).value })}
+            />
+            <p className="text-[11px] text-gray-400 mt-1">Use your real production sending address to build reputation for it. Accepts display name format: Name &lt;email@domain.com&gt;</p>
+          </div>
+
+          <div>
+            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">External seed recipients <span className="font-normal text-gray-400">(optional)</span></label>
+            <textarea
+              rows={3}
+              placeholder={"me@gmail.com\ntest@yahoo.com"}
+              value={form.extra_recipients}
+              onChange={(e) => setForm({ ...form, extra_recipients: e.target.value })}
+              className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 transition-all resize-none"
+            />
+            <p className="text-[11px] text-gray-400 mt-1">One address per line or comma-separated. Real external mailboxes (Gmail, Yahoo, Outlook) test deliverability at real providers and broaden reputation signals.</p>
+          </div>
 
           <Button
             onClick={startWarmup}
@@ -251,17 +282,54 @@ export default function WarmupPage() {
                 <p className="text-[11px] text-gray-500">Total Sent</p>
               </div>
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-center">
-                <p className="text-lg font-bold text-emerald-600">{statsData.summary.open_rate.toFixed(1)}%</p>
+                <p className="text-lg font-bold text-emerald-600">{statsData.summary.open_rate}%</p>
                 <p className="text-[11px] text-gray-500">Open Rate</p>
               </div>
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-center">
-                <p className="text-lg font-bold text-violet-600">{statsData.summary.reply_rate.toFixed(1)}%</p>
+                <p className="text-lg font-bold text-violet-600">{statsData.summary.reply_rate}%</p>
                 <p className="text-[11px] text-gray-500">Reply Rate</p>
               </div>
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-center">
+                {statsData.summary.inbox_rate !== null ? (
+                  <>
+                    <p className={`text-lg font-bold ${statsData.summary.inbox_rate >= 80 ? "text-emerald-600" : statsData.summary.inbox_rate >= 50 ? "text-amber-500" : "text-red-500"}`}>
+                      {statsData.summary.inbox_rate}%
+                    </p>
+                    <p className="text-[11px] text-gray-500">Inbox Placement</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-lg font-bold text-gray-400">—</p>
+                    <p className="text-[11px] text-gray-500">Inbox Placement</p>
+                  </>
+                )}
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-center col-span-2">
                 <p className="text-lg font-bold text-gray-900">{statsData.summary.days_completed} / {statsData.summary.days_completed + statsData.summary.days_remaining}</p>
                 <p className="text-[11px] text-gray-500">Days Complete</p>
               </div>
+            </div>
+
+            {/* Ramp held notice */}
+            {statsData.schedule.ramp_held && (
+              <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-[12px] text-amber-700">
+                <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+                <span><strong>Ramp paused</strong> — open rate dropped below 10% over the last 7 days. Volume is held at the current level until engagement recovers. Check that inbound mail is working and auto-replies are firing.</span>
+              </div>
+            )}
+
+            {/* From address + extra recipients */}
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-1.5">
+              <div className="flex gap-2 text-[12px]">
+                <span className="text-gray-400 w-24 shrink-0">From</span>
+                <span className="text-gray-700 font-medium break-all">{statsData.schedule.from_address}</span>
+              </div>
+              {statsData.schedule.extra_recipients.length > 0 && (
+                <div className="flex gap-2 text-[12px]">
+                  <span className="text-gray-400 w-24 shrink-0">Seed pool</span>
+                  <span className="text-gray-700 break-all">{statsData.schedule.extra_recipients.join(", ")}</span>
+                </div>
+              )}
             </div>
 
             {/* Progress visualization */}
@@ -274,20 +342,12 @@ export default function WarmupPage() {
                   const daily = statsData.daily.find((d) => d.day === i + 1);
                   const actualPct = daily && maxTarget > 0 ? (daily.sent / maxTarget) * 100 : 0;
                   const isPast = i < statsData.summary.days_completed;
+                  const isHeld = statsData.schedule.ramp_held && i === statsData.summary.days_completed;
                   return (
                     <div key={i} className="flex-1 flex flex-col items-center justify-end h-full relative" title={`Day ${i + 1}: ${daily?.sent ?? 0} / ${target}`}>
-                      {/* Target bar (background) */}
-                      <div
-                        className="w-full rounded-sm bg-gray-200 absolute bottom-0"
-                        style={{ height: `${heightPct}%` }}
-                      />
-                      {/* Actual bar (foreground) */}
-                      {isPast && (
-                        <div
-                          className="w-full rounded-sm bg-violet-500 absolute bottom-0"
-                          style={{ height: `${actualPct}%` }}
-                        />
-                      )}
+                      <div className="w-full rounded-sm bg-gray-200 absolute bottom-0" style={{ height: `${heightPct}%` }} />
+                      {isPast && <div className="w-full rounded-sm bg-violet-500 absolute bottom-0" style={{ height: `${actualPct}%` }} />}
+                      {isHeld && <div className="w-full rounded-sm bg-amber-400 absolute bottom-0" style={{ height: `${actualPct}%` }} />}
                     </div>
                   );
                 })}
@@ -310,6 +370,7 @@ export default function WarmupPage() {
                         <th className="text-left px-3 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wider">Opens</th>
                         <th className="text-left px-3 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wider">Replies</th>
                         <th className="text-left px-3 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wider">Inbox</th>
+                        <th className="text-left px-3 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wider">Spam</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -319,8 +380,11 @@ export default function WarmupPage() {
                           <td className="px-3 py-2 text-[12px] text-gray-500">{d.sent}</td>
                           <td className="px-3 py-2 text-[12px] text-gray-500">{d.opened}</td>
                           <td className="px-3 py-2 text-[12px] text-gray-500">{d.replied}</td>
-                          <td className="px-3 py-2 text-[12px] text-gray-500">
-                            {d.sent > 0 ? `${Math.round((d.inbox / d.sent) * 100)}%` : "—"}
+                          <td className="px-3 py-2 text-[12px] text-emerald-600">
+                            {d.inbox + d.spam > 0 ? `${Math.round((d.inbox / (d.inbox + d.spam)) * 100)}%` : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-[12px] text-red-500">
+                            {d.inbox + d.spam > 0 ? `${Math.round((d.spam / (d.inbox + d.spam)) * 100)}%` : "—"}
                           </td>
                         </tr>
                       ))}
@@ -346,9 +410,15 @@ export default function WarmupPage() {
           {warmups.map((w) => (
             <div key={w.id} className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-[14px] font-semibold text-gray-900">{domainNameById(w.domain_id)}</h3>
                   <Badge variant={warmupVariant(w.status)}>{w.status}</Badge>
+                  {w.ramp_held && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-700 border border-amber-200">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" /></svg>
+                      Ramp held
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {w.status === "active" && (
@@ -375,7 +445,7 @@ export default function WarmupPage() {
               {/* Progress bar */}
               <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-2">
                 <div
-                  className="h-full bg-violet-500 rounded-full transition-all duration-500"
+                  className={`h-full rounded-full transition-all duration-500 ${w.ramp_held ? "bg-amber-400" : "bg-violet-500"}`}
                   style={{ width: `${w.progress_percent}%` }}
                 />
               </div>
@@ -384,8 +454,12 @@ export default function WarmupPage() {
                 <span>Day {w.current_day} of {w.total_days}</span>
                 <span>{w.progress_percent}% complete</span>
                 <span>Sent today: {w.sent_today} / {w.target_today}</span>
-                <span>Open rate: {w.open_rate.toFixed(1)}%</span>
-                <span>Reply rate: {w.reply_rate.toFixed(1)}%</span>
+                <span>Open rate: {w.open_rate}%</span>
+                <span>Reply rate: {w.reply_rate}%</span>
+                <span className="text-gray-400">From: {w.from_address}</span>
+                {w.extra_recipients.length > 0 && (
+                  <span className="text-gray-400">{w.extra_recipients.length} seed recipient{w.extra_recipients.length !== 1 ? "s" : ""}</span>
+                )}
               </div>
             </div>
           ))}
