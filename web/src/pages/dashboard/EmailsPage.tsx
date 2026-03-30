@@ -132,7 +132,7 @@ export default function EmailsPage() {
   const [previewMode, setPreviewMode] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(600);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { showError, showSuccess, toast } = useToast();
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
   const verifiedDomains = domains.filter((d) => d.status === "verified");
@@ -275,6 +275,7 @@ export default function EmailsPage() {
       await post("/dashboard/emails", body);
       setComposeOpen(false);
       resetCompose();
+      showSuccess("Email sent successfully");
       loadEmails();
       loadCounts();
     } catch (e: any) {
@@ -394,7 +395,8 @@ export default function EmailsPage() {
       ) : emails.length === 0 ? (
         <EmptyState
           title={search ? "No emails match your search" : "No emails yet"}
-          desc={search ? "Try adjusting your search or filters" : hasDomains ? "Click Compose to send your first email" : "Connect a verified domain first"}
+          desc={search ? "Try adjusting your search or filters" : hasDomains ? "Send your first email to get started" : "Connect a verified domain first"}
+          action={!search && hasDomains ? <Button onClick={() => { resetCompose(); setComposeOpen(true); }}>Compose Email</Button> : undefined}
         />
       ) : (
         <>

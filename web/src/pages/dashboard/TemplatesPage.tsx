@@ -67,7 +67,7 @@ export default function TemplatesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { showError, showSuccess, toast } = useToast();
 
   /* --- data loading --- */
 
@@ -114,6 +114,7 @@ export default function TemplatesPage() {
       });
       setCreateOpen(false);
       resetForm();
+      showSuccess("Template created");
       loadTemplates();
     } catch (e: any) {
       setError(e.message || "Failed to create template");
@@ -149,6 +150,7 @@ export default function TemplatesPage() {
       });
       setEditTemplate(null);
       resetForm();
+      showSuccess("Template saved");
       loadTemplates();
     } catch (e: any) {
       setError(e.message || "Failed to update template");
@@ -223,6 +225,7 @@ export default function TemplatesPage() {
         <EmptyState
           title="No templates yet"
           desc="Create a template to reuse email content with variables"
+          action={<Button onClick={() => { resetForm(); setCreateOpen(true); }}>Create Template</Button>}
         />
       ) : (
         <Table headers={["Name", "Subject", "Variables", "Version", "Last Updated", "Actions"]}>

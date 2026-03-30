@@ -7,6 +7,7 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import AdminPanel from "./pages/AdminPanel";
 import AcceptInvite from "./pages/AcceptInvite";
+import NotFound from "./pages/NotFound";
 import type { ReactNode } from "react";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -38,6 +39,7 @@ function AppRoutes() {
       <Route path="/invite/:token" element={<AcceptInvite />} />
       <Route path="/dashboard/*" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/admin/*" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

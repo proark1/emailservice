@@ -133,7 +133,7 @@ export default function ContactsPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           title={search ? "No matches" : "No contacts"}
-          description={search ? "Try a different search term." : "Add contacts to your address book for quick email composition."}
+          desc={search ? "Try a different search term." : "Add contacts to your address book for quick email composition."}
           action={!search ? <Button onClick={openCreate}>+ Add Contact</Button> : undefined}
         />
       ) : (
