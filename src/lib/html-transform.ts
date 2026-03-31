@@ -1,6 +1,15 @@
 import crypto from "node:crypto";
 import { getConfig } from "../config/index.js";
 
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
 /**
  * Injects an open-tracking pixel into HTML email body.
  */
@@ -27,17 +36,20 @@ export function rewriteLinks(html: string, emailId: string): string {
   return html.replace(
     /<a\s([^>]*?)href=["']([^"']+)["']([^>]*?)>/gi,
     (_match, before, url, after) => {
+      // Decode HTML entities (e.g. &amp; → &) that email HTML requires in href attributes
+      const cleanUrl = decodeHtmlEntities(url);
+
       // Don't track mailto:, tel:, anchor links, or unsubscribe links
-      if (url.startsWith("mailto:") || url.startsWith("tel:") || url.startsWith("#") || url.includes("/unsubscribe/")) {
-        return `<a ${before}href="${url}"${after}>`;
+      if (cleanUrl.startsWith("mailto:") || cleanUrl.startsWith("tel:") || cleanUrl.startsWith("#") || cleanUrl.includes("/unsubscribe/")) {
+        return `<a ${before}href="${cleanUrl}"${after}>`;
       }
 
       // Don't rewrite links with data-no-track attribute
       if (before.includes("data-no-track") || after.includes("data-no-track")) {
-        return `<a ${before}href="${url}"${after}>`;
+        return `<a ${before}href="${cleanUrl}"${after}>`;
       }
 
-      const payload = Buffer.from(JSON.stringify({ emailId, url })).toString("base64url");
+      const payload = Buffer.from(JSON.stringify({ emailId, url: cleanUrl })).toString("base64url");
       const sig = crypto.createHmac("sha256", config.ENCRYPTION_KEY).update(payload).digest("base64url");
       const encoded = `${payload}.${sig}`;
       const trackingUrl = `${config.TRACKING_URL}/c/${encoded}`;
