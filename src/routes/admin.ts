@@ -8,6 +8,7 @@ import { count, sql, desc, eq, and, ilike } from "drizzle-orm";
 import { ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { getWebhookDeliverQueue } from "../queues/index.js";
 import { RETRY_DELAYS } from "../workers/webhook-deliver.worker.js";
+import { getRateLimitMax, setRateLimitMax } from "../services/settings.service.js";
 
 export default async function adminRoutes(app: FastifyInstance) {
   // Admin auth check on all routes
@@ -270,5 +271,24 @@ export default async function adminRoutes(app: FastifyInstance) {
       account_name: l.accountName,
       created_at: l.createdAt?.toISOString(),
     })) };
+  });
+
+  // GET /admin/settings — return current system settings
+  app.get("/settings", async () => {
+    return {
+      data: {
+        rate_limit_max: await getRateLimitMax(),
+      },
+    };
+  });
+
+  // PATCH /admin/settings — update system settings
+  app.patch("/settings", async (request) => {
+    const body = z.object({
+      rate_limit_max: z.number().int().min(1).max(100000),
+    }).parse(request.body);
+
+    await setRateLimitMax(body.rate_limit_max);
+    return { data: { rate_limit_max: body.rate_limit_max } };
   });
 }

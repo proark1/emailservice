@@ -12,6 +12,7 @@ const adminNav = [
   { to: "/admin/api-usage", label: "API Usage", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg> },
   { to: "/admin/api-logs", label: "API Logs", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" /></svg> },
   { to: "/admin/warmups", label: "Warmups", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" /></svg> },
+  { to: "/admin/settings", label: "Settings", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg> },
 ];
 
 function AdminSidebar({ open, onToggle }: { open: boolean; onToggle: () => void }) {
@@ -449,6 +450,74 @@ function AdminWarmups() {
   );
 }
 
+// ---- Settings ----
+function AdminSettings() {
+  const [rateLimitMax, setRateLimitMaxState] = useState<number | null>(null);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const { showError, toast } = useToast();
+
+  useEffect(() => {
+    api("/admin/settings")
+      .then((r) => {
+        setRateLimitMaxState(r.data.rate_limit_max);
+        setInput(String(r.data.rate_limit_max));
+      })
+      .catch((e) => showError(e.message || "Failed to load settings"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    const value = parseInt(input, 10);
+    if (isNaN(value) || value < 1 || value > 100000) {
+      showError("Rate limit must be a number between 1 and 100,000.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await patch("/admin/settings", { rate_limit_max: value });
+      setRateLimitMaxState(value);
+    } catch (e: any) {
+      showError(e.message || "Failed to save settings");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /></div>;
+
+  return (
+    <div>
+      <div className="mb-6"><h1 className="text-xl font-semibold text-gray-900 tracking-tight">Settings</h1><p className="text-sm text-gray-500 mt-1">System-wide configuration</p></div>
+      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden max-w-lg">
+        <div className="px-5 py-4 border-b border-gray-100"><h3 className="text-[14px] font-semibold text-gray-900">API Rate Limiting</h3><p className="text-[12px] text-gray-500 mt-0.5">Maximum requests per API key per minute. Changes take effect within 60 seconds.</p></div>
+        <form onSubmit={handleSave} className="px-5 py-4 space-y-4">
+          <div>
+            <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Requests per minute</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={1}
+                max={100000}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                className="w-36 px-3 py-2 text-[13px] border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+              />
+              <span className="text-[12px] text-gray-400">Current: <span className="font-medium text-gray-700">{rateLimitMax?.toLocaleString()}</span></span>
+            </div>
+          </div>
+          <button type="submit" disabled={saving} className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-[13px] font-medium rounded-lg transition-colors">
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </form>
+      </div>
+      {toast}
+    </div>
+  );
+}
+
 // ---- Main Layout ----
 export default function AdminPanel() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -468,6 +537,7 @@ export default function AdminPanel() {
           <Route path="api-usage" element={<AdminApiUsage />} />
           <Route path="api-logs" element={<AdminApiLogs />} />
           <Route path="warmups" element={<AdminWarmups />} />
+          <Route path="settings" element={<AdminSettings />} />
         </Routes>
       </main>
     </div>

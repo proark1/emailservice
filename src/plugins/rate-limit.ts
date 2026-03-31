@@ -3,12 +3,13 @@ import fp from "fastify-plugin";
 import rateLimit from "@fastify/rate-limit";
 import IORedis from "ioredis";
 import { getConfig } from "../config/index.js";
+import { getRateLimitMax } from "../services/settings.service.js";
 
 async function rateLimitPlugin(app: FastifyInstance) {
   const config = getConfig();
 
   const opts: Parameters<typeof rateLimit>[1] = {
-    max: config.RATE_LIMIT_MAX,
+    max: getRateLimitMax,
     timeWindow: "1 minute",
     keyGenerator: (request) => {
       // request.apiKey is populated by the per-route auth hook which runs AFTER this
