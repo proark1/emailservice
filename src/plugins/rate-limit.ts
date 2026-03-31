@@ -8,10 +8,18 @@ async function rateLimitPlugin(app: FastifyInstance) {
   const config = getConfig();
 
   const opts: Parameters<typeof rateLimit>[1] = {
-    max: 60,
+    max: config.RATE_LIMIT_MAX,
     timeWindow: "1 minute",
     keyGenerator: (request) => {
-      return request.apiKey?.id || request.ip;
+      // request.apiKey is populated by the per-route auth hook which runs AFTER this
+      // global onRequest hook, so it is always undefined here. Extract the raw Bearer
+      // token from the Authorization header directly — it's a stable per-API-key
+      // identifier without needing a DB lookup.
+      const auth = request.headers.authorization;
+      if (auth?.startsWith("Bearer ")) {
+        return auth.slice(7);
+      }
+      return request.ip;
     },
     errorResponseBuilder: () => ({
       error: {

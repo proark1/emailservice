@@ -28,6 +28,7 @@ const envSchema = z.object({
   SMTP_SECURE: z.string().optional(), // "true" for port 465
   JWT_SECRET: z.string().min(1).optional(),
   ENCRYPTION_KEY: z.string().min(1).default(DEFAULT_ENCRYPTION_KEY),
+  RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(600),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().optional(),
