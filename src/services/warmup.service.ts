@@ -265,7 +265,7 @@ export async function getWarmupStats(accountId: string, scheduleId: string) {
       open_rate: schedule.totalSent > 0 ? Math.round((schedule.totalOpens / schedule.totalSent) * 100) : 0,
       reply_rate: schedule.totalSent > 0 ? Math.round((schedule.totalReplies / schedule.totalSent) * 100) : 0,
       days_completed: schedule.currentDay - 1,
-      days_remaining: Math.max(0, schedule.totalDays - schedule.currentDay + 1),
+      days_remaining: Math.max(0, schedule.totalDays - schedule.currentDay),
       total_inbox: totalInbox,
       total_spam: totalSpam,
       inbox_rate: totalPlaced > 0 ? Math.round((totalInbox / totalPlaced) * 100) : null,

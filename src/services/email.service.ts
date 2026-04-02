@@ -193,13 +193,16 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
   } else if (delay > 0 && isRedisConfigured()) {
     // Scheduled emails need the queue
     await getEmailSendQueue().add("send", { emailId: email.id, accountId }, { delay });
-  } else {
-    // No Redis — send directly (async, don't block the response)
+  } else if (delay === 0) {
+    // No Redis, immediate send — send directly (async, don't block the response)
     const { sendEmailDirect } = await import("./email-sender.js");
     sendEmailDirect(email.id, accountId).catch((err) => {
       console.error(`[email-send] Direct send failed for email ${email.id}:`, err?.message || err);
       db.update(emails).set({ status: "failed" }).where(eq(emails.id, email.id)).catch(() => {});
     });
+  } else {
+    // Scheduled email but no Redis — leave in "queued" status for later processing
+    console.warn(`[email-send] Email ${email.id} is scheduled but Redis is unavailable. Left in queued status.`);
   }
 
   const response = formatEmailResponse(email);
@@ -235,6 +238,10 @@ export async function listEmails(accountId: string, options: { limit: number; cu
     if (cursorEmail) {
       conditions.push(lt(emails.createdAt, cursorEmail.createdAt));
     }
+  }
+
+  if (options.status) {
+    conditions.push(eq(emails.status, options.status as any));
   }
 
   return db
