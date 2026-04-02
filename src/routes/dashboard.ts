@@ -22,6 +22,13 @@ function escapeIlike(s: string): string {
   return s.replace(/[%_\\]/g, (c) => `\\${c}`);
 }
 
+function csvEscape(value: string): string {
+  if (value.includes(",") || value.includes('"') || value.includes("\n") || value.includes("\r")) {
+    return '"' + value.replace(/"/g, '""') + '"';
+  }
+  return value;
+}
+
 function calculateReputationScore(t: any): number {
   const totalSent = (t.sent || 0) + (t.delivered || 0);
   if (totalSent === 0) return 100;
@@ -525,7 +532,12 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       domain.dkimDnsValue || "",
     );
 
-    const allVerified = result.spfVerified && result.dkimVerified && result.dmarcVerified;
+    const mode = domain.mode || "both";
+    const needsSend = mode === "send" || mode === "both";
+    const needsReceive = mode === "receive" || mode === "both";
+    const sendVerified = !needsSend || (result.spfVerified && result.dkimVerified && result.dmarcVerified);
+    const receiveVerified = !needsReceive || result.mxVerified;
+    const allVerified = sendVerified && receiveVerified;
     const newStatus = allVerified ? "verified" as const : "pending" as const;
 
     await domainService.updateDomainVerification(domain.id, {
@@ -536,6 +548,13 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       status: newStatus,
     });
 
+    const pending = [
+      needsSend && !result.spfVerified && "SPF",
+      needsSend && !result.dkimVerified && "DKIM",
+      needsSend && !result.dmarcVerified && "DMARC",
+      needsReceive && !result.mxVerified && "MX",
+    ].filter(Boolean);
+
     return {
       data: {
         status: newStatus,
@@ -545,7 +564,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         mx: result.mxVerified,
         message: allVerified
           ? "Domain verified successfully!"
-          : `Pending: ${[!result.spfVerified && "SPF", !result.dkimVerified && "DKIM", !result.dmarcVerified && "DMARC"].filter(Boolean).join(", ")} not yet detected. DNS propagation can take up to 24 hours.`,
+          : `Pending: ${pending.join(", ")} not yet detected. DNS propagation can take up to 24 hours.`,
       },
     };
   });
@@ -895,7 +914,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const header = "email,first_name,last_name,subscribed\n";
     const rows = allContacts.map(c => {
       const formatted = audienceService.formatContactResponse(c);
-      return `${formatted.email},${formatted.first_name || ""},${formatted.last_name || ""},${formatted.subscribed}`;
+      return `${csvEscape(formatted.email)},${csvEscape(formatted.first_name || "")},${csvEscape(formatted.last_name || "")},${formatted.subscribed}`;
     }).join("\n");
 
     reply.header("Content-Type", "text/csv");
