@@ -199,6 +199,7 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
         .replace(/&lt;/g, "<")
         .replace(/&gt;/g, ">")
         .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
         .replace(/&#39;/g, "'")
         .replace(/\n{3,}/g, "\n\n")
         .trim();

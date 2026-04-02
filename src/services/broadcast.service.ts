@@ -187,16 +187,17 @@ export async function executeBroadcast(broadcastId: string) {
 export async function processScheduledBroadcasts() {
   const db = getDb();
 
-  // Find all broadcasts with status "scheduled" and scheduledAt <= now
+  // Atomically claim due scheduled broadcasts — prevents duplicate sends across concurrent workers
   const dueBroadcasts = await db
-    .select()
-    .from(broadcasts)
+    .update(broadcasts)
+    .set({ status: "sending", updatedAt: new Date() })
     .where(
       and(
         eq(broadcasts.status, "scheduled"),
         lte(broadcasts.scheduledAt, new Date()),
       ),
-    );
+    )
+    .returning();
 
   let processed = 0;
   for (const broadcast of dueBroadcasts) {
