@@ -44,7 +44,7 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
 
   // Parse "from" address
   const from = parseFromAddress(input.from);
-  const fromDomain = from.address.split("@")[1];
+  const fromDomain = from.address.split("@")[1]?.toLowerCase();
   if (!fromDomain) {
     throw new ValidationError("Invalid 'from' address — must contain a valid email (e.g., user@example.com)");
   }
