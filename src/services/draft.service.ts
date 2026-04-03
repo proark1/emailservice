@@ -120,9 +120,9 @@ export async function listDrafts(accountId: string, options: { limit?: number; c
 
   if (options.cursor) {
     const { lt } = await import("drizzle-orm");
-    const [cursorEmail] = await db.select({ createdAt: emails.createdAt }).from(emails).where(eq(emails.id, options.cursor));
+    const [cursorEmail] = await db.select({ updatedAt: emails.updatedAt }).from(emails).where(eq(emails.id, options.cursor));
     if (cursorEmail) {
-      conditions.push(lt(emails.createdAt, cursorEmail.createdAt));
+      conditions.push(lt(emails.updatedAt, cursorEmail.updatedAt));
     }
   }
 
@@ -167,7 +167,7 @@ export async function sendDraft(accountId: string, draftId: string) {
   }
 
   // Validate domain
-  const fromDomain = draft.fromAddress.split("@")[1];
+  const fromDomain = draft.fromAddress.split("@")[1]?.toLowerCase();
   const [domain] = await db
     .select()
     .from(domains)

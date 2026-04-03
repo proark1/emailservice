@@ -109,6 +109,7 @@ async function syncMailbox(mailbox: typeof connectedMailboxes.$inferSelect) {
         let htmlBody: string | null = null;
         let messageId: string | null = null;
         let inReplyTo: string | null = null;
+        let references: string[] | null = null;
         let ccAddresses: string[] | null = null;
         let messageDate: Date = new Date();
 
@@ -133,6 +134,8 @@ async function syncMailbox(mailbox: typeof connectedMailboxes.$inferSelect) {
             htmlBody = parsed.html || null;
             messageId = parsed.messageId ?? null;
             inReplyTo = parsed.inReplyTo ?? null;
+            const refsRaw = parsed.references;
+            references = Array.isArray(refsRaw) ? refsRaw : refsRaw ? [refsRaw] : null;
             messageDate = parsed.date ?? new Date();
           } catch (parseErr) {
             console.warn(`[mailbox-sync] Failed to parse message uid=${msg.uid}:`, parseErr);
@@ -176,6 +179,10 @@ async function syncMailbox(mailbox: typeof connectedMailboxes.$inferSelect) {
           // Folder not yet seeded — null folderId means "default inbox"
         }
 
+        // Compute thread ID for conversation grouping
+        const { computeThreadId } = await import("../services/thread.service.js");
+        const threadId = computeThreadId(messageId, inReplyTo, references, subject);
+
         await db.insert(inboundEmails).values({
           accountId: mailbox.accountId,
           folderId: inboxFolderId,
@@ -188,6 +195,9 @@ async function syncMailbox(mailbox: typeof connectedMailboxes.$inferSelect) {
           htmlBody,
           messageId,
           inReplyTo,
+          threadId,
+          references,
+          hasAttachments: false,
           headers: {},
           createdAt: messageDate,
         });

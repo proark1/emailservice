@@ -22,7 +22,7 @@ export async function createBroadcast(accountId: string, input: CreateBroadcastI
 
   // Parse "from" address and validate domain
   const from = parseFromAddress(input.from);
-  const fromDomain = from.address.split("@")[1];
+  const fromDomain = from.address.split("@")[1]?.toLowerCase();
   if (!fromDomain) {
     throw new ValidationError("Invalid 'from' address — must contain a valid email (e.g., user@example.com)");
   }
