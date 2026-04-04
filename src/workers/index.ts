@@ -8,6 +8,9 @@ import { createWarmupWorker } from "./warmup.worker.js";
 import { createTrashPurgeWorker } from "./trash-purge.worker.js";
 import { createMailboxSyncWorker } from "./mailbox-sync.worker.js";
 import { createBroadcastWorker } from "./broadcast.worker.js";
+import { createImportWorker } from "./import.worker.js";
+import { createAbTestWorker } from "./abtest.worker.js";
+import { createSequenceWorker } from "./sequence.worker.js";
 
 function attachErrorHandlers(worker: Worker, name: string) {
   worker.on("error", (err) => {
@@ -29,6 +32,9 @@ export function startAllWorkers() {
     { worker: createTrashPurgeWorker(), name: "trash.purge" },
     { worker: createMailboxSyncWorker(), name: "mailbox.sync" },
     { worker: createBroadcastWorker(), name: "broadcast.execute" },
+    { worker: createImportWorker(), name: "contact.import" },
+    { worker: createAbTestWorker(), name: "broadcast.abtest" },
+    { worker: createSequenceWorker(), name: "sequence.process" },
   ];
 
   for (const { worker, name } of workerEntries) {

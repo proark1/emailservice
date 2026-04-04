@@ -115,6 +115,38 @@ export function getMailboxSyncQueue() {
   });
 }
 
+export function getContactImportQueue() {
+  return getQueue("contact.import", {
+    defaultJobOptions: {
+      attempts: 2,
+      backoff: { type: "exponential", delay: 5000 },
+      removeOnComplete: { count: 100 },
+      removeOnFail: { age: 7 * 24 * 3600 },
+    },
+  });
+}
+
+export function getSequenceQueue() {
+  return getQueue("sequence.process", {
+    defaultJobOptions: {
+      attempts: 1,
+      removeOnComplete: { count: 10 },
+      removeOnFail: { age: 24 * 3600 },
+    },
+  });
+}
+
+export function getAbTestQueue() {
+  return getQueue("broadcast.abtest", {
+    defaultJobOptions: {
+      attempts: 2,
+      backoff: { type: "exponential", delay: 10_000 },
+      removeOnComplete: { count: 100 },
+      removeOnFail: { age: 7 * 24 * 3600 },
+    },
+  });
+}
+
 export function getBroadcastQueue() {
   return getQueue("broadcast.execute", {
     defaultJobOptions: {

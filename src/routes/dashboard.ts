@@ -1024,6 +1024,158 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     return { data: broadcastService.formatBroadcastResponse(deleted) };
   });
 
+  // A/B test variant stats
+  app.get<{ Params: { id: string } }>("/broadcasts/:id/variants", async (request) => {
+    const stats = await broadcastService.getAbTestVariantStats(request.account.id, request.params.id);
+    return { data: stats };
+  });
+
+  // Manual winner selection
+  app.post<{ Params: { id: string } }>("/broadcasts/:id/select-winner", async (request) => {
+    const body = z.object({ winner_id: z.enum(["A", "B"]) }).parse(request.body);
+    const updated = await broadcastService.selectAbTestWinner(request.params.id, body.winner_id);
+    return { data: broadcastService.formatBroadcastResponse(updated!) };
+  });
+
+  // --- Sequences ---
+  app.get("/sequences", async (request) => {
+    const { paginationSchema } = await import("../lib/pagination.js");
+    const sequenceService = await import("../services/sequence.service.js");
+    const pagination = paginationSchema.parse(request.query);
+    const result = await sequenceService.listSequences(request.account.id, pagination);
+    return { data: result.data.map(sequenceService.formatSequenceResponse), pagination: result.pagination };
+  });
+
+  app.post("/sequences", async (request, reply) => {
+    const sequenceService = await import("../services/sequence.service.js");
+    const { createSequenceSchema } = await import("../schemas/sequence.schema.js");
+    const input = createSequenceSchema.parse(request.body);
+    const sequence = await sequenceService.createSequence(request.account.id, input);
+    return reply.status(201).send({ data: sequenceService.formatSequenceResponse(sequence) });
+  });
+
+  app.get<{ Params: { id: string } }>("/sequences/:id", async (request) => {
+    const sequenceService = await import("../services/sequence.service.js");
+    const sequence = await sequenceService.getSequence(request.account.id, request.params.id);
+    const steps = await sequenceService.listSteps(request.account.id, request.params.id);
+    return {
+      data: {
+        ...sequenceService.formatSequenceResponse(sequence),
+        steps: steps.map(sequenceService.formatStepResponse),
+      },
+    };
+  });
+
+  app.put<{ Params: { id: string } }>("/sequences/:id", async (request) => {
+    const sequenceService = await import("../services/sequence.service.js");
+    const { updateSequenceSchema } = await import("../schemas/sequence.schema.js");
+    const input = updateSequenceSchema.parse(request.body);
+    const updated = await sequenceService.updateSequence(request.account.id, request.params.id, input);
+    return { data: sequenceService.formatSequenceResponse(updated) };
+  });
+
+  app.delete<{ Params: { id: string } }>("/sequences/:id", async (request) => {
+    const sequenceService = await import("../services/sequence.service.js");
+    const deleted = await sequenceService.deleteSequence(request.account.id, request.params.id);
+    return { data: sequenceService.formatSequenceResponse(deleted) };
+  });
+
+  app.post<{ Params: { id: string } }>("/sequences/:id/activate", async (request) => {
+    const sequenceService = await import("../services/sequence.service.js");
+    const activated = await sequenceService.activateSequence(request.account.id, request.params.id);
+    return { data: sequenceService.formatSequenceResponse(activated!) };
+  });
+
+  app.post<{ Params: { id: string } }>("/sequences/:id/pause", async (request) => {
+    const sequenceService = await import("../services/sequence.service.js");
+    const paused = await sequenceService.pauseSequence(request.account.id, request.params.id);
+    return { data: sequenceService.formatSequenceResponse(paused!) };
+  });
+
+  app.post<{ Params: { id: string } }>("/sequences/:id/steps", async (request, reply) => {
+    const sequenceService = await import("../services/sequence.service.js");
+    const { createStepSchema } = await import("../schemas/sequence.schema.js");
+    const input = createStepSchema.parse(request.body);
+    const step = await sequenceService.createStep(request.account.id, request.params.id, input);
+    return reply.status(201).send({ data: sequenceService.formatStepResponse(step) });
+  });
+
+  app.put<{ Params: { id: string; stepId: string } }>("/sequences/:id/steps/:stepId", async (request) => {
+    const sequenceService = await import("../services/sequence.service.js");
+    const { updateStepSchema } = await import("../schemas/sequence.schema.js");
+    const input = updateStepSchema.parse(request.body);
+    const updated = await sequenceService.updateStep(
+      request.account.id, request.params.id, request.params.stepId, input,
+    );
+    return { data: sequenceService.formatStepResponse(updated) };
+  });
+
+  app.delete<{ Params: { id: string; stepId: string } }>("/sequences/:id/steps/:stepId", async (request) => {
+    const sequenceService = await import("../services/sequence.service.js");
+    const deleted = await sequenceService.deleteStep(
+      request.account.id, request.params.id, request.params.stepId,
+    );
+    return { data: sequenceService.formatStepResponse(deleted) };
+  });
+
+  app.post<{ Params: { id: string } }>("/sequences/:id/enroll", async (request, reply) => {
+    const sequenceService = await import("../services/sequence.service.js");
+    const { enrollContactsSchema } = await import("../schemas/sequence.schema.js");
+    const input = enrollContactsSchema.parse(request.body);
+    const result = await sequenceService.enrollContacts(request.account.id, request.params.id, input);
+    return reply.status(201).send({ data: result });
+  });
+
+  app.get<{ Params: { id: string } }>("/sequences/:id/enrollments", async (request) => {
+    const sequenceService = await import("../services/sequence.service.js");
+    const { paginationSchema } = await import("../lib/pagination.js");
+    const pagination = paginationSchema.parse(request.query);
+    const result = await sequenceService.listEnrollments(request.account.id, request.params.id, pagination);
+    return {
+      data: result.data.map(sequenceService.formatEnrollmentResponse),
+      pagination: result.pagination,
+    };
+  });
+
+  // --- Enhanced CSV Import ---
+  app.post<{ Params: { id: string } }>("/audiences/:id/imports/create", async (request, reply) => {
+    const importService = await import("../services/import.service.js");
+    const body = request.body as any;
+    if (!body?.csv) {
+      throw new (await import("../lib/errors.js")).ValidationError("Request body must include 'csv' field");
+    }
+    const result = await importService.createImport(request.account.id, request.params.id, body.csv, body.file_name);
+    return reply.status(201).send({
+      data: {
+        import: importService.formatImportResponse(result.import),
+        headers: result.headers,
+        suggested_mapping: result.suggested_mapping,
+        preview: result.preview,
+        total_rows: result.total_rows,
+      },
+    });
+  });
+
+  app.post<{ Params: { id: string; importId: string } }>("/audiences/:id/imports/:importId/confirm", async (request) => {
+    const importService = await import("../services/import.service.js");
+    const { confirmImportSchema } = await import("../schemas/import.schema.js");
+    const input = confirmImportSchema.parse(request.body);
+    const result = await importService.confirmImport(request.account.id, request.params.id, request.params.importId, input);
+    return { data: importService.formatImportResponse(result!) };
+  });
+
+  app.get<{ Params: { id: string; importId: string } }>("/audiences/:id/imports/:importId", async (request) => {
+    const importService = await import("../services/import.service.js");
+    const result = await importService.getImport(request.account.id, request.params.id, request.params.importId);
+    return { data: importService.formatImportResponse(result) };
+  });
+
+  app.get<{ Params: { id: string } }>("/audiences/:id/export", async (request, reply) => {
+    const importService = await import("../services/import.service.js");
+    const csv = await importService.exportContacts(request.account.id, request.params.id);
+    return reply.header("Content-Type", "text/csv").header("Content-Disposition", `attachment; filename="contacts.csv"`).send(csv);
+  });
+
   // --- Warmup ---
   app.get("/warmup", async (request) => {
     const list = await warmupService.listWarmups(request.account.id);

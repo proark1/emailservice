@@ -60,6 +60,17 @@ export async function createContact(accountId: string, audienceId: string, input
         subscribed: input.subscribed ?? true,
       })
       .returning();
+
+    // Auto-enroll in active sequences with audience_join trigger
+    if (input.subscribed !== false) {
+      try {
+        const { autoEnrollContact } = await import("./sequence.service.js");
+        await autoEnrollContact(audienceId, contact.id);
+      } catch {
+        // Non-critical: don't fail contact creation if sequence enrollment fails
+      }
+    }
+
     return contact;
   } catch (error: any) {
     if (error.code === "23505") {

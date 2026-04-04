@@ -1,9 +1,27 @@
-import { pgTable, uuid, varchar, timestamp, text, jsonb, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, text, jsonb, integer, index, boolean } from "drizzle-orm/pg-core";
 import { accounts } from "./accounts.js";
 import { audiences } from "./audiences.js";
 
 export const broadcastStatusEnum = ["draft", "scheduled", "sending", "sent", "partial_failure", "failed"] as const;
 export type BroadcastStatus = (typeof broadcastStatusEnum)[number];
+
+export const abTestStatusEnum = ["testing", "winner_selected", "sending_winner", "completed"] as const;
+export type AbTestStatus = (typeof abTestStatusEnum)[number];
+
+export interface AbTestVariant {
+  id: string; // "A" or "B"
+  subject: string;
+  htmlBody?: string;
+  textBody?: string;
+}
+
+export interface AbTestConfig {
+  test_percentage: number; // 10-50
+  variants: AbTestVariant[];
+  winner_criteria: "open_rate" | "click_rate";
+  wait_hours: number; // 1-72
+  winner_id?: string | null;
+}
 
 export const broadcasts = pgTable("broadcasts", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -25,6 +43,9 @@ export const broadcasts = pgTable("broadcasts", {
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  abTestEnabled: boolean("ab_test_enabled").notNull().default(false),
+  abTestConfig: jsonb("ab_test_config").$type<AbTestConfig>(),
+  abTestStatus: varchar("ab_test_status", { length: 20 }).$type<AbTestStatus>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

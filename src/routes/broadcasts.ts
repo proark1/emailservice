@@ -33,4 +33,21 @@ export default async function broadcastRoutes(app: FastifyInstance) {
     const deleted = await broadcastService.deleteBroadcast(request.account.id, request.params.id);
     return { data: broadcastService.formatBroadcastResponse(deleted) };
   });
+
+  // GET /v1/broadcasts/:id/variants — A/B test variant analytics
+  app.get<{ Params: { id: string } }>("/:id/variants", async (request) => {
+    const stats = await broadcastService.getAbTestVariantStats(request.account.id, request.params.id);
+    return { data: stats };
+  });
+
+  // POST /v1/broadcasts/:id/select-winner — Manually select A/B test winner
+  app.post<{ Params: { id: string } }>("/:id/select-winner", async (request) => {
+    const body = request.body as any;
+    const winnerId = body?.winner_id;
+    if (!winnerId || !["A", "B"].includes(winnerId)) {
+      throw new (await import("../lib/errors.js")).ValidationError("winner_id must be 'A' or 'B'");
+    }
+    const updated = await broadcastService.selectAbTestWinner(request.params.id, winnerId);
+    return { data: broadcastService.formatBroadcastResponse(updated!) };
+  });
 }

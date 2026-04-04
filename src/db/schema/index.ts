@@ -23,3 +23,6 @@ export { domainMembers } from "./domain-members.js";
 export { domainInvitations } from "./domain-invitations.js";
 export { connectedMailboxes } from "./connected-mailboxes.js";
 export { systemSettings } from "./system-settings.js";
+export { contactImports } from "./contact-imports.js";
+export { broadcastVariantSends } from "./broadcast-variants.js";
+export { sequences, sequenceSteps, sequenceEnrollments, sequenceSends } from "./sequences.js";
