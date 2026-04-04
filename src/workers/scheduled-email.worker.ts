@@ -1,12 +1,30 @@
 import { Worker, Job } from "bullmq";
-import { lte, eq, and, isNotNull } from "drizzle-orm";
+import { lte, eq, and, isNotNull, sql } from "drizzle-orm";
 import { getRedisConnection, getEmailSendQueue, getScheduledEmailQueue } from "../queues/index.js";
 import { getDb } from "../db/index.js";
 import { emails } from "../db/schema/index.js";
 import { processScheduledBroadcasts } from "../services/broadcast.service.js";
 
+const STUCK_SENDING_THRESHOLD_MINUTES = 10;
+
 async function processScheduledEmails(_job: Job) {
   const db = getDb();
+
+  // Recover emails stuck in "sending" for more than 10 minutes (likely worker crash)
+  const stuckEmails = await db
+    .update(emails)
+    .set({ status: "queued", updatedAt: new Date() })
+    .where(
+      and(
+        eq(emails.status, "sending"),
+        lte(emails.updatedAt, sql`NOW() - INTERVAL '${sql.raw(String(STUCK_SENDING_THRESHOLD_MINUTES))} minutes'`),
+      ),
+    )
+    .returning({ id: emails.id });
+
+  if (stuckEmails.length > 0) {
+    console.warn(`[scheduled-email] Recovered ${stuckEmails.length} stuck emails back to queued`);
+  }
 
   // Atomically claim due scheduled emails — prevents duplicate sends across concurrent workers
   const dueEmails = await db

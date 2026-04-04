@@ -1,4 +1,4 @@
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, desc, lt } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { webhooks, webhookDeliveries, emailEvents } from "../db/schema/index.js";
 import { getWebhookDeliverQueue } from "../queues/index.js";
@@ -58,16 +58,31 @@ export async function deleteWebhook(accountId: string, webhookId: string) {
   return deleted;
 }
 
-export async function listDeliveries(accountId: string, webhookId: string) {
+export async function listDeliveries(accountId: string, webhookId: string, opts?: { cursor?: string; limit?: number }) {
   const db = getDb();
   // Verify webhook belongs to account
   await getWebhook(accountId, webhookId);
-  return db
+  const limit = opts?.limit ?? 50;
+  const conditions = [eq(webhookDeliveries.webhookId, webhookId)];
+  if (opts?.cursor) {
+    conditions.push(lt(webhookDeliveries.id, opts.cursor));
+  }
+  const items = await db
     .select()
     .from(webhookDeliveries)
-    .where(eq(webhookDeliveries.webhookId, webhookId))
-    .orderBy(webhookDeliveries.createdAt)
-    .limit(50);
+    .where(and(...conditions))
+    .orderBy(desc(webhookDeliveries.createdAt))
+    .limit(limit + 1);
+
+  const hasMore = items.length > limit;
+  const data = hasMore ? items.slice(0, limit) : items;
+  return {
+    data,
+    pagination: {
+      cursor: hasMore ? data[data.length - 1].id : null,
+      has_more: hasMore,
+    },
+  };
 }
 
 /**

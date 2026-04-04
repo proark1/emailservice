@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, warmupEmails, warmupSchedules } from "../db/schema/index.js";
 import { isRedisConfigured } from "../queues/index.js";
-import { getConfig } from "../config/index.js";
+import { getConfig, getTrackingSecret } from "../config/index.js";
 
 // 1x1 transparent GIF
 const TRACKING_PIXEL = Buffer.from(
@@ -115,9 +115,9 @@ export function decodeClickTrackingData(encoded: string): { emailId: string; url
     if (dotIndex !== -1) {
       const payload = encoded.substring(0, dotIndex);
       const sig = encoded.substring(dotIndex + 1);
-      const expected = crypto.createHmac("sha256", config.ENCRYPTION_KEY).update(payload).digest("base64url");
-      const sigBuf = Buffer.from(sig);
-      const expBuf = Buffer.from(expected);
+      const expected = crypto.createHmac("sha256", getTrackingSecret()).update(payload).digest("base64url");
+      const sigBuf = Buffer.from(sig, "base64url");
+      const expBuf = Buffer.from(expected, "base64url");
       if (sigBuf.byteLength === expBuf.byteLength && crypto.timingSafeEqual(sigBuf, expBuf)) {
         const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
         if (data.emailId && data.url) {

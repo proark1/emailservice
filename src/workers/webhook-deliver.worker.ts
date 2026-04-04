@@ -1,8 +1,30 @@
 import { Worker, Job } from "bullmq";
+import dns from "node:dns/promises";
 import { getRedisConnection } from "../queues/index.js";
 import { getDb } from "../db/index.js";
 import { webhookDeliveries } from "../db/schema/index.js";
 import { signWebhookPayload } from "../lib/crypto.js";
+
+function isPrivateIP(ip: string): boolean {
+  // IPv4 private/reserved ranges
+  if (ip.startsWith("127.") || ip.startsWith("10.") || ip.startsWith("192.168.") || ip === "0.0.0.0") return true;
+  if (ip.startsWith("172.")) {
+    const second = parseInt(ip.split(".")[1], 10);
+    if (second >= 16 && second <= 31) return true;
+  }
+  if (ip.startsWith("169.254.")) return true; // link-local
+  // IPv6 private/reserved
+  if (ip === "::1" || ip === "::") return true;
+  const lower = ip.toLowerCase();
+  if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // unique local
+  if (lower.startsWith("fe80:")) return true; // link-local
+  if (lower.startsWith("::ffff:")) {
+    // IPv4-mapped IPv6 — extract and check the IPv4 portion
+    const v4 = lower.slice(7);
+    return isPrivateIP(v4);
+  }
+  return false;
+}
 
 export interface WebhookDeliverJobData {
   webhookId: string;
@@ -32,20 +54,37 @@ async function processWebhookDeliver(job: Job<WebhookDeliverJobData>) {
   let responseStatus: number | null = null;
   let responseBody: string | null = null;
   let status: "success" | "failed" = "failed";
+  let timeout: ReturnType<typeof setTimeout> | undefined;
 
   try {
-    // SSRF protection: block private/internal IPs
+    // SSRF protection: block private/internal IPs by resolving DNS
     const parsedUrl = new URL(url);
-    const hostname = parsedUrl.hostname;
-    const blocked = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]", "169.254.169.254", "metadata.google.internal"];
-    const privatePrefixes = ["10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.", "192.168.", "fc00:", "fd", "fe80:", "::ffff:10.", "::ffff:172.", "::ffff:192.168.", "::ffff:127."];
+    const hostname = parsedUrl.hostname.replace(/^\[|\]$/g, ""); // strip IPv6 brackets
+    const blockedHostnames = ["localhost", "metadata.google.internal"];
     const blockedSuffixes = [".local", ".internal", ".localhost"];
-    if (blocked.includes(hostname) || privatePrefixes.some((p) => hostname.startsWith(p)) || blockedSuffixes.some((s) => hostname.endsWith(s))) {
+    if (blockedHostnames.includes(hostname) || blockedSuffixes.some((s) => hostname.endsWith(s))) {
       throw new Error("Webhook URL targets a private/internal address");
+    }
+    // Resolve hostname to IPs and check each one
+    try {
+      const [v4addrs, v6addrs] = await Promise.allSettled([
+        dns.resolve4(hostname),
+        dns.resolve6(hostname),
+      ]);
+      const resolvedIPs = [
+        ...(v4addrs.status === "fulfilled" ? v4addrs.value : []),
+        ...(v6addrs.status === "fulfilled" ? v6addrs.value : []),
+      ];
+      if (resolvedIPs.length > 0 && resolvedIPs.every((ip) => isPrivateIP(ip))) {
+        throw new Error("Webhook URL targets a private/internal address");
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("private/internal")) throw err;
+      // DNS resolution failed — allow the request to proceed and let fetch handle it
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
+    timeout = setTimeout(() => controller.abort(), 30_000);
 
     const response = await fetch(url, {
       method: "POST",
@@ -68,6 +107,7 @@ async function processWebhookDeliver(job: Job<WebhookDeliverJobData>) {
       status = "success";
     }
   } catch (error) {
+    clearTimeout(timeout);
     responseBody = error instanceof Error ? error.message : "Unknown error";
   }
 

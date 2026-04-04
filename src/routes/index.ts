@@ -79,8 +79,12 @@ export async function registerRoutes(app: FastifyInstance) {
     });
 
     suppApp.get("/", async (request) => {
-      const list = await listSuppressions(request.account.id);
-      return { data: list.map(formatSuppressionResponse) };
+      const query = z.object({
+        cursor: z.string().uuid().optional(),
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+      }).parse(request.query);
+      const result = await listSuppressions(request.account.id, query);
+      return { data: result.data.map(formatSuppressionResponse), pagination: result.pagination };
     });
 
     suppApp.post("/", async (request, reply) => {

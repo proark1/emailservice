@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { getConfig } from "../config/index.js";
+import { getConfig, getTrackingSecret } from "../config/index.js";
 
 function decodeHtmlEntities(text: string): string {
   return text
@@ -50,7 +50,7 @@ export function rewriteLinks(html: string, emailId: string): string {
       }
 
       const payload = Buffer.from(JSON.stringify({ emailId, url: cleanUrl })).toString("base64url");
-      const sig = crypto.createHmac("sha256", config.ENCRYPTION_KEY).update(payload).digest("base64url");
+      const sig = crypto.createHmac("sha256", getTrackingSecret()).update(payload).digest("base64url");
       const encoded = `${payload}.${sig}`;
       const trackingUrl = `${config.TRACKING_URL}/c/${encoded}`;
       return `<a ${before}href="${trackingUrl}"${after}>`;

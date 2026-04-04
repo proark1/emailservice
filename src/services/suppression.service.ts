@@ -1,7 +1,8 @@
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, desc, lt } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { suppressions } from "../db/schema/index.js";
 import { NotFoundError, ConflictError } from "../lib/errors.js";
+import { buildPaginatedResponse, type PaginationParams } from "../lib/pagination.js";
 
 export async function addSuppression(
   accountId: string,
@@ -29,9 +30,23 @@ export async function addSuppression(
   }
 }
 
-export async function listSuppressions(accountId: string) {
+export async function listSuppressions(accountId: string, pagination?: PaginationParams) {
   const db = getDb();
-  return db.select().from(suppressions).where(eq(suppressions.accountId, accountId));
+  const limit = pagination?.limit ?? 100;
+  const conditions = [eq(suppressions.accountId, accountId)];
+
+  if (pagination?.cursor) {
+    conditions.push(lt(suppressions.id, pagination.cursor));
+  }
+
+  const items = await db
+    .select()
+    .from(suppressions)
+    .where(and(...conditions))
+    .orderBy(desc(suppressions.createdAt))
+    .limit(limit + 1);
+
+  return buildPaginatedResponse(items, limit);
 }
 
 export async function removeSuppression(accountId: string, suppressionId: string) {

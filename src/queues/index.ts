@@ -46,13 +46,84 @@ export function getEmailSendQueue() {
     },
   });
 }
-export function getWebhookDeliverQueue() { return getQueue("webhook.deliver"); }
-export function getDnsVerifyQueue() { return getQueue("dns.verify"); }
-export function getScheduledEmailQueue() { return getQueue("email.scheduled"); }
-export function getInboundEmailQueue() { return getQueue("email.inbound"); }
-export function getWarmupQueue() { return getQueue("email.warmup"); }
-export function getTrashPurgeQueue() { return getQueue("trash.purge"); }
-export function getMailboxSyncQueue() { return getQueue("mailbox.sync"); }
+export function getWebhookDeliverQueue() {
+  return getQueue("webhook.deliver", {
+    defaultJobOptions: {
+      attempts: 6,
+      backoff: { type: "exponential", delay: 30_000 },
+      removeOnComplete: { count: 500 },
+      removeOnFail: { age: 7 * 24 * 3600 },
+    },
+  });
+}
+export function getDnsVerifyQueue() {
+  return getQueue("dns.verify", {
+    defaultJobOptions: {
+      attempts: 1,
+      removeOnComplete: { count: 100 },
+      removeOnFail: { age: 72 * 3600 },
+    },
+  });
+}
+export function getScheduledEmailQueue() {
+  return getQueue("email.scheduled", {
+    defaultJobOptions: {
+      attempts: 1,
+      removeOnComplete: { count: 10 },
+      removeOnFail: { age: 24 * 3600 },
+    },
+  });
+}
+export function getInboundEmailQueue() {
+  return getQueue("email.inbound", {
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: "exponential", delay: 5000 },
+      removeOnComplete: { count: 500 },
+      removeOnFail: { age: 7 * 24 * 3600 },
+    },
+  });
+}
+export function getWarmupQueue() {
+  return getQueue("email.warmup", {
+    defaultJobOptions: {
+      attempts: 2,
+      backoff: { type: "exponential", delay: 10_000 },
+      removeOnComplete: { count: 50 },
+      removeOnFail: { age: 24 * 3600 },
+    },
+  });
+}
+export function getTrashPurgeQueue() {
+  return getQueue("trash.purge", {
+    defaultJobOptions: {
+      attempts: 2,
+      backoff: { type: "exponential", delay: 10_000 },
+      removeOnComplete: { count: 10 },
+      removeOnFail: { age: 24 * 3600 },
+    },
+  });
+}
+export function getMailboxSyncQueue() {
+  return getQueue("mailbox.sync", {
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: "exponential", delay: 10_000 },
+      removeOnComplete: { count: 200 },
+      removeOnFail: { age: 7 * 24 * 3600 },
+    },
+  });
+}
+
+export function getBroadcastQueue() {
+  return getQueue("broadcast.execute", {
+    defaultJobOptions: {
+      attempts: 1,
+      removeOnComplete: { count: 100 },
+      removeOnFail: { age: 7 * 24 * 3600 },
+    },
+  });
+}
 
 export async function closeQueues() {
   const closePromises = Array.from(_queues.values()).map((q) => q.close());

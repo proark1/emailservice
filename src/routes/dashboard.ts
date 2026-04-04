@@ -849,8 +849,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   // --- Webhook Deliveries ---
   app.get<{ Params: { id: string } }>("/webhooks/:id/deliveries", async (request) => {
     const webhook = await webhookService.getWebhook(request.account.id, request.params.id);
-    const deliveries = await webhookService.listDeliveries(request.account.id, webhook.id);
-    return { data: deliveries.map(webhookService.formatDeliveryResponse) };
+    const result = await webhookService.listDeliveries(request.account.id, webhook.id);
+    return { data: result.data.map(webhookService.formatDeliveryResponse), pagination: result.pagination };
   });
 
   // --- Audiences ---
@@ -905,21 +905,49 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     return { data: audienceService.formatContactResponse(deleted) };
   });
 
-  // CSV Export
+  // CSV Export — streams contacts in batches to avoid loading all into memory
   app.get<{ Params: { id: string } }>("/audiences/:id/contacts/export", async (request, reply) => {
     const { contacts: contactsTable } = await import("../db/schema/index.js");
     const audience = await audienceService.getAudience(request.account.id, request.params.id);
-    const allContacts = await getDb().select().from(contactsTable).where(eq(contactsTable.audienceId, audience.id));
-
-    const header = "email,first_name,last_name,subscribed\n";
-    const rows = allContacts.map(c => {
-      const formatted = audienceService.formatContactResponse(c);
-      return `${csvEscape(formatted.email)},${csvEscape(formatted.first_name || "")},${csvEscape(formatted.last_name || "")},${formatted.subscribed}`;
-    }).join("\n");
 
     reply.header("Content-Type", "text/csv");
     reply.header("Content-Disposition", `attachment; filename="${audience.name}-contacts.csv"`);
-    return header + rows;
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/csv",
+      "Content-Disposition": `attachment; filename="${audience.name}-contacts.csv"`,
+    });
+    reply.raw.write("email,first_name,last_name,subscribed\n");
+
+    const BATCH_SIZE = 500;
+    let lastId: string | null = null;
+    let hasMore = true;
+
+    while (hasMore) {
+      const conditions = [eq(contactsTable.audienceId, audience.id)];
+      if (lastId) {
+        const { gt } = await import("drizzle-orm");
+        conditions.push(gt(contactsTable.id, lastId));
+      }
+      const batch = await getDb()
+        .select()
+        .from(contactsTable)
+        .where(and(...conditions))
+        .orderBy(contactsTable.id)
+        .limit(BATCH_SIZE);
+
+      for (const c of batch) {
+        const formatted = audienceService.formatContactResponse(c);
+        reply.raw.write(`${csvEscape(formatted.email)},${csvEscape(formatted.first_name || "")},${csvEscape(formatted.last_name || "")},${formatted.subscribed}\n`);
+      }
+
+      hasMore = batch.length === BATCH_SIZE;
+      if (batch.length > 0) {
+        lastId = batch[batch.length - 1].id;
+      }
+    }
+
+    reply.raw.end();
+    reply.hijack();
   });
 
   // CSV Import
@@ -1170,75 +1198,78 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const pattern = `%${escapeIlike(q)}%`;
     const limit = 5;
 
-    // Search emails
-    const emailResults = await db.select({
-      id: emails.id,
-      fromAddress: emails.fromAddress,
-      subject: emails.subject,
-      status: emails.status,
-      createdAt: emails.createdAt,
-    }).from(emails).where(
-      and(
-        eq(emails.accountId, accountId),
-        or(ilike(emails.fromAddress, pattern), ilike(emails.subject, pattern)),
-      ),
-    ).orderBy(desc(emails.createdAt)).limit(limit);
-
-    // Search inbound emails
-    const inboxResults = await db.select({
-      id: inboundEmails.id,
-      fromAddress: inboundEmails.fromAddress,
-      subject: inboundEmails.subject,
-      createdAt: inboundEmails.createdAt,
-    }).from(inboundEmails).where(
-      and(
-        eq(inboundEmails.accountId, accountId),
-        or(ilike(inboundEmails.fromAddress, pattern), ilike(inboundEmails.subject, pattern)),
-      ),
-    ).orderBy(desc(inboundEmails.createdAt)).limit(limit);
-
-    // Search domains
-    const domainResults = await db.select({
-      id: domains.id,
-      name: domains.name,
-      status: domains.status,
-    }).from(domains).where(
-      and(eq(domains.accountId, accountId), ilike(domains.name, pattern)),
-    ).limit(limit);
-
-    // Search contacts across all audiences
     const { contacts } = await import("../db/schema/index.js");
-    const contactResults = await db.select({
-      id: contacts.id,
-      email: contacts.email,
-      firstName: contacts.firstName,
-      lastName: contacts.lastName,
-      audienceId: contacts.audienceId,
-    }).from(contacts)
-      .innerJoin(audiences, eq(contacts.audienceId, audiences.id))
-      .where(
-        and(
-          eq(audiences.accountId, accountId),
-          or(
-            ilike(contacts.email, pattern),
-            ilike(contacts.firstName, pattern),
-            ilike(contacts.lastName, pattern),
-          ),
-        ),
-      ).limit(limit);
-
-    // Search templates
     const { templates } = await import("../db/schema/index.js");
-    const templateResults = await db.select({
-      id: templates.id,
-      name: templates.name,
-      subject: templates.subject,
-    }).from(templates).where(
-      and(
-        eq(templates.accountId, accountId),
-        or(ilike(templates.name, pattern), ilike(templates.subject, pattern)),
-      ),
-    ).limit(limit);
+
+    const [emailResults, inboxResults, domainResults, contactResults, templateResults] = await Promise.all([
+      // Search emails
+      db.select({
+        id: emails.id,
+        fromAddress: emails.fromAddress,
+        subject: emails.subject,
+        status: emails.status,
+        createdAt: emails.createdAt,
+      }).from(emails).where(
+        and(
+          eq(emails.accountId, accountId),
+          or(ilike(emails.fromAddress, pattern), ilike(emails.subject, pattern)),
+        ),
+      ).orderBy(desc(emails.createdAt)).limit(limit),
+
+      // Search inbound emails
+      db.select({
+        id: inboundEmails.id,
+        fromAddress: inboundEmails.fromAddress,
+        subject: inboundEmails.subject,
+        createdAt: inboundEmails.createdAt,
+      }).from(inboundEmails).where(
+        and(
+          eq(inboundEmails.accountId, accountId),
+          or(ilike(inboundEmails.fromAddress, pattern), ilike(inboundEmails.subject, pattern)),
+        ),
+      ).orderBy(desc(inboundEmails.createdAt)).limit(limit),
+
+      // Search domains
+      db.select({
+        id: domains.id,
+        name: domains.name,
+        status: domains.status,
+      }).from(domains).where(
+        and(eq(domains.accountId, accountId), ilike(domains.name, pattern)),
+      ).limit(limit),
+
+      // Search contacts across all audiences
+      db.select({
+        id: contacts.id,
+        email: contacts.email,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+        audienceId: contacts.audienceId,
+      }).from(contacts)
+        .innerJoin(audiences, eq(contacts.audienceId, audiences.id))
+        .where(
+          and(
+            eq(audiences.accountId, accountId),
+            or(
+              ilike(contacts.email, pattern),
+              ilike(contacts.firstName, pattern),
+              ilike(contacts.lastName, pattern),
+            ),
+          ),
+        ).limit(limit),
+
+      // Search templates
+      db.select({
+        id: templates.id,
+        name: templates.name,
+        subject: templates.subject,
+      }).from(templates).where(
+        and(
+          eq(templates.accountId, accountId),
+          or(ilike(templates.name, pattern), ilike(templates.subject, pattern)),
+        ),
+      ).limit(limit),
+    ]);
 
     return {
       data: {
@@ -1254,8 +1285,15 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   // --- Suppressions ---
   app.get("/suppressions", async (request) => {
     const { listSuppressions, formatSuppressionResponse } = await import("../services/suppression.service.js");
-    const list = await listSuppressions(request.account.id);
-    return { data: list.map(formatSuppressionResponse) };
+    const query = z.object({
+      cursor: z.string().uuid().optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+    }).parse(request.query);
+    const result = await listSuppressions(request.account.id, query);
+    return {
+      data: result.data.map(formatSuppressionResponse),
+      pagination: result.pagination,
+    };
   });
 
   app.post("/suppressions", async (request, reply) => {
@@ -1373,35 +1411,36 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    const [monthUsage] = await db.select({
-      emailsSent: sql<number>`count(*) filter (where ${emails.status} in ('sent','delivered','bounced','failed','complained'))::int`,
-      emailsDelivered: sql<number>`count(*) filter (where ${emails.status} = 'delivered')::int`,
-    }).from(emails).where(and(
-      eq(emails.accountId, accountId),
-      sql`${emails.createdAt} >= ${startOfMonth.toISOString()}::timestamp`,
-    ));
-
-    // Last 6 months breakdown
-    const monthlyBreakdown = await db.select({
-      month: sql<string>`to_char(${emails.createdAt}, 'YYYY-MM')`,
-      count: sql<number>`count(*)::int`,
-    }).from(emails)
-      .where(and(
-        eq(emails.accountId, accountId),
-        sql`${emails.createdAt} > now() - interval '6 months'`,
-      ))
-      .groupBy(sql`to_char(${emails.createdAt}, 'YYYY-MM')`)
-      .orderBy(sql`to_char(${emails.createdAt}, 'YYYY-MM')`);
-
-    // Counts
-    const [domainCount] = await db.select({ count: count() }).from(domains).where(eq(domains.accountId, accountId));
-    const [audienceCount] = await db.select({ count: count() }).from(audiences).where(eq(audiences.accountId, accountId));
     const { contacts } = await import("../db/schema/index.js");
     const { templates } = await import("../db/schema/index.js");
-    const [contactCount] = await db.select({ count: count() }).from(contacts)
-      .innerJoin(audiences, eq(contacts.audienceId, audiences.id))
-      .where(eq(audiences.accountId, accountId));
-    const [templateCount] = await db.select({ count: count() }).from(templates).where(eq(templates.accountId, accountId));
+
+    const [[monthUsage], monthlyBreakdown, [domainCount], [audienceCount], [contactCount], [templateCount]] = await Promise.all([
+      db.select({
+        emailsSent: sql<number>`count(*) filter (where ${emails.status} in ('sent','delivered','bounced','failed','complained'))::int`,
+        emailsDelivered: sql<number>`count(*) filter (where ${emails.status} = 'delivered')::int`,
+      }).from(emails).where(and(
+        eq(emails.accountId, accountId),
+        sql`${emails.createdAt} >= ${startOfMonth.toISOString()}::timestamp`,
+      )),
+
+      db.select({
+        month: sql<string>`to_char(${emails.createdAt}, 'YYYY-MM')`,
+        count: sql<number>`count(*)::int`,
+      }).from(emails)
+        .where(and(
+          eq(emails.accountId, accountId),
+          sql`${emails.createdAt} > now() - interval '6 months'`,
+        ))
+        .groupBy(sql`to_char(${emails.createdAt}, 'YYYY-MM')`)
+        .orderBy(sql`to_char(${emails.createdAt}, 'YYYY-MM')`),
+
+      db.select({ count: count() }).from(domains).where(eq(domains.accountId, accountId)),
+      db.select({ count: count() }).from(audiences).where(eq(audiences.accountId, accountId)),
+      db.select({ count: count() }).from(contacts)
+        .innerJoin(audiences, eq(contacts.audienceId, audiences.id))
+        .where(eq(audiences.accountId, accountId)),
+      db.select({ count: count() }).from(templates).where(eq(templates.accountId, accountId)),
+    ]);
 
     return {
       data: {

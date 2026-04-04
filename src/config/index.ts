@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { z } from "zod";
 
 // Stable default for development only — production MUST set ENCRYPTION_KEY
@@ -27,7 +28,8 @@ const envSchema = z.object({
   SMTP_PASS: z.string().optional(),
   SMTP_SECURE: z.string().optional(), // "true" for port 465
   JWT_SECRET: z.string().min(1).optional(),
-  ENCRYPTION_KEY: z.string().min(1).default(DEFAULT_ENCRYPTION_KEY),
+  ENCRYPTION_KEY: z.string().regex(/^[0-9a-f]{64}$/i, "ENCRYPTION_KEY must be 64 hex characters (32 bytes)").default(DEFAULT_ENCRYPTION_KEY),
+  TRACKING_HMAC_SECRET: z.string().optional(),
   RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(600),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -101,4 +103,15 @@ export function getMailHost(): string {
     if (host !== "localhost" && host !== "127.0.0.1") return host;
   } catch {}
   return "your-server-hostname.com";
+}
+
+/**
+ * Get the HMAC secret used for click tracking URL signatures.
+ * Uses TRACKING_HMAC_SECRET if set, otherwise derives one from ENCRYPTION_KEY
+ * to avoid reusing the encryption key for HMAC signing.
+ */
+export function getTrackingSecret(): string {
+  const config = getConfig();
+  if (config.TRACKING_HMAC_SECRET) return config.TRACKING_HMAC_SECRET;
+  return crypto.createHmac("sha256", config.ENCRYPTION_KEY).update("tracking").digest("hex");
 }

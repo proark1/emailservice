@@ -7,6 +7,7 @@ import { audiences } from "../db/schema/index.js";
 import { NotFoundError, ValidationError } from "../lib/errors.js";
 import { buildPaginatedResponse, type PaginationParams } from "../lib/pagination.js";
 import { sendEmail } from "./email.service.js";
+import { isRedisConfigured } from "../queues/index.js";
 import type { CreateBroadcastInput } from "../schemas/broadcast.schema.js";
 
 function parseFromAddress(from: string): { address: string; name?: string } {
@@ -94,7 +95,14 @@ export async function createBroadcast(accountId: string, input: CreateBroadcastI
     return broadcast;
   }
 
-  // Send immediately
+  // Enqueue to background worker if Redis is available, otherwise fall back to inline execution
+  if (isRedisConfigured()) {
+    const { getBroadcastQueue } = await import("../queues/index.js");
+    await getBroadcastQueue().add("execute", { broadcastId: broadcast.id });
+    return broadcast;
+  }
+
+  // Fallback: execute inline (blocks the request — used only when Redis is unavailable)
   return executeBroadcast(broadcast.id);
 }
 

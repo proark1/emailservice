@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import rateLimit from "@fastify/rate-limit";
@@ -12,13 +13,10 @@ async function rateLimitPlugin(app: FastifyInstance) {
     max: getRateLimitMax,
     timeWindow: "1 minute",
     keyGenerator: (request) => {
-      // request.apiKey is populated by the per-route auth hook which runs AFTER this
-      // global onRequest hook, so it is always undefined here. Extract the raw Bearer
-      // token from the Authorization header directly — it's a stable per-API-key
-      // identifier without needing a DB lookup.
+      // Hash the Bearer token so the raw API key secret is never stored in Redis.
       const auth = request.headers.authorization;
       if (auth?.startsWith("Bearer ")) {
-        return auth.slice(7);
+        return createHash("sha256").update(auth.slice(7)).digest("hex");
       }
       return request.ip;
     },

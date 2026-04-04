@@ -41,7 +41,7 @@ export default async function webhookRoutes(app: FastifyInstance) {
 
   // GET /v1/webhooks/:id/deliveries
   app.get<{ Params: { id: string } }>("/:id/deliveries", async (request) => {
-    const deliveries = await webhookService.listDeliveries(request.account.id, request.params.id);
-    return { data: deliveries.map(webhookService.formatDeliveryResponse) };
+    const result = await webhookService.listDeliveries(request.account.id, request.params.id);
+    return { data: result.data.map(webhookService.formatDeliveryResponse), pagination: result.pagination };
   });
 }
