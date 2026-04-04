@@ -3,7 +3,7 @@ import { accounts } from "./accounts.js";
 import { domains } from "./domains.js";
 import { folders } from "./folders.js";
 
-export const emailStatusEnum = ["queued", "sending", "sent", "delivered", "bounced", "failed", "complained"] as const;
+export const emailStatusEnum = ["queued", "sending", "sent", "delivered", "bounced", "failed", "complained", "cancelled"] as const;
 export type EmailStatus = (typeof emailStatusEnum)[number];
 
 export const emails = pgTable("emails", {

@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq";
-import { eq, and } from "drizzle-orm";
-import { getRedisConnection, getMailboxSyncQueue } from "../queues/index.js";
+import { eq, and, inArray } from "drizzle-orm";
+import { createWorkerConnection, getMailboxSyncQueue } from "../queues/index.js";
 import { getDb } from "../db/index.js";
 import { connectedMailboxes, inboundEmails } from "../db/schema/index.js";
 import { getDecryptedPassword } from "../services/mailbox.service.js";
@@ -53,11 +53,36 @@ async function processMailboxSync(job: Job<{ mailboxId?: string }>) {
   }
 }
 
+interface ParsedMessage {
+  fromAddress: string;
+  fromName: string | null;
+  toAddress: string;
+  ccAddresses: string[] | null;
+  subject: string;
+  textBody: string | null;
+  htmlBody: string | null;
+  messageId: string | null;
+  inReplyTo: string | null;
+  references: string[] | null;
+  messageDate: Date;
+}
+
 async function syncMailbox(mailbox: typeof connectedMailboxes.$inferSelect) {
   const { ImapFlow } = await import("imapflow");
   const { simpleParser } = await import("mailparser");
+  const { computeThreadId } = await import("../services/thread.service.js");
   const db = getDb();
   const password = getDecryptedPassword(mailbox);
+
+  // Resolve inbox folder once before the loop (eliminates N per-message queries)
+  let inboxFolderId: string | null = null;
+  try {
+    const { getFolderBySlug } = await import("../services/folder.service.js");
+    const inboxFolder = await getFolderBySlug(mailbox.accountId, "inbox");
+    inboxFolderId = inboxFolder.id;
+  } catch {
+    // Folder not yet seeded — null folderId means "default inbox"
+  }
 
   const client = new ImapFlow({
     host: mailbox.imapHost,
@@ -84,6 +109,9 @@ async function syncMailbox(mailbox: typeof connectedMailboxes.$inferSelect) {
       let count = 0;
       const isFirstSync = mailbox.lastUid === 0;
 
+      // Phase 1: Fetch and parse all messages into memory
+      const parsedMessages: ParsedMessage[] = [];
+
       for await (const msg of client.fetch(range, {
         uid: true,
         envelope: true,
@@ -100,7 +128,6 @@ async function syncMailbox(mailbox: typeof connectedMailboxes.$inferSelect) {
         if (!msg.envelope) continue;
 
         // Parse the raw RFC 2822 source with mailparser for correct MIME handling
-        // (multipart, base64, quoted-printable, etc.)
         let fromAddress = mailbox.email;
         let fromName: string | null = null;
         let toAddress = mailbox.email;
@@ -117,7 +144,6 @@ async function syncMailbox(mailbox: typeof connectedMailboxes.$inferSelect) {
           try {
             const parsed = await simpleParser(msg.source);
 
-            // from.address is the full "user@host" string in mailparser/imapflow
             fromAddress = parsed.from?.value?.[0]?.address ?? mailbox.email;
             fromName = parsed.from?.value?.[0]?.name ?? null;
             toAddress = parsed.to
@@ -139,7 +165,6 @@ async function syncMailbox(mailbox: typeof connectedMailboxes.$inferSelect) {
             messageDate = parsed.date ?? new Date();
           } catch (parseErr) {
             console.warn(`[mailbox-sync] Failed to parse message uid=${msg.uid}:`, parseErr);
-            // Fall back to envelope data
             const envFrom = msg.envelope.from?.[0] as any;
             fromAddress = envFrom?.address ?? envFrom?.name ?? mailbox.email;
             fromName = envFrom?.name ?? null;
@@ -148,7 +173,6 @@ async function syncMailbox(mailbox: typeof connectedMailboxes.$inferSelect) {
             inReplyTo = msg.envelope.inReplyTo ?? null;
           }
         } else {
-          // No source — fall back to envelope only
           const envFrom = msg.envelope.from?.[0] as any;
           fromAddress = envFrom?.address ?? mailbox.email;
           fromName = envFrom?.name ?? null;
@@ -158,49 +182,60 @@ async function syncMailbox(mailbox: typeof connectedMailboxes.$inferSelect) {
           messageDate = msg.envelope.date instanceof Date ? msg.envelope.date : new Date();
         }
 
-        // Skip duplicates by messageId
-        if (messageId) {
-          const [existing] = await db.select({ id: inboundEmails.id })
+        parsedMessages.push({ fromAddress, fromName, toAddress, ccAddresses, subject, textBody, htmlBody, messageId, inReplyTo, references, messageDate });
+      }
+
+      // Phase 2: Batch-check for existing messageIds (single query instead of N)
+      const messageIdsToCheck = parsedMessages
+        .map((m) => m.messageId)
+        .filter((id): id is string => id !== null);
+
+      const existingIds = new Set<string>();
+      if (messageIdsToCheck.length > 0) {
+        // Check in chunks of 100 to stay within reasonable query size
+        const CHUNK = 100;
+        for (let i = 0; i < messageIdsToCheck.length; i += CHUNK) {
+          const chunk = messageIdsToCheck.slice(i, i + CHUNK);
+          const rows = await db.select({ messageId: inboundEmails.messageId })
             .from(inboundEmails)
             .where(and(
               eq(inboundEmails.accountId, mailbox.accountId),
-              eq(inboundEmails.messageId, messageId),
+              inArray(inboundEmails.messageId, chunk),
             ));
-          if (existing) continue;
+          for (const r of rows) {
+            if (r.messageId) existingIds.add(r.messageId);
+          }
         }
+      }
 
-        // Resolve inbox folder for this account
-        let inboxFolderId: string | null = null;
-        try {
-          const { getFolderBySlug } = await import("../services/folder.service.js");
-          const inboxFolder = await getFolderBySlug(mailbox.accountId, "inbox");
-          inboxFolderId = inboxFolder.id;
-        } catch {
-          // Folder not yet seeded — null folderId means "default inbox"
-        }
+      // Phase 3: Batch-insert new messages (skip duplicates)
+      const newMessages = parsedMessages.filter((m) => !m.messageId || !existingIds.has(m.messageId));
 
-        // Compute thread ID for conversation grouping
-        const { computeThreadId } = await import("../services/thread.service.js");
-        const threadId = computeThreadId(messageId, inReplyTo, references, subject);
-
-        await db.insert(inboundEmails).values({
+      if (newMessages.length > 0) {
+        const rows = newMessages.map((m) => ({
           accountId: mailbox.accountId,
           folderId: inboxFolderId,
-          fromAddress,
-          fromName: fromName || null,
-          toAddress,
-          ccAddresses: ccAddresses?.length ? ccAddresses : null,
-          subject,
-          textBody,
-          htmlBody,
-          messageId,
-          inReplyTo,
-          threadId,
-          references,
-          hasAttachments: false,
+          fromAddress: m.fromAddress,
+          fromName: m.fromName || null,
+          toAddress: m.toAddress,
+          ccAddresses: m.ccAddresses?.length ? m.ccAddresses : null,
+          subject: m.subject,
+          textBody: m.textBody,
+          htmlBody: m.htmlBody,
+          messageId: m.messageId,
+          inReplyTo: m.inReplyTo,
+          threadId: computeThreadId(m.messageId, m.inReplyTo, m.references, m.subject),
+          references: m.references,
+          hasAttachments: false as const,
           headers: {},
-          createdAt: messageDate,
-        });
+          createdAt: m.messageDate,
+        }));
+
+        // Insert in chunks of 50 to avoid overly large queries
+        const INSERT_CHUNK = 50;
+        for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+          await db.insert(inboundEmails).values(rows.slice(i, i + INSERT_CHUNK)).onConflictDoNothing();
+        }
       }
     } finally {
       lock.release();
@@ -223,7 +258,7 @@ async function syncMailbox(mailbox: typeof connectedMailboxes.$inferSelect) {
 
 export function createMailboxSyncWorker() {
   const worker = new Worker("mailbox.sync", processMailboxSync, {
-    connection: getRedisConnection(),
+    connection: createWorkerConnection(),
     concurrency: 1,
   });
 

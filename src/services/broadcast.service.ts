@@ -290,3 +290,28 @@ export function formatBroadcastResponse(broadcast: typeof broadcasts.$inferSelec
     updated_at: broadcast.updatedAt.toISOString(),
   };
 }
+
+/**
+ * Summary format for list endpoints — omits large html/text bodies to keep
+ * paginated responses lightweight.
+ */
+export function formatBroadcastSummary(broadcast: typeof broadcasts.$inferSelect) {
+  return {
+    id: broadcast.id,
+    audience_id: broadcast.audienceId,
+    name: broadcast.name,
+    from: broadcast.fromName ? `${broadcast.fromName} <${broadcast.fromAddress}>` : broadcast.fromAddress,
+    subject: broadcast.subject,
+    reply_to: broadcast.replyTo,
+    tags: broadcast.tags,
+    status: broadcast.status,
+    total_count: broadcast.totalCount,
+    sent_count: broadcast.sentCount,
+    failed_count: broadcast.failedCount,
+    scheduled_at: broadcast.scheduledAt?.toISOString() ?? null,
+    sent_at: broadcast.sentAt?.toISOString() ?? null,
+    completed_at: broadcast.completedAt?.toISOString() ?? null,
+    created_at: broadcast.createdAt.toISOString(),
+    updated_at: broadcast.updatedAt.toISOString(),
+  };
+}

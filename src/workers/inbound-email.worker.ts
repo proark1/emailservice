@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq";
 import { eq, and, sql } from "drizzle-orm";
-import { getRedisConnection } from "../queues/index.js";
+import { createWorkerConnection } from "../queues/index.js";
 import { dispatchEvent } from "../services/webhook.service.js";
 import { getDb } from "../db/index.js";
 import { inboundEmails, domains, emails, warmupEmails, warmupSchedules } from "../db/schema/index.js";
@@ -202,7 +202,7 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
 export function createInboundEmailWorker() {
   const concurrency = Number(process.env.INBOUND_CONCURRENCY) || 5;
   return new Worker("email.inbound", processInboundEmail, {
-    connection: getRedisConnection(),
+    connection: createWorkerConnection(),
     concurrency,
   });
 }

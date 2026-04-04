@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { getRedisConnection } from "../queues/index.js";
+import { createWorkerConnection } from "../queues/index.js";
 import { executeBroadcast } from "../services/broadcast.service.js";
 
 export interface BroadcastJobData {
@@ -12,7 +12,7 @@ async function processBroadcast(job: Job<BroadcastJobData>) {
 
 export function createBroadcastWorker() {
   return new Worker("broadcast.execute", processBroadcast, {
-    connection: getRedisConnection(),
+    connection: createWorkerConnection(),
     concurrency: 2,
   });
 }

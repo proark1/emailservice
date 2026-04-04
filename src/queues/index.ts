@@ -4,6 +4,10 @@ import { getConfig } from "../config/index.js";
 
 let _connection: any = null;
 
+/**
+ * Shared Redis connection for Queue instances (non-blocking operations).
+ * Do NOT use this for Worker instances — use createWorkerConnection() instead.
+ */
 export function getRedisConnection() {
   if (!_connection) {
     const config = getConfig();
@@ -15,6 +19,25 @@ export function getRedisConnection() {
     });
   }
   return _connection;
+}
+
+const _workerConnections: IORedis.default[] = [];
+
+/**
+ * Create a dedicated Redis connection for a BullMQ Worker.
+ * Workers use blocking commands (BLPOP/BRPOP) which require their own connection
+ * to avoid deadlocking the shared queue connection.
+ */
+export function createWorkerConnection(): any {
+  const config = getConfig();
+  if (!config.REDIS_URL) {
+    throw new Error("REDIS_URL is required for queue operations");
+  }
+  const conn = new IORedis.default(config.REDIS_URL, {
+    maxRetriesPerRequest: null,
+  });
+  _workerConnections.push(conn);
+  return conn;
 }
 
 export function isRedisConfigured(): boolean {
@@ -129,6 +152,9 @@ export async function closeQueues() {
   const closePromises = Array.from(_queues.values()).map((q) => q.close());
   await Promise.all(closePromises);
   _queues.clear();
+  // Close dedicated worker connections
+  await Promise.all(_workerConnections.map((c) => c.quit().catch(() => {})));
+  _workerConnections.length = 0;
   if (_connection) {
     await _connection.quit();
     _connection = null;

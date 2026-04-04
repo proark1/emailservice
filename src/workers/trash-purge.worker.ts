@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { lt, and, isNotNull } from "drizzle-orm";
-import { getRedisConnection, getTrashPurgeQueue } from "../queues/index.js";
+import { createWorkerConnection, getTrashPurgeQueue } from "../queues/index.js";
 import { getDb } from "../db/index.js";
 import { inboundEmails, emails, inboundAttachments } from "../db/schema/index.js";
 import { eq, inArray } from "drizzle-orm";
@@ -81,7 +81,7 @@ export function createTrashPurgeWorker() {
   return new Worker("trash.purge", async () => {
     await purgeTrash();
   }, {
-    connection: getRedisConnection(),
+    connection: createWorkerConnection(),
     concurrency: 1,
   });
 }

@@ -19,7 +19,7 @@ export default async function broadcastRoutes(app: FastifyInstance) {
   app.get("/", async (request) => {
     const pagination = paginationSchema.parse(request.query);
     const result = await broadcastService.listBroadcasts(request.account.id, pagination);
-    return { data: result.data.map(broadcastService.formatBroadcastResponse), pagination: result.pagination };
+    return { data: result.data.map(broadcastService.formatBroadcastSummary), pagination: result.pagination };
   });
 
   // GET /v1/broadcasts/:id

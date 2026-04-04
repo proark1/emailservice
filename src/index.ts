@@ -72,10 +72,14 @@ async function main() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"], // Inline styles needed for Tailwind/CSS-in-JS
         imgSrc: ["'self'", "data:"],
         frameSrc: ["'self'"],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
       },
     },
   });
@@ -117,23 +121,15 @@ async function main() {
     return reply.sendFile("index.html", frontendPath);
   });
 
-  // Graceful shutdown
-  const shutdown = async (signal: string) => {
-    app.log.info(`Received ${signal}, shutting down...`);
-    await app.close();
-    const { closeDb } = await import("./db/index.js");
-    await closeDb();
-    process.exit(0);
-  };
-
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+  // Track in-process workers and SMTP servers for graceful shutdown
+  let inProcessWorkers: import("bullmq").Worker[] = [];
+  const smtpServers: Array<{ close: (cb?: () => void) => void }> = [];
 
   // Start workers in-process if Redis is available
   const { isRedisConfigured } = await import("./queues/index.js");
   if (isRedisConfigured()) {
     const { startAllWorkers } = await import("./workers/index.js");
-    startAllWorkers();
+    inProcessWorkers = startAllWorkers();
     app.log.info("Background workers started (Redis connected)");
   } else {
     app.log.info("Running without Redis — emails will be sent directly (no queue)");
@@ -149,6 +145,7 @@ async function main() {
     inboundServer.on("error", (err: Error) => {
       app.log.error({ err }, "SMTP inbound server error");
     });
+    smtpServers.push(inboundServer);
   } catch (err) {
     app.log.warn({ err }, "Failed to start SMTP inbound server");
   }
@@ -162,9 +159,36 @@ async function main() {
     relayServer.on("error", (err: Error) => {
       app.log.error({ err }, "SMTP relay server error");
     });
+    smtpServers.push(relayServer);
   } catch (err) {
     app.log.warn({ err }, "Failed to start SMTP relay server");
   }
+
+  // Graceful shutdown — close workers, SMTP servers, queues, then DB
+  const shutdown = async (signal: string) => {
+    app.log.info(`Received ${signal}, shutting down...`);
+    // 1. Stop accepting new HTTP requests
+    await app.close();
+    // 2. Close BullMQ workers (drain in-flight jobs)
+    if (inProcessWorkers.length > 0) {
+      app.log.info("Closing background workers...");
+      await Promise.all(inProcessWorkers.map((w) => w.close()));
+    }
+    // 3. Close SMTP servers
+    await Promise.all(smtpServers.map((s) => new Promise<void>((resolve) => s.close(() => resolve()))));
+    // 4. Close queue connections
+    if (isRedisConfigured()) {
+      const { closeQueues } = await import("./queues/index.js");
+      await closeQueues();
+    }
+    // 5. Close database
+    const { closeDb } = await import("./db/index.js");
+    await closeDb();
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 
   // Start
   await app.listen({ port: config.API_PORT, host: config.API_HOST });

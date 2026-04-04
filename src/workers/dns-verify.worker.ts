@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { getRedisConnection, getDnsVerifyQueue } from "../queues/index.js";
+import { createWorkerConnection, getDnsVerifyQueue } from "../queues/index.js";
 import { getDomain, updateDomainVerification } from "../services/domain.service.js";
 import { verifyDnsRecords } from "../services/dns.service.js";
 import { getDb } from "../db/index.js";
@@ -83,7 +83,7 @@ async function processDnsVerify(job: Job<DnsVerifyJobData>) {
 
 export function createDnsVerifyWorker() {
   return new Worker("dns.verify", processDnsVerify, {
-    connection: getRedisConnection(),
+    connection: createWorkerConnection(),
     concurrency: 3,
   });
 }

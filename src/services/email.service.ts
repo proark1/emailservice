@@ -266,7 +266,7 @@ export async function cancelScheduledEmail(accountId: string, emailId: string) {
 
   const [updated] = await db
     .update(emails)
-    .set({ status: "failed", updatedAt: new Date() })
+    .set({ status: "cancelled", updatedAt: new Date() })
     .where(and(eq(emails.id, emailId), eq(emails.accountId, accountId)))
     .returning();
 
@@ -275,8 +275,8 @@ export async function cancelScheduledEmail(accountId: string, emailId: string) {
   await db.insert(emailEvents).values({
     emailId: email.id,
     accountId,
-    type: "failed",
-    data: { reason: "cancelled" },
+    type: "cancelled",
+    data: {},
   });
 
   return updated;

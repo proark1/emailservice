@@ -211,13 +211,16 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
     // Build Feedback-ID for Gmail Postmaster Tools
     const feedbackId = `${email.id}:${accountId}:transactional:${fromDomain}`;
 
+    // Strip CR/LF from a header value to prevent header injection attacks
+    const sanitizeHeaderValue = (v: string) => v.replace(/[\r\n\x00]/g, "");
+
     // Sanitize user-provided headers — block dangerous ones that could hijack mail routing
     const BLOCKED_HEADERS = new Set(["from", "to", "cc", "bcc", "sender", "return-path", "envelope-from", "dkim-signature", "received", "authentication-results", "arc-seal", "arc-message-signature", "arc-authentication-results"]);
     const existingHeaders = email.headers || {};
     const sanitizedHeaders: Record<string, string> = {};
     for (const [key, value] of Object.entries(existingHeaders)) {
       if (!BLOCKED_HEADERS.has(key.toLowerCase()) && !key.toLowerCase().startsWith("x-google-") && !value.includes("\n") && !value.includes("\r")) {
-        sanitizedHeaders[key] = value;
+        sanitizedHeaders[key] = sanitizeHeaderValue(value);
       }
     }
     const mergedHeaders: Record<string, string> = {
@@ -227,12 +230,12 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       "X-Mailer": "MailNowAPI/1.0",
     };
 
-    // Add reply/forward threading headers
+    // Add reply/forward threading headers (sanitize to prevent CRLF injection)
     if (email.inReplyTo) {
-      mergedHeaders["In-Reply-To"] = email.inReplyTo;
+      mergedHeaders["In-Reply-To"] = sanitizeHeaderValue(email.inReplyTo);
     }
     if (email.references && email.references.length > 0) {
-      mergedHeaders["References"] = (email.references as string[]).join(" ");
+      mergedHeaders["References"] = (email.references as string[]).map(sanitizeHeaderValue).join(" ");
     }
 
     // Use connected mailbox SMTP if the sender address matches one
@@ -257,11 +260,19 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
         ].filter(Boolean),
       },
       headers: mergedHeaders,
-      attachments: email.attachments?.map((a) => ({
-        filename: a.filename,
-        content: Buffer.from(a.content, "base64"),
-        contentType: a.contentType,
-      })),
+      attachments: email.attachments?.map((a) => {
+        // Sanitize Content-Type: only allow safe MIME types (block text/html, application/xhtml+xml, etc.)
+        const DANGEROUS_TYPES = new Set(["text/html", "application/xhtml+xml", "text/xml", "image/svg+xml"]);
+        let contentType = a.contentType || "application/octet-stream";
+        if (DANGEROUS_TYPES.has(contentType.toLowerCase().split(";")[0].trim())) {
+          contentType = "application/octet-stream";
+        }
+        return {
+          filename: a.filename,
+          content: Buffer.from(a.content, "base64"),
+          contentType,
+        };
+      }),
       ...(dkimConfig ? { dkim: dkimConfig } : {}),
     });
 

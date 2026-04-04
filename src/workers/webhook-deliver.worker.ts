@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq";
 import dns from "node:dns/promises";
-import { getRedisConnection } from "../queues/index.js";
+import { createWorkerConnection } from "../queues/index.js";
 import { getDb } from "../db/index.js";
 import { webhookDeliveries } from "../db/schema/index.js";
 import { signWebhookPayload } from "../lib/crypto.js";
@@ -135,7 +135,7 @@ async function processWebhookDeliver(job: Job<WebhookDeliverJobData>) {
 export function createWebhookDeliverWorker() {
   const concurrency = Number(process.env.WEBHOOK_CONCURRENCY) || 5;
   return new Worker("webhook.deliver", processWebhookDeliver, {
-    connection: getRedisConnection(),
+    connection: createWorkerConnection(),
     concurrency,
   });
 }

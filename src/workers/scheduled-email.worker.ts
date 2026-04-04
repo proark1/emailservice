@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq";
 import { lte, eq, and, isNotNull, sql } from "drizzle-orm";
-import { getRedisConnection, getEmailSendQueue, getScheduledEmailQueue } from "../queues/index.js";
+import { createWorkerConnection, getEmailSendQueue, getScheduledEmailQueue } from "../queues/index.js";
 import { getDb } from "../db/index.js";
 import { emails } from "../db/schema/index.js";
 import { processScheduledBroadcasts } from "../services/broadcast.service.js";
@@ -70,7 +70,7 @@ export function createScheduledEmailWorker() {
   });
 
   return new Worker("email.scheduled", processScheduledEmails, {
-    connection: getRedisConnection(),
+    connection: createWorkerConnection(),
     concurrency: 1,
   });
 }

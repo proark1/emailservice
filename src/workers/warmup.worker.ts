@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { getRedisConnection, getWarmupQueue } from "../queues/index.js";
+import { createWorkerConnection, getWarmupQueue } from "../queues/index.js";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { warmupSchedules } from "../db/schema/index.js";
@@ -30,7 +30,7 @@ async function processWarmup(_job: Job) {
 
 export function createWarmupWorker() {
   const worker = new Worker("email.warmup", processWarmup, {
-    connection: getRedisConnection(),
+    connection: createWorkerConnection(),
     concurrency: 1,
   });
 

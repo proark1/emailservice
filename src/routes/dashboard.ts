@@ -796,6 +796,14 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>("/webhooks/:id/test", async (request) => {
     const webhook = await webhookService.getWebhook(request.account.id, request.params.id);
 
+    // SSRF protection: block requests to private/internal networks
+    const { isUrlSafeForSSRF } = await import("../lib/url-safety.js");
+    if (!await isUrlSafeForSSRF(webhook.url)) {
+      throw new (await import("../lib/errors.js")).ValidationError(
+        "Webhook URL must point to a public internet address (private/internal IPs are not allowed)"
+      );
+    }
+
     const testPayload = {
       type: "email.sent",
       created_at: new Date().toISOString(),
@@ -995,7 +1003,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const { paginationSchema } = await import("../lib/pagination.js");
     const pagination = paginationSchema.parse(request.query);
     const result = await broadcastService.listBroadcasts(request.account.id, pagination);
-    return { data: result.data.map(broadcastService.formatBroadcastResponse), pagination: result.pagination };
+    return { data: result.data.map(broadcastService.formatBroadcastSummary), pagination: result.pagination };
   });
 
   app.post("/broadcasts", async (request, reply) => {
