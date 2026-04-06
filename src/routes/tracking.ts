@@ -6,6 +6,30 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+function extractTrackingData(request: { url: string }) {
+  // Extract everything after /c/ from the raw URL, stripping query params
+  const trackingId = request.url.replace(/^\/c\//, "").replace(/\?.*$/, "");
+  if (!trackingId) return null;
+
+  // Try raw tracking data first
+  let data = trackingService.decodeClickTrackingData(trackingId);
+  if (data) return data;
+
+  // Try URL-decoded version (some email clients/proxies encode base64url chars)
+  try {
+    data = trackingService.decodeClickTrackingData(decodeURIComponent(trackingId));
+  } catch {}
+  if (data) return data;
+
+  // Try re-joining segments if the path was split by decoded slashes
+  const joined = trackingId.replace(/\//g, "");
+  if (joined !== trackingId) {
+    data = trackingService.decodeClickTrackingData(joined);
+  }
+
+  return data;
+}
+
 export default async function trackingRoutes(app: FastifyInstance) {
   // GET /t/:trackingId — open tracking pixel (no auth)
   app.get<{ Params: { trackingId: string } }>("/t/:trackingId", async (request, reply) => {
@@ -21,10 +45,11 @@ export default async function trackingRoutes(app: FastifyInstance) {
       .send(pixel);
   });
 
-  // GET /c/:trackingId — click tracking redirect (no auth)
-  app.get<{ Params: { trackingId: string } }>("/c/:trackingId", async (request, reply) => {
-    const { trackingId } = request.params;
-    const data = trackingService.decodeClickTrackingData(trackingId);
+  // GET /c/* — click tracking redirect (no auth)
+  // Uses wildcard to handle cases where proxies/email clients decode characters
+  // in the base64url tracking data, potentially splitting the path into segments.
+  app.get("/c/*", async (request, reply) => {
+    const data = extractTrackingData(request);
 
     if (!data) {
       return reply.status(400).send({ error: { type: "bad_request", message: "Invalid tracking link" } });

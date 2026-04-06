@@ -120,6 +120,13 @@
       "when": 1775297228688,
       "tag": "0016_short_carnage",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1775383628688,
+      "tag": "0017_email_tracking_options",
+      "breakpoints": true
     }
   ]
 }

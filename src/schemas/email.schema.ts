@@ -25,6 +25,10 @@ export const sendEmailSchema = z.object({
   in_reply_to: z.string().max(500).optional(),
   references: z.array(z.string().max(500)).optional(),
   signature_id: z.string().uuid().optional(),
+  tracking: z.object({
+    opens: z.boolean().default(true),
+    clicks: z.boolean().default(true),
+  }).optional(),
 }).refine((d) => d.html || d.text || d.template_id, {
   message: "At least one of html, text, or template_id is required",
   path: ["html"],

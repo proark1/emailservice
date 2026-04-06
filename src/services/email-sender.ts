@@ -4,7 +4,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, connectedMailboxes } from "../db/schema/index.js";
 import { getDkimPrivateKey } from "./dkim.service.js";
-import { transformHtml } from "../lib/html-transform.js";
+import { injectTrackingPixel, rewriteLinks } from "../lib/html-transform.js";
 import { getConfig } from "../config/index.js";
 import { encryptPrivateKey } from "../lib/crypto.js";
 import { processDeliveryFailure } from "./suppression.service.js";
@@ -159,10 +159,15 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       }
     }
 
-    // Transform HTML for tracking
+    // Transform HTML for tracking (respects per-email tracking preferences)
     let html = email.htmlBody;
     if (html) {
-      html = transformHtml(html, email.id);
+      if (email.trackingClicks) {
+        html = rewriteLinks(html, email.id);
+      }
+      if (email.trackingOpens) {
+        html = injectTrackingPixel(html, email.id);
+      }
     }
 
     // Build List-Unsubscribe headers

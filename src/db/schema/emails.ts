@@ -36,6 +36,8 @@ export const emails = pgTable("emails", {
   inReplyTo: varchar("in_reply_to", { length: 500 }),
   threadId: varchar("thread_id", { length: 500 }),
   references: jsonb("references").$type<string[]>(),
+  trackingOpens: boolean("tracking_opens").notNull().default(true),
+  trackingClicks: boolean("tracking_clicks").notNull().default(true),
   isDraft: boolean("is_draft").notNull().default(false),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

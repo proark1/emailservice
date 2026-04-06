@@ -2,7 +2,6 @@ import { eq, and, desc, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, suppressions } from "../db/schema/index.js";
 import { isRedisConfigured, getEmailSendQueue } from "../queues/index.js";
-import { transformHtml } from "../lib/html-transform.js";
 import { checkIdempotencyKey, storeIdempotencyKey } from "../lib/idempotency.js";
 import { ValidationError, NotFoundError } from "../lib/errors.js";
 import type { SendEmailInput } from "../schemas/email.schema.js";
@@ -158,6 +157,8 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
         content: a.content,
       })),
       tags: input.tags,
+      trackingOpens: input.tracking?.opens ?? true,
+      trackingClicks: input.tracking?.clicks ?? true,
       status: "queued",
       scheduledAt: input.scheduled_at ? new Date(input.scheduled_at) : null,
       inReplyTo: input.in_reply_to,
