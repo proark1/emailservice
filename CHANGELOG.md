@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] — 2026-04-19
+
+### Added
+- **Company accounts** — multi-tenant model so an external platform can use
+  one root MailNowAPI account to serve many of its own customers. Each
+  customer-project becomes a "company" that owns domains and provisions its
+  own members:
+  - New tables `companies`, `company_members`, `company_mailboxes` and
+    `company_id` columns on `domains` and `api_keys` (migration `0017`).
+  - `/v1/companies/*` routes: CRUD, domain linking, API key minting, member
+    provisioning (creates an `accounts` row, assigns a handle, and optionally
+    mints a per-member API key in a single call), and handle management.
+  - `POST /v1/companies/:id/domains` accepts either `{ domain_id }` (link an
+    existing domain) or `{ name, mode? }` (create + link in one call) and
+    returns the DNS records to hand to the end customer.
+- **Per-handle inbound routing** — when a domain is linked to a company, mail
+  to `alice@customer-domain.com` now lands in Alice's isolated inbox (not the
+  domain owner's shared inbox). Domains without a company link retain today's
+  behavior (`src/smtp/inbound-server.ts`).
+- **18 new MCP tools** for company, member, mailbox, domain, and API key
+  management (`create_company`, `provision_company_member`,
+  `create_company_domain`, `assign_company_mailbox`, etc.).
+
+### Security
+- Company-scoped API keys are restricted to their own company's domains.
+  `sendEmail` now rejects any `from` address whose domain is not linked to
+  the key's company (`src/services/email.service.ts`), preventing cross-tenant
+  sends on a shared root account. Internal workers (broadcasts, sequences,
+  warmup) and dashboard cookie sessions are unaffected.
+- Company API keys are minted with explicit `company:provision` and
+  `company:read` permissions; the raw key is returned once and never again.
+
 ## [1.4.0] — 2026-03-28
 
 ### Security

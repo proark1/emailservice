@@ -63,7 +63,7 @@ A fourth process — **MCP server** (`src/mcp-server.ts`) — exposes all email 
 - `EMAIL_SERVICE_URL` — Base URL of the API server (default: `http://localhost:3000`)
 - `EMAIL_SERVICE_API_KEY` — API key for authentication (e.g. `es_xxxx`)
 
-**Available MCP tools (49 tools):**
+**Available MCP tools (100+ tools):**
 - **Emails:** `send_email`, `send_batch_emails`, `list_emails`, `get_email`, `cancel_scheduled_email`
 - **Domains:** `create_domain`, `list_domains`, `get_domain`, `verify_domain`, `delete_domain`
 - **API Keys:** `create_api_key`, `list_api_keys`, `revoke_api_key`
@@ -74,6 +74,8 @@ A fourth process — **MCP server** (`src/mcp-server.ts`) — exposes all email 
 - **Templates:** `create_template`, `list_templates`, `get_template`, `update_template`, `delete_template`
 - **Broadcasts:** `create_broadcast`, `list_broadcasts`, `get_broadcast`, `delete_broadcast`
 - **Warmup:** `start_warmup`, `list_warmups`, `get_warmup`, `get_warmup_stats`, `pause_warmup`, `resume_warmup`, `cancel_warmup`
+- **Team:** `list_domain_members`, `add_domain_member`, `update_domain_member`, `remove_domain_member`, `list_domain_invitations`, `create_domain_invitation`, `revoke_domain_invitation`
+- **Companies:** `create_company`, `list_companies`, `get_company`, `update_company`, `delete_company`, `create_company_api_key`, `list_company_api_keys`, `revoke_company_api_key`, `link_company_domain`, `create_company_domain`, `list_company_domains`, `unlink_company_domain`, `provision_company_member`, `list_company_members`, `get_company_member`, `update_company_member`, `remove_company_member`, `assign_company_mailbox`, `list_company_mailboxes`, `remove_company_mailbox`
 - **Analytics:** `get_analytics`
 - **Utilities:** `validate_email`
 
@@ -83,6 +85,27 @@ A fourth process — **MCP server** (`src/mcp-server.ts`) — exposes all email 
 Two auth systems:
 - **API key (Bearer token)** — `Authorization: Bearer es_xxxx` — used for all `/v1/*` routes. Hashed with argon2 in DB. Checked in `src/plugins/auth.ts` → `app.authenticate()`.
 - **Cookie/JWT session** — used for the dashboard UI (`/dashboard/*`) and auth routes (`/auth/*`). JWT signed with `JWT_SECRET`, stored in `session` cookie.
+
+API keys can optionally carry a `companyId` (`api_keys.company_id`). When set, the key is **company-scoped**: routes use `request.apiKey.companyId` to enforce that the caller only acts on their own company and can only send mail from domains linked to it (`src/services/email.service.ts` rejects the send when `options.companyScopeId !== domain.companyId`). Keys without a `companyId` act as user-level keys with full access to the owning account's domains.
+
+### Companies (multi-tenant)
+A **company** is a sub-tenant that lives under a root MailNowAPI account. The intended use is a platform that wants to offer MailNowAPI to its own customers: the platform owns one root account + API key; each customer-project becomes a company.
+
+**Tables** (`src/db/schema/companies.ts`):
+- `companies` — id, `owner_account_id`, name, unique slug.
+- `company_members` — maps `accounts` rows to a company with a role (`owner` | `admin` | `member`). The account is a real MailNowAPI user; members can log into the dashboard.
+- `company_mailboxes` — `(domain_id, local_part) → account_id` mapping. Unique on `(domain_id, local_part)`. This is the authoritative handle → member account table.
+- `domains.company_id` — nullable FK. Present on "delegated" domains.
+- `api_keys.company_id` — nullable FK. Present on company-scoped keys.
+
+**Services:**
+- `src/services/company.service.ts` — CRUD, domain linking (`linkDomainToCompany`, `createAndLinkDomain`), company API key minting, `requireCompanyRole` (same role hierarchy pattern as `team.service.ts`).
+- `src/services/company-member.service.ts` — `provisionMember` (creates account + company_member row + optional mailbox + optional per-member API key, sends welcome email), list/get/update/remove.
+- `src/services/company-mailbox.service.ts` — `assignMailbox` (inserts `company_mailboxes` row AND mirrors into `domain_members` with mailbox filter so outbound send scoping works), `resolveMailbox` (used by inbound routing), list/remove.
+
+**Routes:** `src/routes/companies.ts` — `/v1/companies/*`. `assertCompanyScope()` enforces that a company-scoped key can only hit its own `:companyId` path.
+
+**Inbound routing:** when a message arrives at `alice@domain`, `src/smtp/inbound-server.ts` looks up the domain; if `domain.companyId` is set it calls `resolveMailbox(domainId, localPart)` and routes to the resolved member's `accountId`. When no mapping exists, it falls back to `domain.accountId` (the root owner) — no mail is lost. Non-company domains behave exactly as before.
 
 ### Queues (BullMQ on Redis)
 All queues are lazy-initialized (won't crash if Redis is unavailable):
@@ -136,8 +159,9 @@ src/
     tracking.ts         # /t/:id (open pixel), /c/:id (click redirect) — no auth
     auth.ts             # /auth/login, /auth/register, /auth/logout
     admin.ts            # /admin/* (cookie auth + admin role)
+    companies.ts        # /v1/companies/* — multi-tenant sub-accounts
   services/
-    email.service.ts        # sendEmail(), getEmail(), listEmails()
+    email.service.ts        # sendEmail(), getEmail(), listEmails() — accepts companyScopeId option
     email-sender.ts         # sendEmailDirect() — nodemailer, DKIM, transport cache
     domain.service.ts       # CRUD + formatDomainResponse()
     dns.service.ts          # generateDnsRecords(), verifyDnsRecords()
@@ -147,6 +171,9 @@ src/
     suppression.service.ts
     analytics.service.ts
     tracking.service.ts     # recordOpen(), recordClick(), decodeClickTrackingData()
+    company.service.ts          # CRUD, linkDomainToCompany, createAndLinkDomain, company API keys
+    company-member.service.ts   # provisionMember() — creates account + membership + mailbox + key
+    company-mailbox.service.ts  # assignMailbox(), resolveMailbox() — handle → member routing
   workers/              # One file per BullMQ worker
   queues/index.ts       # getEmailSendQueue(), getDnsVerifyQueue(), etc.
   lib/
@@ -312,6 +339,28 @@ curl -X POST http://localhost:3000/v1/domains \
 ```bash
 curl -X POST http://localhost:3000/v1/domains/DOMAIN_ID/verify \
   -H "Authorization: Bearer es_YOUR_KEY"
+```
+
+### Provision a customer via companies (platform-as-a-customer flow)
+```bash
+# 1. Create the company
+CID=$(curl -s -X POST http://localhost:3000/v1/companies \
+  -H "Authorization: Bearer es_ROOT" -H "Content-Type: application/json" \
+  -d '{"name":"Acme","slug":"acme"}' | jq -r .data.id)
+
+# 2. Create + link a domain in one call (returns DNS records for the customer)
+DID=$(curl -s -X POST http://localhost:3000/v1/companies/$CID/domains \
+  -H "Authorization: Bearer es_ROOT" -H "Content-Type: application/json" \
+  -d '{"name":"acme.example.com","mode":"both"}' | jq -r .data.id)
+
+# 3. After customer configures DNS, trigger verification
+curl -X POST http://localhost:3000/v1/domains/$DID/verify \
+  -H "Authorization: Bearer es_ROOT"
+
+# 4. Provision a member with handle + API key in one call
+curl -X POST http://localhost:3000/v1/companies/$CID/members \
+  -H "Authorization: Bearer es_ROOT" -H "Content-Type: application/json" \
+  -d "{\"email\":\"alice@ext\",\"name\":\"Alice\",\"domain_id\":\"$DID\",\"local_part\":\"alice\",\"issue_api_key\":true}"
 ```
 
 ---

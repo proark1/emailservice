@@ -7,15 +7,20 @@ Self-hosted email service platform — a Resend.com-style API you own and contro
 - **REST API** for sending transactional and bulk emails (`POST /v1/emails`)
 - **Domain verification** with automatic SPF, DKIM (RSA-2048), DMARC, and MX record generation
 - **DNS auto-setup** via GoDaddy and Cloudflare APIs
+- **Company accounts** — provision sub-tenants via API so an external platform can offer
+  MailNowAPI to its own customers under one root account, with isolated per-member inboxes
+  and company-scoped API keys
 - **Webhook delivery** with HMAC signatures and automatic retries
 - **SMTP relay server** (port 587/465) for clients sending through the service
-- **SMTP inbound** for receiving emails
+- **SMTP inbound** for receiving emails, with per-handle routing to the owning member's inbox
 - **Click and open tracking** with HMAC-signed URLs and per-email analytics
 - **Batch sending** up to 100 emails per request
 - **Audiences and contacts** management
 - **Suppression lists** (bounces, complaints, unsubscribes)
+- **MCP server** — 100+ tools exposing the full API to AI agents (Claude Desktop, Cursor, etc.)
 - **Dashboard UI** — React 19 + Vite + TailwindCSS 4, fully mobile-responsive
-- **Security hardened** — SSRF protection on webhooks, HMAC-signed tracking links, encrypted unsubscribe tokens, rate limiting
+- **Security hardened** — SSRF protection on webhooks, HMAC-signed tracking links, encrypted
+  unsubscribe tokens, rate limiting, company-scoped API keys restricted to their own domains
 
 ## Quick Start
 
@@ -65,6 +70,11 @@ All API routes require `Authorization: Bearer es_xxx` (API key auth).
 | `POST` | `/v1/webhooks` | Register a webhook |
 | `GET` | `/v1/audiences` | List audiences |
 | `POST` | `/v1/audiences/:id/contacts` | Add a contact |
+| `POST` | `/v1/companies` | Create a company (sub-tenant) |
+| `POST` | `/v1/companies/:id/domains` | Create & link a domain, or link an existing one |
+| `POST` | `/v1/companies/:id/members` | Provision a member account + handle + optional API key |
+| `POST` | `/v1/companies/:id/mailboxes` | Assign an email handle to a member |
+| `POST` | `/v1/companies/:id/api-keys` | Mint a company-scoped API key |
 
 ### Send an email
 
@@ -79,6 +89,76 @@ curl -X POST http://localhost:3000/v1/emails \
     "html": "<h1>Hi there!</h1>"
   }'
 ```
+
+## Company accounts (multi-tenant)
+
+If you're building a platform that wants to offer MailNowAPI to your own
+customers, use **companies**. One root account on MailNowAPI holds the API key;
+each of your customer projects becomes a `company` that owns its own domains
+and members.
+
+- Every member is a real account — they can log into the dashboard, have their
+  own isolated inbox, and (optionally) their own API key.
+- Inbound mail to `alice@customer-domain.com` lands in Alice's inbox only.
+  Other members of the company never see it.
+- Company-scoped API keys can only send from domains linked to that company,
+  so a single root account can safely serve many tenants without cross-talk.
+- Per-member API keys inherit `domain_members.mailboxes` scoping — the key for
+  Alice can only send as `alice@…`.
+
+### Typical flow
+
+```bash
+# 1. Create a company (uses the platform's root user key)
+curl -X POST http://localhost:3000/v1/companies \
+  -H "Authorization: Bearer es_ROOT" -H "Content-Type: application/json" \
+  -d '{"name":"Acme Inc","slug":"acme"}'
+# → { "data": { "id": "COMPANY_ID", ... } }
+
+# 2. Create and link a domain in one call. Response includes DNS records.
+curl -X POST http://localhost:3000/v1/companies/COMPANY_ID/domains \
+  -H "Authorization: Bearer es_ROOT" -H "Content-Type: application/json" \
+  -d '{"name":"acme.example.com","mode":"both"}'
+# → DNS records (SPF, DKIM, DMARC, MX) to hand to your customer
+
+# 3. Customer configures DNS, then trigger verification
+curl -X POST http://localhost:3000/v1/domains/DOMAIN_ID/verify \
+  -H "Authorization: Bearer es_ROOT"
+
+# 4. Provision a member with an email handle and a per-member API key
+curl -X POST http://localhost:3000/v1/companies/COMPANY_ID/members \
+  -H "Authorization: Bearer es_ROOT" -H "Content-Type: application/json" \
+  -d '{
+    "email":"alice@ext.example",
+    "name":"Alice",
+    "domain_id":"DOMAIN_ID",
+    "local_part":"alice",
+    "issue_api_key": true
+  }'
+# → { "data": { "member_id": "...", "api_key": { "key": "es_..." } } }
+
+# 5. Mint a company-scoped API key if you want to delegate ongoing provisioning
+curl -X POST http://localhost:3000/v1/companies/COMPANY_ID/api-keys \
+  -H "Authorization: Bearer es_ROOT" -H "Content-Type: application/json" \
+  -d '{"name":"Acme provisioning key"}'
+# → { "data": { "key": "es_..." } } — shown once, store it safely
+```
+
+Company-scoped keys can manage members, mailboxes, and domains for their
+company, and can send email — but only from domains linked to that company.
+
+## MCP server
+
+Run an MCP server that exposes every API feature as a tool for AI agents:
+
+```bash
+EMAIL_SERVICE_API_KEY=es_YOUR_KEY pnpm mcp
+```
+
+Tools cover Emails, Domains, API Keys, Webhooks, Audiences, Contacts,
+Suppressions, Templates, Broadcasts, Warmup, Analytics, Team, Sequences, and
+Companies. See `mcp-config.example.json` for Claude Desktop / Claude Code /
+Cursor integration.
 
 ## Environment Variables
 
@@ -111,4 +191,4 @@ ISC
 
 ---
 
-Version 1.4.0 — Last updated: 2026-03-28
+Version 1.5.0 — Last updated: 2026-04-19
