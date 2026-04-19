@@ -43,9 +43,18 @@ export const createCompanyApiKeySchema = z.object({
   expires_at: z.string().datetime().optional(),
 });
 
-export const linkDomainSchema = z.object({
-  domain_id: z.string().uuid(),
-});
+// Accepts either shape:
+//   { domain_id }          → link an existing domain to the company
+//   { name, mode? }        → create a new domain under the caller's account and link it in one call
+export const linkDomainSchema = z.union([
+  z.object({
+    domain_id: z.string().uuid(),
+  }),
+  z.object({
+    name: z.string().min(1).max(255),
+    mode: z.enum(["send", "receive", "both"]).default("both").optional(),
+  }),
+]);
 
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>;
 export type UpdateCompanyInput = z.infer<typeof updateCompanySchema>;

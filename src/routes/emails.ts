@@ -11,7 +11,8 @@ export default async function emailRoutes(app: FastifyInstance) {
   // POST /v1/emails
   app.post("/", async (request, reply) => {
     const input = sendEmailSchema.parse(request.body);
-    const result = await emailService.sendEmail(request.account.id, input);
+    const companyScopeId = (request.apiKey as any)?.companyId ?? null;
+    const result = await emailService.sendEmail(request.account.id, input, { companyScopeId });
 
     if (result.cached) {
       const cached = result.response as { status: number; body: unknown };

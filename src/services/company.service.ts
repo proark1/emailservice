@@ -117,6 +117,31 @@ export async function linkDomainToCompany(accountId: string, companyId: string, 
   return updated;
 }
 
+/**
+ * Create a new domain under the caller's account and link it to the company
+ * in one operation. The new domain returns the DNS records the customer needs
+ * to configure (SPF/DKIM/DMARC/MX) — callers surface these to the end user.
+ */
+export async function createAndLinkDomain(
+  accountId: string,
+  companyId: string,
+  input: { name: string; mode?: "send" | "receive" | "both" },
+) {
+  await requireCompanyRole(accountId, companyId, "owner");
+
+  const { createDomain } = await import("./domain.service.js");
+  const domain = await createDomain(accountId, { name: input.name, mode: input.mode ?? "both" });
+
+  const db = getDb();
+  const [linked] = await db
+    .update(domains)
+    .set({ companyId, updatedAt: new Date() })
+    .where(eq(domains.id, domain.id))
+    .returning();
+
+  return linked;
+}
+
 export async function unlinkDomainFromCompany(accountId: string, companyId: string, domainId: string) {
   await requireCompanyRole(accountId, companyId, "owner");
   const db = getDb();

@@ -1460,6 +1460,21 @@ server.tool(
 );
 
 server.tool(
+  "create_company_domain",
+  "Create a new domain and link it to a company in one call. Returns the DNS records (SPF/DKIM/DMARC/MX) the customer needs to configure; pass these back to the end user and then call verify_domain once they're set.",
+  {
+    company_id: z.string().describe("Company ID"),
+    name: z.string().describe("Domain name (e.g. customer.example.com)"),
+    mode: z.enum(["send", "receive", "both"]).default("both").describe("send / receive / both"),
+  },
+  async (params) => {
+    const { company_id, ...body } = params;
+    const res = await api("POST", `/v1/companies/${company_id}/domains`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
   "list_company_domains",
   "List domains currently linked to a company.",
   { company_id: z.string().describe("Company ID") },

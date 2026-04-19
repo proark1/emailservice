@@ -4,8 +4,17 @@ import { emails, emailEvents, domains, suppressions } from "../db/schema/index.j
 import { isRedisConfigured, getEmailSendQueue } from "../queues/index.js";
 import { transformHtml } from "../lib/html-transform.js";
 import { checkIdempotencyKey, storeIdempotencyKey } from "../lib/idempotency.js";
-import { ValidationError, NotFoundError } from "../lib/errors.js";
+import { ValidationError, NotFoundError, ForbiddenError } from "../lib/errors.js";
 import type { SendEmailInput } from "../schemas/email.schema.js";
+
+export interface SendEmailOptions {
+  /**
+   * When set, the send is scoped to a specific company: the `from` domain must
+   * be linked to this company. Used to prevent a company-scoped API key from
+   * sending mail via another tenant's domain on the same owner account.
+   */
+  companyScopeId?: string | null;
+}
 
 function parseFromAddress(from: string): { address: string; name?: string } {
   const match = from.match(/^(.+?)\s*<(.+?)>$/);
@@ -15,7 +24,7 @@ function parseFromAddress(from: string): { address: string; name?: string } {
   return { address: from.trim() };
 }
 
-export async function sendEmail(accountId: string, input: SendEmailInput) {
+export async function sendEmail(accountId: string, input: SendEmailInput, options: SendEmailOptions = {}) {
   const db = getDb();
 
   // Check idempotency
@@ -57,6 +66,12 @@ export async function sendEmail(accountId: string, input: SendEmailInput) {
 
   if (!domain) {
     throw new ValidationError(`Domain ${fromDomain} is not registered`);
+  }
+
+  // Company-scoped API keys may only send from domains linked to their company.
+  // This is the hard isolation boundary between tenants that share one root account.
+  if (options.companyScopeId && domain.companyId !== options.companyScopeId) {
+    throw new ForbiddenError(`Domain ${fromDomain} is not linked to this company`);
   }
 
   // Verify team access to this domain

@@ -15,7 +15,8 @@ export default async function batchRoutes(app: FastifyInstance) {
   // POST /v1/emails/batch
   app.post("/", async (request, reply) => {
     const input = batchEmailSchema.parse(request.body);
-    const result = await sendBatch(request.account.id, input.emails);
+    const companyScopeId = (request.apiKey as any)?.companyId ?? null;
+    const result = await sendBatch(request.account.id, input.emails, { companyScopeId });
     return reply.status(201).send({ data: result });
   });
 }

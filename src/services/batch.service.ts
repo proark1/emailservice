@@ -1,10 +1,10 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emailBatches } from "../db/schema/index.js";
-import { sendEmail, formatEmailResponse } from "./email.service.js";
+import { sendEmail, formatEmailResponse, type SendEmailOptions } from "./email.service.js";
 import type { SendEmailInput } from "../schemas/email.schema.js";
 
-export async function sendBatch(accountId: string, emailInputs: SendEmailInput[]) {
+export async function sendBatch(accountId: string, emailInputs: SendEmailInput[], options: SendEmailOptions = {}) {
   const db = getDb();
 
   // Create batch record
@@ -17,7 +17,7 @@ export async function sendBatch(accountId: string, emailInputs: SendEmailInput[]
     })
     .returning();
 
-  const settled = await Promise.allSettled(emailInputs.map((input) => sendEmail(accountId, input)));
+  const settled = await Promise.allSettled(emailInputs.map((input) => sendEmail(accountId, input, options)));
 
   const results: Array<{ success: boolean; data?: any; error?: string }> = settled.map((r) => {
     if (r.status === "fulfilled") return { success: true, data: r.value.response };

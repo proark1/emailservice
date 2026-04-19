@@ -110,15 +110,16 @@ export default async function companyRoutes(app: FastifyInstance) {
   app.post<{ Params: { companyId: string } }>("/:companyId/domains", async (request, reply) => {
     assertCompanyScope(request, request.params.companyId);
     const input = linkDomainSchema.parse(request.body);
-    if ((request.apiKey as any)?.companyId) {
-      throw new ForbiddenError("Company-scoped API keys cannot link domains; use the owner's user key");
-    }
-    const domain = await companyService.linkDomainToCompany(
-      request.account.id,
-      request.params.companyId,
-      input.domain_id,
-    );
-    return reply.status(201).send({ data: { id: domain.id, name: domain.name, company_id: domain.companyId } });
+    const domain = "domain_id" in input
+      ? await companyService.linkDomainToCompany(request.account.id, request.params.companyId, input.domain_id)
+      : await companyService.createAndLinkDomain(request.account.id, request.params.companyId, {
+          name: input.name,
+          mode: input.mode,
+        });
+    // Return the full domain response including DNS records so the caller can
+    // surface them to the customer configuring the domain.
+    const { formatDomainResponse } = await import("../services/domain.service.js");
+    return reply.status(201).send({ data: formatDomainResponse(domain) });
   });
 
   app.get<{ Params: { companyId: string } }>("/:companyId/domains", async (request) => {
