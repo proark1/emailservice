@@ -1344,6 +1344,267 @@ server.tool(
   },
 );
 
+// ---- Companies --------------------------------------------------------------
+// A "company" is a tenant that owns domains and provisions email handles for
+// its members. The external platform typically uses a company-scoped API key
+// to call these tools on behalf of one company.
+
+server.tool(
+  "create_company",
+  "Create a new company. Requires a user-level API key (not a company-scoped key).",
+  {
+    name: z.string().describe("Company display name"),
+    slug: z.string().describe("URL-safe slug, unique across the service"),
+  },
+  async (params) => {
+    const res = await api("POST", "/v1/companies", params);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "list_companies",
+  "List companies the caller has access to.",
+  {},
+  async () => {
+    const res = await api("GET", "/v1/companies");
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "get_company",
+  "Fetch a single company by ID.",
+  { company_id: z.string().describe("Company ID") },
+  async (params) => {
+    const res = await api("GET", `/v1/companies/${params.company_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "update_company",
+  "Update a company's display name.",
+  {
+    company_id: z.string().describe("Company ID"),
+    name: z.string().optional().describe("New name"),
+  },
+  async (params) => {
+    const { company_id, ...body } = params;
+    const res = await api("PATCH", `/v1/companies/${company_id}`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "delete_company",
+  "Delete a company. Unlinks its domains first (they survive).",
+  { company_id: z.string().describe("Company ID") },
+  async (params) => {
+    const res = await api("DELETE", `/v1/companies/${params.company_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "create_company_api_key",
+  "Mint a new company-scoped API key. The raw key is returned once — store it safely.",
+  {
+    company_id: z.string().describe("Company ID"),
+    name: z.string().describe("Human-readable key name"),
+    rate_limit: z.number().int().optional().describe("Requests per minute (default 60)"),
+    expires_at: z.string().optional().describe("ISO timestamp; omit for a non-expiring key"),
+  },
+  async (params) => {
+    const { company_id, ...body } = params;
+    const res = await api("POST", `/v1/companies/${company_id}/api-keys`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "list_company_api_keys",
+  "List active API keys for a company.",
+  { company_id: z.string().describe("Company ID") },
+  async (params) => {
+    const res = await api("GET", `/v1/companies/${params.company_id}/api-keys`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "revoke_company_api_key",
+  "Revoke a company API key.",
+  {
+    company_id: z.string().describe("Company ID"),
+    key_id: z.string().describe("API key ID"),
+  },
+  async (params) => {
+    const res = await api("DELETE", `/v1/companies/${params.company_id}/api-keys/${params.key_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "link_company_domain",
+  "Link an existing verified domain to a company. The caller must own the domain.",
+  {
+    company_id: z.string().describe("Company ID"),
+    domain_id: z.string().describe("Domain ID to link"),
+  },
+  async (params) => {
+    const { company_id, domain_id } = params;
+    const res = await api("POST", `/v1/companies/${company_id}/domains`, { domain_id });
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "list_company_domains",
+  "List domains currently linked to a company.",
+  { company_id: z.string().describe("Company ID") },
+  async (params) => {
+    const res = await api("GET", `/v1/companies/${params.company_id}/domains`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "unlink_company_domain",
+  "Unlink a domain from a company (returns it to standalone ownership).",
+  {
+    company_id: z.string().describe("Company ID"),
+    domain_id: z.string().describe("Domain ID to unlink"),
+  },
+  async (params) => {
+    const res = await api("DELETE", `/v1/companies/${params.company_id}/domains/${params.domain_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "provision_company_member",
+  "Create (or attach) a member account on a company. Optionally assigns an email handle and issues a per-member API key in the same call.",
+  {
+    company_id: z.string().describe("Company ID"),
+    email: z.string().describe("Member's email address (used for login)"),
+    name: z.string().describe("Member's display name"),
+    role: z.enum(["admin", "member"]).default("member").describe("Company role"),
+    password: z.string().optional().describe("Optional password; if omitted a random one is generated and emailed"),
+    domain_id: z.string().optional().describe("Domain ID (when assigning a handle)"),
+    local_part: z.string().optional().describe("Local part of the member's handle, e.g. \"alice\""),
+    issue_api_key: z.boolean().default(false).describe("Mint a per-member API key and return it once"),
+    api_key_name: z.string().optional().describe("Name for the issued API key"),
+  },
+  async (params) => {
+    const { company_id, ...body } = params;
+    const res = await api("POST", `/v1/companies/${company_id}/members`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "list_company_members",
+  "List members of a company.",
+  { company_id: z.string().describe("Company ID") },
+  async (params) => {
+    const res = await api("GET", `/v1/companies/${params.company_id}/members`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "get_company_member",
+  "Fetch a single company member.",
+  {
+    company_id: z.string().describe("Company ID"),
+    member_id: z.string().describe("Member ID"),
+  },
+  async (params) => {
+    const res = await api("GET", `/v1/companies/${params.company_id}/members/${params.member_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "update_company_member",
+  "Update a company member's role or display name.",
+  {
+    company_id: z.string().describe("Company ID"),
+    member_id: z.string().describe("Member ID"),
+    role: z.enum(["admin", "member"]).optional().describe("New role"),
+    name: z.string().optional().describe("New display name"),
+  },
+  async (params) => {
+    const { company_id, member_id, ...body } = params;
+    const res = await api("PATCH", `/v1/companies/${company_id}/members/${member_id}`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "remove_company_member",
+  "Remove a member from a company. Pass hard_delete=true to also delete the underlying account (only allowed if it was provisioned by this flow and belongs to no other companies).",
+  {
+    company_id: z.string().describe("Company ID"),
+    member_id: z.string().describe("Member ID"),
+    hard_delete: z.boolean().default(false).describe("Also delete the account row"),
+  },
+  async (params) => {
+    const suffix = params.hard_delete ? "?hard_delete=true" : "";
+    const res = await api("DELETE", `/v1/companies/${params.company_id}/members/${params.member_id}${suffix}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "assign_company_mailbox",
+  "Assign an email handle (local_part@domain) to a company member. Inbound mail to this handle will land in that member's isolated inbox.",
+  {
+    company_id: z.string().describe("Company ID"),
+    account_id: z.string().describe("Member's account ID"),
+    domain_id: z.string().describe("Domain ID (must be linked to this company)"),
+    local_part: z.string().describe("Local part of the email address, e.g. \"alice\""),
+  },
+  async (params) => {
+    const { company_id, ...body } = params;
+    const res = await api("POST", `/v1/companies/${company_id}/mailboxes`, body);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "list_company_mailboxes",
+  "List email handles assigned to members of a company.",
+  {
+    company_id: z.string().describe("Company ID"),
+    domain_id: z.string().optional().describe("Filter by domain"),
+    account_id: z.string().optional().describe("Filter by member account"),
+  },
+  async (params) => {
+    const { company_id, ...query } = params;
+    const qs = Object.entries(query)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+      .join("&");
+    const res = await api("GET", `/v1/companies/${company_id}/mailboxes${qs ? `?${qs}` : ""}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "remove_company_mailbox",
+  "Remove an email handle assignment.",
+  {
+    company_id: z.string().describe("Company ID"),
+    mailbox_id: z.string().describe("Mailbox assignment ID"),
+  },
+  async (params) => {
+    const res = await api("DELETE", `/v1/companies/${params.company_id}/mailboxes/${params.mailbox_id}`);
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------

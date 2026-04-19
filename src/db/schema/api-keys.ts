@@ -1,9 +1,11 @@
 import { pgTable, uuid, varchar, timestamp, integer, jsonb, index } from "drizzle-orm/pg-core";
 import { accounts } from "./accounts.js";
+import { companies } from "./companies.js";
 
 export const apiKeys = pgTable("api_keys", {
   id: uuid("id").primaryKey().defaultRandom(),
   accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   keyPrefix: varchar("key_prefix", { length: 12 }).notNull(),
   keyHash: varchar("key_hash", { length: 255 }).notNull(),

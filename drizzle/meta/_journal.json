@@ -120,6 +120,13 @@
       "when": 1775297228688,
       "tag": "0016_short_carnage",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1776638102886,
+      "tag": "0017_blue_psylocke",
+      "breakpoints": true
     }
   ]
 }

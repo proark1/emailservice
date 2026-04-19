@@ -83,6 +83,19 @@ export function createInboundServer(): SMTPServer {
             const domain = await lookupReceiveDomain(recipientDomain);
             if (!domain) continue;
 
+            // If the domain is delegated to a company, try to route the message
+            // to the member account that owns this specific handle. When no
+            // mapping exists we fall back to the domain owner so mail is not lost.
+            let deliveryAccountId = domain.accountId;
+            if (domain.companyId) {
+              try {
+                const { resolveMailbox } = await import("../services/company-mailbox.service.js");
+                const localPart = toAddress.split("@")[0];
+                const resolved = await resolveMailbox(domain.id, localPart);
+                if (resolved) deliveryAccountId = resolved.accountId;
+              } catch {}
+            }
+
             // Extract References header
           const referencesRaw = parsed.references;
           const references: string[] = Array.isArray(referencesRaw) ? referencesRaw : referencesRaw ? [referencesRaw] : [];
@@ -96,7 +109,7 @@ export function createInboundServer(): SMTPServer {
           }));
 
           const emailData = {
-              accountId: domain.accountId,
+              accountId: deliveryAccountId,
               domainId: domain.id,
               from: fromAddress,
               fromName,

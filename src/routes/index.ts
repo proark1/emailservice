@@ -22,6 +22,7 @@ import addressBookRoutes from "./address-book.js";
 import teamRoutes from "./team.js";
 import mailboxRoutes from "./mailboxes.js";
 import sequenceRoutes from "./sequences.js";
+import companyRoutes from "./companies.js";
 import { addSuppression, listSuppressions, removeSuppression, formatSuppressionResponse } from "../services/suppression.service.js";
 import { getAccountAnalytics } from "../services/analytics.service.js";
 
@@ -73,6 +74,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(teamRoutes, { prefix: "/v1/team" });
   await app.register(mailboxRoutes, { prefix: "/v1/mailboxes" });
   await app.register(sequenceRoutes, { prefix: "/v1/sequences" });
+  await app.register(companyRoutes, { prefix: "/v1/companies" });
 
   // Suppression routes
   await app.register(async (suppApp) => {
