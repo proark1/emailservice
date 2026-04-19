@@ -6,6 +6,30 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+/**
+ * Decrypt an unsubscribe token and record the unsubscribe. Shared by the GET
+ * (user-facing, HTML response) and POST (RFC 8058 one-click, 204 response)
+ * endpoints so they stay in lock-step.
+ */
+async function applyUnsubscribeToken(encodedData: string): Promise<{ email: string } | null> {
+  const { decryptPrivateKey } = await import("../lib/crypto.js");
+  const { getConfig } = await import("../config/index.js");
+  try {
+    const decrypted = JSON.parse(decryptPrivateKey(decodeURIComponent(encodedData), getConfig().ENCRYPTION_KEY));
+    const accountId: string = decrypted.a;
+    const email: string = decrypted.e;
+    if (!accountId || !email) return null;
+    try {
+      await addSuppression(accountId, email, "unsubscribe");
+    } catch {
+      // Already suppressed — idempotent.
+    }
+    return { email };
+  } catch {
+    return null;
+  }
+}
+
 export default async function trackingRoutes(app: FastifyInstance) {
   // GET /t/:trackingId — open tracking pixel (no auth)
   app.get<{ Params: { trackingId: string } }>("/t/:trackingId", async (request, reply) => {
@@ -40,45 +64,33 @@ export default async function trackingRoutes(app: FastifyInstance) {
     return reply.redirect(data.url);
   });
 
-  // GET /unsubscribe/:encodedData — one-click unsubscribe (no auth)
+  // GET /unsubscribe/:encodedData — user-facing one-click unsubscribe (no auth)
   app.get<{ Params: { encodedData: string } }>("/unsubscribe/:encodedData", async (request, reply) => {
-    const { encodedData } = request.params;
-
-    try {
-      let accountId: string;
-      let email: string;
-      const { decryptPrivateKey } = await import("../lib/crypto.js");
-      const { getConfig } = await import("../config/index.js");
-      const decrypted = JSON.parse(decryptPrivateKey(decodeURIComponent(encodedData), getConfig().ENCRYPTION_KEY));
-      accountId = decrypted.a;
-      email = decrypted.e;
-
-      if (!accountId || !email) {
-        return reply.status(400).header("Content-Type", "text/html").send(
-          "<html><body><h1>Invalid unsubscribe link</h1></body></html>"
-        );
-      }
-
-      // Add to suppression list (fire and forget, ignore duplicates)
-      try {
-        await addSuppression(accountId, email, "unsubscribe");
-      } catch {
-        // Already suppressed — that's fine
-      }
-
-      return reply.header("Content-Type", "text/html").send(
-        `<html>
-<head><meta charset="utf-8"><title>Unsubscribed</title></head>
-<body style="font-family: sans-serif; max-width: 500px; margin: 80px auto; text-align: center;">
-  <h1>You have been unsubscribed</h1>
-  <p>${escapeHtml(email)} has been removed from future emails.</p>
-</body>
-</html>`
-      );
-    } catch {
+    const result = await applyUnsubscribeToken(request.params.encodedData);
+    if (!result) {
       return reply.status(400).header("Content-Type", "text/html").send(
         "<html><body><h1>Invalid unsubscribe link</h1></body></html>"
       );
     }
+    return reply.header("Content-Type", "text/html").send(
+      `<html>
+<head><meta charset="utf-8"><title>Unsubscribed</title></head>
+<body style="font-family: sans-serif; max-width: 500px; margin: 80px auto; text-align: center;">
+  <h1>You have been unsubscribed</h1>
+  <p>${escapeHtml(result.email)} has been removed from future emails.</p>
+</body>
+</html>`
+    );
+  });
+
+  // POST /unsubscribe/:encodedData — RFC 8058 one-click unsubscribe (no auth).
+  // Called by mail clients (Gmail, Yahoo, Apple Mail) when the user hits the
+  // unsubscribe button. Must be POST-capable or bulk senders are deprioritized.
+  app.post<{ Params: { encodedData: string } }>("/unsubscribe/:encodedData", async (request, reply) => {
+    const result = await applyUnsubscribeToken(request.params.encodedData);
+    if (!result) {
+      return reply.status(400).send({ error: { type: "bad_request", message: "Invalid unsubscribe link" } });
+    }
+    return reply.status(204).send();
   });
 }

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, boolean, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, boolean, text, integer, uniqueIndex } from "drizzle-orm/pg-core";
 import { accounts } from "./accounts.js";
 import { companies } from "./companies.js";
 
@@ -27,6 +27,8 @@ export const domains = pgTable("domains", {
   mxVerified: boolean("mx_verified").notNull().default(false),
   returnPathDomain: varchar("return_path_domain", { length: 255 }),
   returnPathVerified: boolean("return_path_verified").notNull().default(false),
+  dmarcRuaEmail: varchar("dmarc_rua_email", { length: 255 }),
+  sendRatePerMinute: integer("send_rate_per_minute"),
   // DNS provider credentials (encrypted)
   dnsProvider: varchar("dns_provider", { length: 20 }),
   dnsProviderKey: text("dns_provider_key"), // encrypted

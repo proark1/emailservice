@@ -96,6 +96,51 @@ export function createInboundServer(): SMTPServer {
               } catch {}
             }
 
+            // DSN (RFC 3464) and FBL (RFC 5965) short-circuit:
+            // these aren't user-facing mail — they're machine reports that
+            // should auto-suppress failed / complaining recipients and fire a
+            // webhook, then disappear. Storing them in the inbox would pollute
+            // the user's folder.
+            try {
+              const { isDsn, isFbl, parseDsn, parseFbl } = await import("../services/bounce-parser.service.js");
+              const { addSuppression } = await import("../services/suppression.service.js");
+              const { dispatchEvent } = await import("../services/webhook.service.js");
+              const crypto = await import("node:crypto");
+
+              if (isDsn(parsed)) {
+                const bounces = parseDsn(parsed);
+                for (const b of bounces) {
+                  if (b.permanent) {
+                    await addSuppression(deliveryAccountId, b.recipient, "bounce").catch(() => {});
+                  }
+                  await dispatchEvent(
+                    deliveryAccountId,
+                    b.permanent ? "email.bounced" : "email.soft_bounced",
+                    crypto.randomUUID(),
+                    { recipient: b.recipient, status: b.status, diagnostic: b.diagnostic, original_message_id: b.originalMessageId },
+                  ).catch(() => {});
+                }
+                continue; // skip inbox storage
+              }
+
+              if (isFbl(parsed)) {
+                const complaints = parseFbl(parsed);
+                for (const c of complaints) {
+                  await addSuppression(deliveryAccountId, c.complainant, "complaint").catch(() => {});
+                  await dispatchEvent(
+                    deliveryAccountId,
+                    "email.complained",
+                    crypto.randomUUID(),
+                    { complainant: c.complainant, feedback_type: c.feedbackType, original_message_id: c.originalMessageId },
+                  ).catch(() => {});
+                }
+                continue; // skip inbox storage
+              }
+            } catch (err) {
+              // Parser errors should not break inbound delivery of real mail.
+              console.error("[inbound] bounce/FBL detection failed:", err);
+            }
+
             // Extract References header
           const referencesRaw = parsed.references;
           const references: string[] = Array.isArray(referencesRaw) ? referencesRaw : referencesRaw ? [referencesRaw] : [];

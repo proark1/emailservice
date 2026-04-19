@@ -127,6 +127,13 @@
       "when": 1776638102886,
       "tag": "0017_blue_psylocke",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1776642326935,
+      "tag": "0018_dazzling_the_hood",
+      "breakpoints": true
     }
   ]
 }

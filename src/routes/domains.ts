@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { createDomainSchema } from "../schemas/domain.schema.js";
+import { createDomainSchema, updateDomainSchema } from "../schemas/domain.schema.js";
 import * as domainService from "../services/domain.service.js";
 import { getDnsVerifyQueue } from "../queues/index.js";
 
@@ -31,6 +31,13 @@ export default async function domainRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>("/:id", async (request) => {
     const domain = await domainService.getDomain(request.account.id, request.params.id);
     return { data: domainService.formatDomainResponse(domain) };
+  });
+
+  // PATCH /v1/domains/:id — deliverability tuning (DMARC rua, return-path, rate limit)
+  app.patch<{ Params: { id: string } }>("/:id", async (request) => {
+    const input = updateDomainSchema.parse(request.body);
+    const updated = await domainService.updateDomain(request.account.id, request.params.id, input);
+    return { data: domainService.formatDomainResponse(updated) };
   });
 
   // DELETE /v1/domains/:id

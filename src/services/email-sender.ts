@@ -45,16 +45,21 @@ async function getMailboxTransport(fromAddress: string, accountId: string): Prom
     port: mailbox.smtpPort,
     secure: mailbox.smtpSecure,
     auth: { user: mailbox.username, pass: password },
-    tls: { rejectUnauthorized: false },
+    // Reject untrusted / expired / hostname-mismatched TLS certs. Lax mode
+    // exposed connected-mailbox sends to MITM — production providers have
+    // valid certs, and a customer with a broken one should fix it rather
+    // than weaken every other tenant's security.
+    tls: { rejectUnauthorized: true },
   });
 
   mailboxTransportCache.set(mailbox.id, transport);
   return transport;
 }
 
-// Cache decrypted DKIM keys to avoid AES-GCM decryption on every send
+// Cache decrypted DKIM keys + return-path metadata to avoid AES-GCM decryption and
+// a second domain lookup on every send.
 const DKIM_CACHE_TTL_MS = 10 * 60 * 1000;
-interface DkimCacheEntry { privateKey: string; domainName: string; keySelector: string; expiresAt: number }
+interface DkimCacheEntry { privateKey: string; domainName: string; keySelector: string; returnPathDomain: string | null; expiresAt: number }
 const dkimCache = new Map<string, DkimCacheEntry>();
 
 function getOrCreateTransport(): nodemailer.Transporter {
@@ -138,20 +143,26 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
   if (!email) return;
 
   try {
-    // Load domain for DKIM (cache decrypted key to avoid per-send AES-GCM decryption)
+    // Load domain for DKIM (cache decrypted key to avoid per-send AES-GCM decryption).
+    // Also captures the return-path override so we don't hit the DB again at envelope time.
     let dkimConfig = undefined;
+    let returnPathDomainOverride: string | null = null;
     if (email.domainId) {
       const now = Date.now();
       const cached = dkimCache.get(email.domainId);
       if (cached && cached.expiresAt > now) {
         dkimConfig = { domainName: cached.domainName, keySelector: cached.keySelector, privateKey: cached.privateKey };
+        returnPathDomainOverride = cached.returnPathDomain;
       } else {
         const [domain] = await db.select().from(domains).where(eq(domains.id, email.domainId));
+        if (domain) {
+          returnPathDomainOverride = domain.returnPathDomain ?? null;
+        }
         if (domain?.dkimPrivateKey && domain.dkimSelector) {
           try {
             const privateKey = getDkimPrivateKey(domain.dkimPrivateKey);
             dkimConfig = { domainName: domain.name, keySelector: domain.dkimSelector, privateKey };
-            dkimCache.set(email.domainId, { privateKey, domainName: domain.name, keySelector: domain.dkimSelector, expiresAt: now + DKIM_CACHE_TTL_MS });
+            dkimCache.set(email.domainId, { privateKey, domainName: domain.name, keySelector: domain.dkimSelector, returnPathDomain: domain.returnPathDomain ?? null, expiresAt: now + DKIM_CACHE_TTL_MS });
           } catch (err) {
             console.error(`[email-sender] Failed to load DKIM key for domain ${domain.name}:`, err);
           }
@@ -247,9 +258,11 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       html: html || undefined,
       text: textBody || undefined,
       messageId,
-      // Set envelope sender for SPF alignment (Return-Path matches From domain)
+      // Set envelope sender. Prefer the domain's configured Return-Path subdomain
+      // (so DSN bounces route to our inbound MX on that subdomain); fall back to
+      // the From domain for SPF alignment when no override is set.
       envelope: {
-        from: `bounces@${fromDomain}`,
+        from: `bounces@${returnPathDomainOverride || fromDomain}`,
         to: [
           ...(email.toAddresses || []),
           ...(email.ccAddresses || []),

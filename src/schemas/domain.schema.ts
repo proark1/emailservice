@@ -6,6 +6,15 @@ export const createDomainSchema = z.object({
     "Invalid domain name",
   ),
   mode: z.enum(["send", "receive", "both"]).optional().default("both"),
+  dmarc_rua_email: z.string().email().optional(),
+  return_path_domain: z.string().min(1).max(255).optional(),
+  send_rate_per_minute: z.number().int().min(1).max(100_000).optional(),
+});
+
+export const updateDomainSchema = z.object({
+  dmarc_rua_email: z.string().email().nullable().optional(),
+  return_path_domain: z.string().min(1).max(255).nullable().optional(),
+  send_rate_per_minute: z.number().int().min(1).max(100_000).nullable().optional(),
 });
 
 export const domainResponseSchema = z.object({

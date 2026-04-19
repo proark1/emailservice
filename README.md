@@ -21,6 +21,9 @@ Self-hosted email service platform — a Resend.com-style API you own and contro
 - **Dashboard UI** — React 19 + Vite + TailwindCSS 4, fully mobile-responsive
 - **Security hardened** — SSRF protection on webhooks, HMAC-signed tracking links, encrypted
   unsubscribe tokens, rate limiting, company-scoped API keys restricted to their own domains
+- **Deliverability-first** — RFC 8058 one-click unsubscribe, DSN bounce auto-suppression, ARF
+  complaint auto-suppression, DMARC aggregate reporting, per-domain rate limits, strict outbound
+  TLS. See [DELIVERABILITY.md](DELIVERABILITY.md) for the full playbook.
 
 ## Quick Start
 
@@ -65,6 +68,7 @@ All API routes require `Authorization: Bearer es_xxx` (API key auth).
 | `POST` | `/v1/emails/batch` | Send up to 100 emails |
 | `POST` | `/v1/domains` | Add a domain |
 | `GET` | `/v1/domains` | List domains |
+| `PATCH` | `/v1/domains/:id` | Update DMARC reporting, Return-Path, send rate limit |
 | `POST` | `/v1/domains/:id/verify` | Trigger DNS verification |
 | `DELETE` | `/v1/domains/:id` | Remove a domain |
 | `POST` | `/v1/webhooks` | Register a webhook |
@@ -147,6 +151,35 @@ curl -X POST http://localhost:3000/v1/companies/COMPANY_ID/api-keys \
 Company-scoped keys can manage members, mailboxes, and domains for their
 company, and can send email — but only from domains linked to that company.
 
+## Deliverability
+
+If this service is serving real user volume, read [DELIVERABILITY.md](DELIVERABILITY.md) — it's the checklist you actually need.
+
+What's automatic:
+
+- DKIM 2048 signing, SPF, DMARC (`p=quarantine`, strict alignment) generated per domain.
+- `List-Unsubscribe` + `List-Unsubscribe-Post: One-Click` headers on every send, with live GET and POST endpoints (RFC 8058 — required by Gmail/Yahoo bulk sender rules).
+- DSN bounces (RFC 3464) and ARF complaints (RFC 5965) parsed at ingress and auto-added to the suppression list. `email.bounced` / `email.complained` webhooks fire in real time.
+- Return-Path aligned to a configurable subdomain (`bounces@{return_path_domain || from_domain}`).
+- Auto-generated plain-text alternative when only HTML is supplied.
+- Warmup system with engagement-gated ramp + weekend skip.
+- Strict outbound TLS (`rejectUnauthorized: true` on both the relay and connected-mailbox transports).
+
+What you configure:
+
+```bash
+# Optional but recommended — add DMARC aggregate reporting and a bounces subdomain
+curl -X PATCH http://localhost:3000/v1/domains/DOMAIN_ID \
+  -H "Authorization: Bearer es_YOUR_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "dmarc_rua_email": "dmarc@yourdomain.com",
+    "return_path_domain": "bounces.yourdomain.com",
+    "send_rate_per_minute": 300
+  }'
+```
+
+Then publish the updated DMARC TXT from the response, add an MX for `bounces.yourdomain.com` pointing at your `MAIL_HOST`, and enroll in [Gmail Postmaster Tools](https://postmaster.google.com/).
+
 ## MCP server
 
 Run an MCP server that exposes every API feature as a tool for AI agents:
@@ -191,4 +224,4 @@ ISC
 
 ---
 
-Version 1.5.0 — Last updated: 2026-04-19
+Version 1.6.0 — Last updated: 2026-04-19

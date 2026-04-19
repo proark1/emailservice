@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] — 2026-04-19
+
+### Added
+- **RFC 8058 one-click unsubscribe POST endpoint** (`POST /unsubscribe/:encodedData`) —
+  Gmail/Yahoo bulk-sender requirement. The `List-Unsubscribe-Post` header was already
+  being set; without a matching POST handler mail was at risk of being downgraded.
+  Returns `204 No Content`. GET endpoint still renders the user-facing page.
+- **DSN bounce auto-suppression** — inbound RFC 3464 bounce messages are parsed at
+  the SMTP ingress, permanent failures (5.x.x) auto-add the recipient to the
+  account's suppression list, and `email.bounced` / `email.soft_bounced` webhooks
+  fire. Reports are never stored in the user's inbox.
+- **ARF/FBL complaint auto-suppression** — inbound RFC 5965 feedback reports are
+  parsed, complainant auto-suppressed with reason `complaint`, and
+  `email.complained` webhook fires.
+- **DMARC aggregate reporting** — new `dmarc_rua_email` field on domains.
+  `generateDnsRecords` appends `rua=mailto:...` when set; the stored DMARC TXT
+  regenerates on update.
+- **Per-domain send rate limiting** — new `send_rate_per_minute` field on domains.
+  Redis token-bucket checked in `sendEmail`; over-limit throws `RateLimitError`.
+  Gracefully skipped when Redis is absent.
+- **PATCH `/v1/domains/:id`** — update `dmarc_rua_email`, `return_path_domain`, and
+  `send_rate_per_minute` on an existing domain. Changes regenerate the DMARC
+  record and reset verification flags where appropriate.
+- **`src/services/bounce-parser.service.ts`** — exports `isDsn`, `isFbl`,
+  `parseDsn`, `parseFbl`. Robust text-scan parser against multipart/report bodies
+  plus subject/content-type heuristics.
+- **`DELIVERABILITY.md`** — customer-facing playbook covering automatic signals,
+  DNS + rDNS setup, MTA-STS / TLS-RPT / BIMI extras, Postmaster / SNDS / blacklist
+  monitoring, warmup, content rules, list hygiene, webhook usage, troubleshooting,
+  and a go-live checklist.
+
+### Changed
+- `Return-Path` envelope now honors `domains.return_path_domain` when set
+  (previously ignored). Defaults to the From domain — backward compatible.
+- DMARC record is now built from parts so adding `rua=` and future tags
+  (e.g. `ruf=`) is one-line additions.
+- `formatDomainResponse` surfaces `dmarc_rua_email`, `return_path_domain`,
+  `send_rate_per_minute` so dashboards can display the current config.
+
+### Security
+- Connected-mailbox SMTP now uses `rejectUnauthorized: true` (was `false`).
+  Customers with broken certs should fix the cert rather than weaken every
+  other tenant's send path.
+
+### Migration
+- `0018_dazzling_the_hood.sql` — adds `domains.dmarc_rua_email`,
+  `domains.send_rate_per_minute`.
+
 ## [1.5.0] — 2026-04-19
 
 ### Added

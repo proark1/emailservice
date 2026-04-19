@@ -20,7 +20,7 @@ export async function createDomain(accountId: string, input: CreateDomainInput) 
   }
 
   const dkim = generateDkimForDomain();
-  const dnsRecords = generateDnsRecords(input.name);
+  const dnsRecords = generateDnsRecords(input.name, { ruaEmail: input.dmarc_rua_email });
 
   const mode = input.mode || "both";
   const needsSend = mode === "send" || mode === "both";
@@ -38,6 +38,9 @@ export async function createDomain(accountId: string, input: CreateDomainInput) 
       dkimPrivateKey: needsSend ? dkim.privateKey : null,
       dkimDnsValue: needsSend ? dkim.dnsValue : null,
       dmarcRecord: needsSend ? dnsRecords.dmarcRecord : null,
+      dmarcRuaEmail: input.dmarc_rua_email ?? null,
+      returnPathDomain: input.return_path_domain ?? null,
+      sendRatePerMinute: input.send_rate_per_minute ?? null,
     })
     .returning();
 
@@ -125,6 +128,52 @@ export async function updateDomainVerification(
   return updated;
 }
 
+/**
+ * Patch the deliverability-relevant fields a customer can tune after creation:
+ * DMARC aggregate reporting address, Return-Path subdomain, per-domain send cap.
+ * Updating `dmarc_rua_email` regenerates the stored DMARC record so the formatter
+ * surfaces the new value in the DNS records response.
+ */
+export async function updateDomain(
+  accountId: string,
+  domainId: string,
+  patch: {
+    dmarc_rua_email?: string | null;
+    return_path_domain?: string | null;
+    send_rate_per_minute?: number | null;
+  },
+) {
+  const db = getDb();
+  const { requireDomainRole } = await import("./team.service.js");
+  await requireDomainRole(accountId, domainId, "admin");
+
+  const [existing] = await db.select().from(domains).where(eq(domains.id, domainId));
+  if (!existing) throw new NotFoundError("Domain");
+
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (patch.dmarc_rua_email !== undefined) {
+    updates.dmarcRuaEmail = patch.dmarc_rua_email;
+    // Regenerate the DMARC string so the stored record matches the new rua target.
+    const regenerated = generateDnsRecords(existing.name, { ruaEmail: patch.dmarc_rua_email });
+    updates.dmarcRecord = regenerated.dmarcRecord;
+    updates.dmarcVerified = false; // force re-verification after DNS change
+  }
+  if (patch.return_path_domain !== undefined) {
+    updates.returnPathDomain = patch.return_path_domain;
+    updates.returnPathVerified = false;
+  }
+  if (patch.send_rate_per_minute !== undefined) {
+    updates.sendRatePerMinute = patch.send_rate_per_minute;
+  }
+
+  const [updated] = await db
+    .update(domains)
+    .set(updates)
+    .where(eq(domains.id, domainId))
+    .returning();
+  return updated;
+}
+
 export function formatDomainResponse(domain: typeof domains.$inferSelect) {
   const mxHost = getMailHost();
   const isHostConfigured = mxHost !== "your-server-hostname.com";
@@ -185,6 +234,9 @@ export function formatDomainResponse(domain: typeof domains.$inferSelect) {
     records,
     provider: (domain as any).dnsProvider || null,
     providerConfigured: !!(domain as any).dnsProviderKey,
+    dmarc_rua_email: domain.dmarcRuaEmail ?? null,
+    return_path_domain: domain.returnPathDomain ?? null,
+    send_rate_per_minute: domain.sendRatePerMinute ?? null,
     created_at: domain.createdAt.toISOString(),
   };
 }

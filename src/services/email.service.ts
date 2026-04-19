@@ -1,11 +1,34 @@
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, suppressions } from "../db/schema/index.js";
-import { isRedisConfigured, getEmailSendQueue } from "../queues/index.js";
+import { isRedisConfigured, getEmailSendQueue, getRedisConnection } from "../queues/index.js";
 import { transformHtml } from "../lib/html-transform.js";
 import { checkIdempotencyKey, storeIdempotencyKey } from "../lib/idempotency.js";
-import { ValidationError, NotFoundError, ForbiddenError } from "../lib/errors.js";
+import { ValidationError, NotFoundError, ForbiddenError, RateLimitError } from "../lib/errors.js";
 import type { SendEmailInput } from "../schemas/email.schema.js";
+
+/**
+ * Per-domain outbound rate limit. Shared-IP pools suffer when one domain
+ * bursts — this is the safety valve. Redis INCR keyed per minute; when Redis
+ * is absent the check is skipped (graceful degrade, matching the rest of the
+ * queue-dependent code). Warmup still caps daily volume separately.
+ */
+async function checkDomainRateLimit(domainId: string, limitPerMinute: number): Promise<void> {
+  if (!isRedisConfigured()) return;
+  try {
+    const redis = getRedisConnection();
+    const bucket = Math.floor(Date.now() / 60_000);
+    const key = `rl:send:${domainId}:${bucket}`;
+    const count = await redis.incr(key);
+    if (count === 1) await redis.expire(key, 65);
+    if (count > limitPerMinute) {
+      throw new RateLimitError();
+    }
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err;
+    // Redis blip — don't block sends.
+  }
+}
 
 export interface SendEmailOptions {
   /**
@@ -72,6 +95,11 @@ export async function sendEmail(accountId: string, input: SendEmailInput, option
   // This is the hard isolation boundary between tenants that share one root account.
   if (options.companyScopeId && domain.companyId !== options.companyScopeId) {
     throw new ForbiddenError(`Domain ${fromDomain} is not linked to this company`);
+  }
+
+  // Enforce per-domain send rate limit if configured
+  if (domain.sendRatePerMinute && domain.sendRatePerMinute > 0) {
+    await checkDomainRateLimit(domain.id, domain.sendRatePerMinute);
   }
 
   // Verify team access to this domain

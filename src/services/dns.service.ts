@@ -6,9 +6,19 @@ export interface DnsRecords {
   dmarcRecord: string;
 }
 
-export function generateDnsRecords(_domain: string): DnsRecords {
+export interface DnsRecordOptions {
+  /** When set, appended to the DMARC record so aggregate reports are mailed here. */
+  ruaEmail?: string | null;
+}
+
+export function generateDnsRecords(_domain: string, options: DnsRecordOptions = {}): DnsRecords {
   const mailHost = getMailHost();
   const isConfigured = mailHost !== "your-server-hostname.com";
+
+  const dmarcParts = ["v=DMARC1", "p=quarantine", "adkim=s", "aspf=s", "pct=100"];
+  if (options.ruaEmail) {
+    dmarcParts.push(`rua=mailto:${options.ruaEmail}`);
+  }
 
   return {
     // SPF: "a mx" authorizes the domain's own A/MX IPs to send.
@@ -16,7 +26,7 @@ export function generateDnsRecords(_domain: string): DnsRecords {
     spfRecord: isConfigured
       ? `v=spf1 a mx include:${mailHost} -all`
       : `v=spf1 a mx -all`,
-    dmarcRecord: `v=DMARC1; p=quarantine; adkim=s; aspf=s; pct=100`,
+    dmarcRecord: dmarcParts.join("; "),
   };
 }
 
