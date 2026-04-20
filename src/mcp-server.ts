@@ -1475,6 +1475,30 @@ server.tool(
 );
 
 server.tool(
+  "adopt_company_domains",
+  "Bulk-migrate existing master-account domains into a company. Use this to clean up domains created via POST /v1/domains before the company endpoint was wired up. Reports per-domain status (linked / skipped / error).",
+  {
+    company_id: z.string().describe("Company ID to adopt the domains into"),
+    domain_ids: z.array(z.string()).describe("Array of domain IDs to migrate (1-100)"),
+  },
+  async (params) => {
+    const { company_id, domain_ids } = params;
+    const res = await api("POST", `/v1/companies/${company_id}/adopt-domains`, { domain_ids });
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
+  "list_unlinked_domains",
+  "List domains owned by the caller's account that are NOT linked to any company. Useful to find stranded domains before adopting them into companies.",
+  {},
+  async () => {
+    const res = await api("GET", "/v1/domains?unlinked=true");
+    return { content: [{ type: "text" as const, text: formatResult(res) }] };
+  },
+);
+
+server.tool(
   "list_company_domains",
   "List domains currently linked to a company.",
   { company_id: z.string().describe("Company ID") },

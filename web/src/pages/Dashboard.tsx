@@ -17,6 +17,7 @@ import DeliverabilityPage from "./dashboard/DeliverabilityPage";
 import DraftsPage from "./dashboard/DraftsPage";
 import ContactsPage from "./dashboard/ContactsPage";
 import TeamPage from "./dashboard/TeamPage";
+import CompaniesPage from "./dashboard/CompaniesPage";
 import MailboxesPage from "./dashboard/MailboxesPage";
 import SequencesPage from "./dashboard/SequencesPage";
 import { Navigate } from "react-router-dom";
@@ -44,6 +45,7 @@ const navSections = [
   ]},
   { label: "Configure", items: [
     { to: "/dashboard/domains", label: "Domains", ownerOnly: true, icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3" /></svg> },
+    { to: "/dashboard/companies", label: "Companies", ownerOnly: true, icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg> },
     { to: "/dashboard/api-keys", label: "API Keys", ownerOnly: true, icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg> },
     { to: "/dashboard/webhooks", label: "Webhooks", ownerOnly: true, icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg> },
   ]},
@@ -1103,6 +1105,7 @@ export default function Dashboard() {
           <Route path="deliverability" element={<OwnerRoute><DeliverabilityPage /></OwnerRoute>} />
           <Route path="domains" element={<OwnerRoute><DomainsPage /></OwnerRoute>} />
           <Route path="domains/:domainId/team" element={<OwnerRoute><TeamPage /></OwnerRoute>} />
+          <Route path="companies" element={<OwnerRoute><CompaniesPage /></OwnerRoute>} />
           <Route path="api-keys" element={<OwnerRoute><ApiKeysPage /></OwnerRoute>} />
           <Route path="webhooks" element={<OwnerRoute><WebhooksPage /></OwnerRoute>} />
           <Route path="suppressions" element={<OwnerRoute><SuppressionsPage /></OwnerRoute>} />

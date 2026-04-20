@@ -76,6 +76,7 @@ All API routes require `Authorization: Bearer es_xxx` (API key auth).
 | `POST` | `/v1/audiences/:id/contacts` | Add a contact |
 | `POST` | `/v1/companies` | Create a company (sub-tenant) |
 | `POST` | `/v1/companies/:id/domains` | Create & link a domain, or link an existing one |
+| `POST` | `/v1/companies/:id/adopt-domains` | Bulk-migrate existing master-account domains into a company |
 | `POST` | `/v1/companies/:id/members` | Provision a member account + handle + optional API key |
 | `POST` | `/v1/companies/:id/mailboxes` | Assign an email handle to a member |
 | `POST` | `/v1/companies/:id/api-keys` | Mint a company-scoped API key |
@@ -151,6 +152,28 @@ curl -X POST http://localhost:3000/v1/companies/COMPANY_ID/api-keys \
 Company-scoped keys can manage members, mailboxes, and domains for their
 company, and can send email — but only from domains linked to that company.
 
+### Migrating existing domains into a company
+
+If domains were already created via `POST /v1/domains` before the company
+endpoint was wired up, they sit unscoped on the master account. To find and
+move them:
+
+```bash
+# 1. List stranded domains
+curl http://localhost:3000/v1/domains?unlinked=true \
+  -H "Authorization: Bearer es_ROOT"
+
+# 2. Bulk-adopt them into a company
+curl -X POST http://localhost:3000/v1/companies/COMPANY_ID/adopt-domains \
+  -H "Authorization: Bearer es_ROOT" -H "Content-Type: application/json" \
+  -d '{"domain_ids": ["<id1>", "<id2>", "<id3>"]}'
+# → { "data": { "linked": 3, "skipped": 0, "errored": 0, "results": [...] } }
+```
+
+The dashboard's **Companies** page (`/dashboard/companies`) groups every
+domain by company with an "Unlinked" bucket at the top — pick the domains,
+choose a target company, click "Move domains".
+
 ## Deliverability
 
 If this service is serving real user volume, read [DELIVERABILITY.md](DELIVERABILITY.md) — it's the checklist you actually need.
@@ -224,4 +247,4 @@ ISC
 
 ---
 
-Version 1.6.0 — Last updated: 2026-04-19
+Version 1.6.1 — Last updated: 2026-04-20

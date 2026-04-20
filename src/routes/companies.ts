@@ -8,6 +8,7 @@ import {
   assignMailboxSchema,
   createCompanyApiKeySchema,
   linkDomainSchema,
+  adoptDomainsSchema,
 } from "../schemas/company.schema.js";
 import * as companyService from "../services/company.service.js";
 import * as memberService from "../services/company-member.service.js";
@@ -148,6 +149,22 @@ export default async function companyRoutes(app: FastifyInstance) {
       return { data: { success: true } };
     },
   );
+
+  // POST /v1/companies/:companyId/adopt-domains — bulk-migrate stranded master-account
+  // domains into this company. Per-domain result so callers can act on partial failure.
+  app.post<{ Params: { companyId: string } }>("/:companyId/adopt-domains", async (request) => {
+    assertCompanyScope(request, request.params.companyId);
+    const input = adoptDomainsSchema.parse(request.body);
+    const results = await companyService.adoptDomainsIntoCompany(
+      request.account.id,
+      request.params.companyId,
+      input.domain_ids,
+    );
+    const linked = results.filter((r) => r.status === "linked").length;
+    const skipped = results.filter((r) => r.status === "skipped").length;
+    const errored = results.filter((r) => r.status === "error").length;
+    return { data: { linked, skipped, errored, results } };
+  });
 
   // -------------------- Members --------------------
 

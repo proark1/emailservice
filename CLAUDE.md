@@ -99,11 +99,13 @@ A **company** is a sub-tenant that lives under a root MailNowAPI account. The in
 - `api_keys.company_id` — nullable FK. Present on company-scoped keys.
 
 **Services:**
-- `src/services/company.service.ts` — CRUD, domain linking (`linkDomainToCompany`, `createAndLinkDomain`), company API key minting, `requireCompanyRole` (same role hierarchy pattern as `team.service.ts`).
+- `src/services/company.service.ts` — CRUD, domain linking (`linkDomainToCompany`, `createAndLinkDomain`, `adoptDomainsIntoCompany` for bulk migration of stranded master-account domains), company API key minting, `requireCompanyRole` (same role hierarchy pattern as `team.service.ts`).
 - `src/services/company-member.service.ts` — `provisionMember` (creates account + company_member row + optional mailbox + optional per-member API key, sends welcome email), list/get/update/remove.
 - `src/services/company-mailbox.service.ts` — `assignMailbox` (inserts `company_mailboxes` row AND mirrors into `domain_members` with mailbox filter so outbound send scoping works), `resolveMailbox` (used by inbound routing), list/remove.
 
-**Routes:** `src/routes/companies.ts` — `/v1/companies/*`. `assertCompanyScope()` enforces that a company-scoped key can only hit its own `:companyId` path.
+**Routes:** `src/routes/companies.ts` — `/v1/companies/*`. `assertCompanyScope()` enforces that a company-scoped key can only hit its own `:companyId` path. `POST /v1/companies/:id/adopt-domains` bulk-migrates stranded master-account domains; the matching dashboard page lives at `web/src/pages/dashboard/CompaniesPage.tsx` (cookie-auth wrappers in `src/routes/dashboard.ts:/companies` + `/companies/:id/adopt-domains` + `/domain-groups`).
+
+**Soft guardrail on `POST /v1/domains`:** when a non-company-scoped key creates a domain without a `company_id`, the response includes `Deprecation: true` + `Link` headers and a `_warning` field nudging the platform toward `POST /v1/companies/:id/domains`. Behavior is unchanged — purely informational.
 
 **Inbound routing:** when a message arrives at `alice@domain`, `src/smtp/inbound-server.ts` looks up the domain; if `domain.companyId` is set it calls `resolveMailbox(domainId, localPart)` and routes to the resolved member's `accountId`. When no mapping exists, it falls back to `domain.accountId` (the root owner) — no mail is lost. Non-company domains behave exactly as before.
 

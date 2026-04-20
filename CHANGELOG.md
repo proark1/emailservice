@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] — 2026-04-20
+
+### Added
+- **Bulk-adopt stranded domains into a company**: `POST /v1/companies/:id/adopt-domains`
+  takes `{ domain_ids: [...] }` and migrates existing master-account domains in
+  one call. Per-domain status (`linked` / `skipped` / `error`) so partial
+  failures aren't silently swallowed. Used to clean up domains that were
+  created via `POST /v1/domains` before the platform learned to use the
+  company endpoint.
+- **Filter for unlinked domains**: `GET /v1/domains?unlinked=true` (and
+  `?company_id=<uuid>`) so the platform's ops can spot drift.
+- **Companies dashboard page** (`/dashboard/companies`): groups every domain
+  by company with an "Unlinked" bucket at the top. Multi-select + "Move
+  domains" modal for one-click migration.
+- **Two new MCP tools**: `adopt_company_domains`, `list_unlinked_domains`.
+
+### Changed
+- `POST /v1/domains` now returns a soft deprecation warning when called by a
+  master/user key without a company link. Adds `Deprecation: true` and `Link`
+  headers (RFC 8594-style) plus a `_warning` field in the response body
+  pointing the platform at `POST /v1/companies/:id/domains`. Behavior is
+  unchanged — existing integrations keep working.
+- `domain.service.ts:listDomains` now accepts `{ unlinked, companyId }`
+  filters; defaults match prior behavior.
+
 ## [1.6.0] — 2026-04-19
 
 ### Added

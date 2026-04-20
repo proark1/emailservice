@@ -501,8 +501,71 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
   // --- Domains ---
   app.get("/domains", async (request) => {
-    const list = await domainService.listDomains(request.account.id);
+    const query = z.object({
+      unlinked: z.coerce.boolean().optional(),
+      company_id: z.string().uuid().optional(),
+    }).parse(request.query);
+    const list = await domainService.listDomains(request.account.id, {
+      unlinked: query.unlinked,
+      companyId: query.company_id,
+    });
     return { data: list.map(domainService.formatDomainResponse) };
+  });
+
+  // --- Companies (cookie auth wrappers around v1 companies routes) ---
+  app.get("/companies", async (request) => {
+    const { listCompaniesForAccount, formatCompanyResponse } = await import("../services/company.service.js");
+    const list = await listCompaniesForAccount(request.account.id);
+    return { data: list.map((c) => formatCompanyResponse(c as any)) };
+  });
+
+  app.post<{ Params: { companyId: string } }>("/companies/:companyId/adopt-domains", async (request) => {
+    const { adoptDomainsIntoCompany } = await import("../services/company.service.js");
+    const body = z.object({ domain_ids: z.array(z.string().uuid()).min(1).max(100) }).parse(request.body);
+    const results = await adoptDomainsIntoCompany(request.account.id, request.params.companyId, body.domain_ids);
+    const linked = results.filter((r) => r.status === "linked").length;
+    const skipped = results.filter((r) => r.status === "skipped").length;
+    const errored = results.filter((r) => r.status === "error").length;
+    return { data: { linked, skipped, errored, results } };
+  });
+
+  // GET /dashboard/domain-groups — domains grouped by company, with an
+  // "Unlinked" bucket for domains stranded on the master account. Used by the
+  // platform's ops UI to spot drift.
+  app.get("/domain-groups", async (request) => {
+    const db = getDb();
+    const { companies, companyMembers } = await import("../db/schema/index.js");
+    const allDomains = await domainService.listDomains(request.account.id);
+    // Companies the caller is a member of (so we don't surface other tenants' names)
+    const myCompanies = await db
+      .select({ id: companies.id, name: companies.name, slug: companies.slug })
+      .from(companyMembers)
+      .innerJoin(companies, eq(companies.id, companyMembers.companyId))
+      .where(eq(companyMembers.accountId, request.account.id));
+    const byId = new Map(myCompanies.map((c) => [c.id, c]));
+
+    const groups: Array<{ company_id: string | null; company_name: string | null; company_slug: string | null; domains: any[] }> = [];
+    const bucket = new Map<string | null, any[]>();
+    for (const d of allDomains) {
+      const key = d.companyId ?? null;
+      if (!bucket.has(key)) bucket.set(key, []);
+      bucket.get(key)!.push(domainService.formatDomainResponse(d));
+    }
+    // Unlinked bucket first — it's what the operator actually wants to clean up.
+    if (bucket.has(null)) {
+      groups.push({ company_id: null, company_name: null, company_slug: null, domains: bucket.get(null)! });
+    }
+    for (const [companyId, domainsForCompany] of bucket.entries()) {
+      if (companyId === null) continue;
+      const c = byId.get(companyId);
+      groups.push({
+        company_id: companyId,
+        company_name: c?.name ?? "(unknown company)",
+        company_slug: c?.slug ?? null,
+        domains: domainsForCompany,
+      });
+    }
+    return { data: { groups, total_domains: allDomains.length, unlinked_count: bucket.get(null)?.length ?? 0 } };
   });
 
   app.post("/domains", async (request, reply) => {

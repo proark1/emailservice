@@ -95,6 +95,36 @@ export async function deleteCompany(accountId: string, companyId: string) {
 
 // --- Domain linkage ---
 
+/**
+ * Bulk-adopt one or more existing master-account domains into a company.
+ * Atomic per-domain: each is validated and linked independently; the response
+ * reports per-domain success/failure so a partially-stranded migration doesn't
+ * silently swallow errors. Used to clean up domains that were created via
+ * POST /v1/domains before the platform knew to use the company endpoint.
+ */
+export async function adoptDomainsIntoCompany(
+  accountId: string,
+  companyId: string,
+  domainIds: string[],
+): Promise<Array<{ domain_id: string; status: "linked" | "skipped" | "error"; reason?: string }>> {
+  await requireCompanyRole(accountId, companyId, "owner");
+  const results: Array<{ domain_id: string; status: "linked" | "skipped" | "error"; reason?: string }> = [];
+  for (const domainId of domainIds) {
+    try {
+      await linkDomainToCompany(accountId, companyId, domainId);
+      results.push({ domain_id: domainId, status: "linked" });
+    } catch (err: any) {
+      // Already linked to *this* company is a no-op, not a failure.
+      if (err?.statusCode === 409 && /already linked/.test(err.message ?? "")) {
+        results.push({ domain_id: domainId, status: "skipped", reason: err.message });
+      } else {
+        results.push({ domain_id: domainId, status: "error", reason: err?.message ?? "Unknown error" });
+      }
+    }
+  }
+  return results;
+}
+
 export async function linkDomainToCompany(accountId: string, companyId: string, domainId: string) {
   await requireCompanyRole(accountId, companyId, "owner");
   const db = getDb();

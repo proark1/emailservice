@@ -1,4 +1,4 @@
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, isNull } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { domains, emails, inboundEmails, domainMembers } from "../db/schema/index.js";
 import { generateDkimForDomain } from "./dkim.service.js";
@@ -69,12 +69,17 @@ export async function getDomain(accountId: string, domainId: string) {
   return domain;
 }
 
-export async function listDomains(accountId: string) {
+export async function listDomains(accountId: string, filter: { unlinked?: boolean; companyId?: string } = {}) {
   const db = getDb();
   const { getAccessibleDomainIds } = await import("./team.service.js");
   const accessibleIds = await getAccessibleDomainIds(accountId);
   if (accessibleIds.length === 0) return [];
-  return db.select().from(domains).where(inArray(domains.id, accessibleIds));
+
+  const conditions = [inArray(domains.id, accessibleIds)];
+  if (filter.unlinked) conditions.push(isNull(domains.companyId));
+  if (filter.companyId) conditions.push(eq(domains.companyId, filter.companyId));
+
+  return db.select().from(domains).where(and(...conditions));
 }
 
 export async function deleteDomain(accountId: string, domainId: string) {

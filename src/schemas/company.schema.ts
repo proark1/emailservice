@@ -56,6 +56,10 @@ export const linkDomainSchema = z.union([
   }),
 ]);
 
+export const adoptDomainsSchema = z.object({
+  domain_ids: z.array(z.string().uuid()).min(1).max(100),
+});
+
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>;
 export type UpdateCompanyInput = z.infer<typeof updateCompanySchema>;
 export type ProvisionMemberInput = z.infer<typeof provisionMemberSchema>;
@@ -63,3 +67,4 @@ export type UpdateCompanyMemberInput = z.infer<typeof updateMemberSchema>;
 export type AssignMailboxInput = z.infer<typeof assignMailboxSchema>;
 export type CreateCompanyApiKeyInput = z.infer<typeof createCompanyApiKeySchema>;
 export type LinkDomainInput = z.infer<typeof linkDomainSchema>;
+export type AdoptDomainsInput = z.infer<typeof adoptDomainsSchema>;
