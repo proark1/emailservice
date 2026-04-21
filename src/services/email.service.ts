@@ -1,4 +1,4 @@
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, suppressions } from "../db/schema/index.js";
 import { isRedisConfigured, getEmailSendQueue, getRedisConnection } from "../queues/index.js";
@@ -297,14 +297,17 @@ export async function sendEmail(accountId: string, input: SendEmailInput, option
 async function companyScopeCondition(accountId: string, companyScopeId: string | null | undefined) {
   if (!companyScopeId) return null;
   const db = getDb();
-  const { inArray } = await import("drizzle-orm");
   const companyDomainIds = (
     await db
       .select({ id: domains.id })
       .from(domains)
       .where(and(eq(domains.accountId, accountId), eq(domains.companyId, companyScopeId)))
   ).map((d) => d.id);
-  if (companyDomainIds.length === 0) return inArray(emails.domainId, ["00000000-0000-0000-0000-000000000000"]);
+  // No domains for this company — return an unconditionally-false predicate
+  // so the caller sees an empty result set. Using `sql\`false\`` instead of a
+  // sentinel UUID keeps the isolation boundary bulletproof even if a domain
+  // with the nil UUID were ever inserted.
+  if (companyDomainIds.length === 0) return sql`false`;
   return inArray(emails.domainId, companyDomainIds);
 }
 
