@@ -27,20 +27,33 @@ import { addSuppression, listSuppressions, removeSuppression, formatSuppressionR
 import { getAccountAnalytics } from "../services/analytics.service.js";
 
 export async function registerRoutes(app: FastifyInstance) {
-  // Health check (no auth)
+  // Health check (liveness) — fast, cache-unfriendly. 200 = process is up.
   app.get("/health", async (_request, reply) => {
+    return reply.send({ status: "healthy", timestamp: new Date().toISOString() });
+  });
+
+  // Readiness — deeper check that DB (and Redis if configured) are reachable.
+  // Used by orchestrators to gate traffic. Returns 503 on any dependency failure.
+  app.get("/readyz", async (_request, reply) => {
+    const checks: Record<string, { ok: boolean; error?: string }> = {};
     try {
       const { getDb } = await import("../db/index.js");
-      const db = getDb();
-      await db.execute("SELECT 1" as any);
-      return reply.send({ status: "healthy", timestamp: new Date().toISOString() });
+      await getDb().execute("SELECT 1" as any);
+      checks.database = { ok: true };
     } catch (error) {
-      return reply.status(503).send({
-        status: "unhealthy",
-        timestamp: new Date().toISOString(),
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
+      checks.database = { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
+    try {
+      const { isRedisConfigured, getRedisConnection } = await import("../queues/index.js");
+      if (isRedisConfigured()) {
+        await getRedisConnection().ping();
+        checks.redis = { ok: true };
+      }
+    } catch (error) {
+      checks.redis = { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    const allOk = Object.values(checks).every((c) => c.ok);
+    return reply.status(allOk ? 200 : 503).send({ status: allOk ? "ready" : "not_ready", checks, timestamp: new Date().toISOString() });
   });
 
   // Tracking routes (no auth, public)

@@ -59,9 +59,20 @@ export function rewriteLinks(html: string, emailId: string): string {
 }
 
 /**
+ * Hard cap on HTML size we'll attempt to transform. Rewriting links on a
+ * multi-megabyte body means thousands of HMAC computations and an equally
+ * large regex walk per send. Above this threshold we pass the body through
+ * untouched — open/click tracking is lost for that one send, but we avoid the
+ * CPU hit (and, in adversarial cases, a DoS vector).
+ */
+const MAX_TRANSFORM_BYTES = 2 * 1024 * 1024; // 2 MB
+
+/**
  * Apply all tracking transforms to HTML.
  */
 export function transformHtml(html: string, emailId: string): string {
+  if (!html) return html;
+  if (html.length > MAX_TRANSFORM_BYTES) return html;
   let result = rewriteLinks(html, emailId);
   result = injectTrackingPixel(result, emailId);
   return result;

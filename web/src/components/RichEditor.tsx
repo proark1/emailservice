@@ -1,4 +1,19 @@
 import { useRef, useCallback, useEffect } from "react";
+import DOMPurify from "dompurify";
+
+/**
+ * Strip anything that could execute JavaScript before we drop HTML into
+ * contentEditable. This guards both live paste and loaded drafts from XSS —
+ * if a compromised API key plants a malicious draft, viewing it in the
+ * dashboard will not fire its scripts.
+ */
+function sanitize(html: string): string {
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "form"],
+    FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "onfocus", "onblur", "formaction"],
+  });
+}
 
 /**
  * Simple rich text editor using contentEditable.
@@ -22,7 +37,7 @@ export function RichEditor({
   // which would overwrite user edits on every parent re-render
   useEffect(() => {
     if (editorRef.current && !initializedRef.current) {
-      editorRef.current.innerHTML = value;
+      editorRef.current.innerHTML = sanitize(value);
       initializedRef.current = true;
     }
   }, []);

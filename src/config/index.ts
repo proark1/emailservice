@@ -1,9 +1,6 @@
 import crypto from "node:crypto";
 import { z } from "zod";
 
-// Stable default for development only — production MUST set ENCRYPTION_KEY
-const DEFAULT_ENCRYPTION_KEY = "0".repeat(64);
-
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1).optional(),
   DATABASE_PUBLIC_URL: z.string().min(1).optional(),
@@ -27,9 +24,9 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_SECURE: z.string().optional(), // "true" for port 465
-  JWT_SECRET: z.string().min(1).optional(),
-  ENCRYPTION_KEY: z.string().regex(/^[0-9a-f]{64}$/i, "ENCRYPTION_KEY must be 64 hex characters (32 bytes)").default(DEFAULT_ENCRYPTION_KEY),
-  TRACKING_HMAC_SECRET: z.string().optional(),
+  JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters").optional(),
+  ENCRYPTION_KEY: z.string().regex(/^[0-9a-f]{64}$/i, "ENCRYPTION_KEY must be 64 hex characters (32 bytes)").optional(),
+  TRACKING_HMAC_SECRET: z.string().min(32, "TRACKING_HMAC_SECRET must be at least 32 characters").optional(),
   RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(600),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -39,7 +36,14 @@ const envSchema = z.object({
   RENDER_EXTERNAL_HOSTNAME: z.string().optional(),
 });
 
-export type Env = z.infer<typeof envSchema>;
+type RawEnv = z.infer<typeof envSchema>;
+// After loadConfig() runs, these are guaranteed non-null — either set in env or
+// populated by the loader's dev fallbacks / platform auto-detection.
+export type Env = Omit<RawEnv, "ENCRYPTION_KEY" | "JWT_SECRET" | "DATABASE_URL"> & {
+  ENCRYPTION_KEY: string;
+  JWT_SECRET: string;
+  DATABASE_URL: string;
+};
 
 let _config: Env | null = null;
 
@@ -70,19 +74,36 @@ export function loadConfig(): Env {
       } catch {}
     }
   }
-  if (parsed.NODE_ENV === "production" && !process.env.ENCRYPTION_KEY) {
+  if (!parsed.ENCRYPTION_KEY) {
+    if (parsed.NODE_ENV === "production") {
+      throw new Error(
+        "ENCRYPTION_KEY environment variable must be set in production. " +
+        "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+      );
+    }
+    // Dev/test: synthesize a deterministic-per-process key so restarts with a
+    // database still decrypt successfully. Log a visible warning so developers
+    // know this isn't persisted.
+    parsed.ENCRYPTION_KEY = crypto.createHash("sha256").update("mailnowapi-dev-fallback").digest("hex");
+    console.warn("[config] ENCRYPTION_KEY not set — using a deterministic dev-only fallback. Set ENCRYPTION_KEY in .env to a 32-byte hex string.");
+  }
+  if (!parsed.JWT_SECRET) {
+    if (parsed.NODE_ENV === "production") {
+      throw new Error(
+        "JWT_SECRET environment variable must be set in production. " +
+        "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+      );
+    }
+    parsed.JWT_SECRET = "dev-only-jwt-secret-do-not-use-outside-local-development-12345678";
+    console.warn("[config] JWT_SECRET not set — using a deterministic dev-only fallback.");
+  }
+  if (parsed.NODE_ENV === "production" && !parsed.TRACKING_HMAC_SECRET) {
     throw new Error(
-      "ENCRYPTION_KEY environment variable must be set in production. " +
+      "TRACKING_HMAC_SECRET environment variable must be set in production. " +
       "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
     );
   }
-  if (parsed.NODE_ENV === "production" && !process.env.JWT_SECRET) {
-    throw new Error(
-      "JWT_SECRET environment variable must be set in production. " +
-      "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
-    );
-  }
-  _config = parsed;
+  _config = parsed as Env;
   return _config;
 }
 
@@ -107,8 +128,10 @@ export function getMailHost(): string {
 
 /**
  * Get the HMAC secret used for click tracking URL signatures.
- * Uses TRACKING_HMAC_SECRET if set, otherwise derives one from ENCRYPTION_KEY
- * to avoid reusing the encryption key for HMAC signing.
+ *
+ * Production requires TRACKING_HMAC_SECRET to be set explicitly so that
+ * compromise of ENCRYPTION_KEY does not automatically compromise tracking
+ * signatures. In development we derive a stable fallback from ENCRYPTION_KEY.
  */
 export function getTrackingSecret(): string {
   const config = getConfig();

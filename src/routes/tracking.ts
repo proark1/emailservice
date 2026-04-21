@@ -54,14 +54,26 @@ export default async function trackingRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: { type: "bad_request", message: "Invalid tracking link" } });
     }
 
-    if (!data.url.startsWith("http://") && !data.url.startsWith("https://")) {
+    // Parse the URL and enforce http/https only. Using URL() also rejects
+    // malformed URLs, protocol-smuggling tricks ("javascript:&#10;..."), and
+    // credentials-in-URL forms used for phishing.
+    let parsedTarget: URL;
+    try {
+      parsedTarget = new URL(data.url);
+    } catch {
+      return reply.status(400).send({ error: { type: "bad_request", message: "Invalid redirect URL" } });
+    }
+    if (parsedTarget.protocol !== "http:" && parsedTarget.protocol !== "https:") {
+      return reply.status(400).send({ error: { type: "bad_request", message: "Invalid redirect URL" } });
+    }
+    if (parsedTarget.username || parsedTarget.password) {
       return reply.status(400).send({ error: { type: "bad_request", message: "Invalid redirect URL" } });
     }
 
     // Record the click (fire and forget)
-    trackingService.recordClick(data.emailId, data.url).catch(() => {});
+    trackingService.recordClick(data.emailId, parsedTarget.toString()).catch(() => {});
 
-    return reply.redirect(data.url);
+    return reply.redirect(parsedTarget.toString());
   });
 
   // GET /unsubscribe/:encodedData — user-facing one-click unsubscribe (no auth)

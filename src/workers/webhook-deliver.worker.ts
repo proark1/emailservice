@@ -132,10 +132,32 @@ async function processWebhookDeliver(job: Job<WebhookDeliverJobData>) {
   }
 }
 
+/**
+ * Jittered exponential backoff strategy. For attempt N we produce a delay of
+ * `base * 2^(N-1)` multiplied by a random factor in [0.5, 1.5]. This spreads
+ * retry storms when one endpoint flaps and decorrelates clients.
+ */
+const JITTER_EXPONENTIAL = "jitterExponential";
+const MAX_BACKOFF_MS = 6 * 3_600_000; // 6 hours
+
+function jitterExponentialBackoff(attemptsMade: number, _: Error, job: Job | undefined) {
+  const base = (job?.opts?.backoff as { delay?: number } | undefined)?.delay ?? 30_000;
+  const exp = Math.min(base * 2 ** Math.max(0, attemptsMade - 1), MAX_BACKOFF_MS);
+  const factor = 0.5 + Math.random(); // 0.5–1.5
+  return Math.floor(exp * factor);
+}
+
 export function createWebhookDeliverWorker() {
   const concurrency = Number(process.env.WEBHOOK_CONCURRENCY) || 5;
   return new Worker("webhook.deliver", processWebhookDeliver, {
     connection: getRedisConnection(),
     concurrency,
+    settings: {
+      backoffStrategy: (attemptsMade: number, _type: string, err: Error, job: Job | undefined) => {
+        return jitterExponentialBackoff(attemptsMade, err, job);
+      },
+    } as any,
   });
 }
+
+export { JITTER_EXPONENTIAL };

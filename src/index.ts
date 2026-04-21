@@ -32,10 +32,10 @@ async function main() {
     genReqId: () => crypto.randomUUID(),
   });
 
-  // Cookie + JWT for web auth
+  // Cookie + JWT for web auth — JWT_SECRET is validated by loadConfig().
   await app.register(fastifyCookie);
   await app.register(fastifyJwt, {
-    secret: config.JWT_SECRET ?? "dev-jwt-secret-do-not-use-in-production",
+    secret: config.JWT_SECRET,
     cookie: { cookieName: "token", signed: false },
   });
 
@@ -84,6 +84,7 @@ async function main() {
   await app.register(errorHandler);
   await app.register(authPlugin);
   await app.register(rateLimitPlugin);
+  await app.register((await import("./plugins/csrf.js")).default);
   await app.register((await import("./plugins/api-logger.js")).default);
 
   // API Routes
@@ -105,6 +106,7 @@ async function main() {
       request.url.startsWith("/admin/") ||
       request.url.startsWith("/dashboard/") ||
       request.url.startsWith("/health") ||
+      request.url.startsWith("/readyz") ||
       request.url.startsWith("/docs") ||
       request.url.startsWith("/t/") ||
       request.url.startsWith("/c/") ||
@@ -117,12 +119,45 @@ async function main() {
     return reply.sendFile("index.html", frontendPath);
   });
 
-  // Graceful shutdown
+  // Background handles we need to drain on SIGTERM.
+  const smtpServers: Array<{ name: string; server: { close: (cb?: (err?: Error) => void) => void } }> = [];
+
+  // Graceful shutdown — stop accepting new connections first (HTTP + SMTP),
+  // then close workers/queues, then the DB. Orchestration platforms usually
+  // wait 10–30s before SIGKILL, so we target <10s total.
+  let shuttingDown = false;
   const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     app.log.info(`Received ${signal}, shutting down...`);
-    await app.close();
-    const { closeDb } = await import("./db/index.js");
-    await closeDb();
+    // 1. Close SMTP listeners so we stop accepting new mail.
+    await Promise.all(
+      smtpServers.map(
+        ({ name, server }) =>
+          new Promise<void>((resolve) => {
+            try {
+              server.close((err) => {
+                if (err) app.log.warn({ err }, `SMTP ${name} close error`);
+                resolve();
+              });
+            } catch {
+              resolve();
+            }
+          }),
+      ),
+    );
+    // 2. Close the HTTP server — Fastify drains in-flight requests.
+    try { await app.close(); } catch (err) { app.log.warn({ err }, "app.close failed"); }
+    // 3. Close BullMQ queues and Redis connection if workers were started.
+    try {
+      const { closeQueues } = await import("./queues/index.js");
+      await closeQueues();
+    } catch (err) { app.log.warn({ err }, "closeQueues failed"); }
+    // 4. Close DB pool last.
+    try {
+      const { closeDb } = await import("./db/index.js");
+      await closeDb();
+    } catch (err) { app.log.warn({ err }, "closeDb failed"); }
     process.exit(0);
   };
 
@@ -149,6 +184,7 @@ async function main() {
     inboundServer.on("error", (err: Error) => {
       app.log.error({ err }, "SMTP inbound server error");
     });
+    smtpServers.push({ name: "inbound", server: inboundServer });
   } catch (err) {
     app.log.warn({ err }, "Failed to start SMTP inbound server");
   }
@@ -162,6 +198,7 @@ async function main() {
     relayServer.on("error", (err: Error) => {
       app.log.error({ err }, "SMTP relay server error");
     });
+    smtpServers.push({ name: "relay", server: relayServer });
   } catch (err) {
     app.log.warn({ err }, "Failed to start SMTP relay server");
   }

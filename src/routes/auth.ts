@@ -4,6 +4,7 @@ import { eq, count } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { domains } from "../db/schema/index.js";
 import * as authService from "../services/auth.service.js";
+import { issueCsrfToken } from "../plugins/csrf.js";
 
 async function getOwnsDomains(accountId: string): Promise<boolean> {
   const db = getDb();
@@ -28,14 +29,15 @@ export default async function authRoutes(app: FastifyInstance) {
     const account = await authService.register(body.name, body.email, body.password);
     const token = app.jwt.sign({ id: account.id, role: account.role }, { expiresIn: "7d" });
 
+    reply.setCookie("token", token, {
+      path: "/",
+      httpOnly: true,
+      secure: process.env.NODE_ENV !== "development",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    });
+    issueCsrfToken(reply);
     return reply
-      .setCookie("token", token, {
-        path: "/",
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-      })
       .status(201)
       .send({
         data: {
@@ -58,29 +60,30 @@ export default async function authRoutes(app: FastifyInstance) {
     const account = await authService.login(body.email, body.password);
     const token = app.jwt.sign({ id: account.id, role: account.role }, { expiresIn: "7d" });
 
-    return reply
-      .setCookie("token", token, {
-        path: "/",
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7,
-      })
-      .send({
-        data: {
-          id: account.id,
-          name: account.name,
-          email: account.email,
-          role: account.role,
-          owns_domains: await getOwnsDomains(account.id),
-        },
-      });
+    reply.setCookie("token", token, {
+      path: "/",
+      httpOnly: true,
+      secure: process.env.NODE_ENV !== "development",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    issueCsrfToken(reply);
+    return reply.send({
+      data: {
+        id: account.id,
+        name: account.name,
+        email: account.email,
+        role: account.role,
+        owns_domains: await getOwnsDomains(account.id),
+      },
+    });
   });
 
   // POST /auth/logout
   app.post("/logout", async (_request, reply) => {
     return reply
       .clearCookie("token", { path: "/" })
+      .clearCookie("csrf_token", { path: "/" })
       .send({ data: { message: "Logged out" } });
   });
 
@@ -93,6 +96,10 @@ export default async function authRoutes(app: FastifyInstance) {
       const decoded = app.jwt.verify<{ id: string; role: string }>(token);
       const account = await authService.getAccountById(decoded.id);
       if (!account) return reply.status(401).send({ data: null });
+
+      // Refresh the CSRF cookie opportunistically — covers first-load after a
+      // deploy where the cookie wasn't in place yet.
+      if (!request.cookies?.csrf_token) issueCsrfToken(reply);
 
       return reply.send({
         data: {
