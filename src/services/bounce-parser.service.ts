@@ -38,17 +38,35 @@ function getHeaderValue(parsed: ParsedMail, name: string): string | undefined {
  * / rfc822 sub-parts come through as attachments in simpleParser). The RFC 3464
  * and RFC 5965 fields we care about appear as "Field-Name: value" lines in
  * those blocks regardless of part layout, so a single text scan handles both.
+ *
+ * Hard-capped to avoid unbounded memory use on forged bounces: any single
+ * attachment over MAX_PART_BYTES is skipped, and the concatenated output is
+ * truncated at MAX_TOTAL_BYTES. The interesting DSN/FBL header fields live in
+ * the first few KB, so truncation is safe.
  */
+const MAX_PART_BYTES = 1 * 1024 * 1024; // 1 MB per attachment
+const MAX_TOTAL_BYTES = 2 * 1024 * 1024; // 2 MB total
+
 function flattenBodyText(parsed: ParsedMail): string {
   const pieces: string[] = [];
-  if (parsed.text) pieces.push(parsed.text);
+  let total = 0;
+  const push = (s: string) => {
+    if (total >= MAX_TOTAL_BYTES) return;
+    const remaining = MAX_TOTAL_BYTES - total;
+    const chunk = s.length > remaining ? s.slice(0, remaining) : s;
+    pieces.push(chunk);
+    total += chunk.length;
+  };
+  if (parsed.text) push(parsed.text);
   for (const att of parsed.attachments || []) {
+    if (total >= MAX_TOTAL_BYTES) break;
     const ct = (att.contentType || "").toLowerCase();
-    if (ct.startsWith("message/") || ct.startsWith("text/")) {
-      try {
-        pieces.push(att.content.toString("utf8"));
-      } catch {}
-    }
+    if (!ct.startsWith("message/") && !ct.startsWith("text/")) continue;
+    const buf = att.content as Buffer | undefined;
+    if (!buf || buf.length === 0 || buf.length > MAX_PART_BYTES) continue;
+    try {
+      push(buf.toString("utf8"));
+    } catch {}
   }
   return pieces.join("\n\n");
 }

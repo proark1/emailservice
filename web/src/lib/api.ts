@@ -1,9 +1,28 @@
+/**
+ * Read a cookie value by name. Returns undefined if the cookie isn't present.
+ * Used to pull the double-submit CSRF token so we can echo it in a header.
+ */
+function readCookie(name: string): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+const UNSAFE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
+
 export async function api<T = any>(path: string, options?: RequestInit): Promise<T> {
+  const method = (options?.method || "GET").toUpperCase();
+  const needsCsrf = UNSAFE_METHODS.has(method) && (path.startsWith("/dashboard") || path.startsWith("/admin"));
+  const csrfToken = needsCsrf ? readCookie("csrf_token") : undefined;
   const res = await fetch(path, {
     credentials: "include",
     // Only set Content-Type for requests that have a body — Fastify 5 rejects
     // Content-Type: application/json with an empty body (e.g. DELETE requests).
-    headers: { ...(options?.body !== undefined ? { "Content-Type": "application/json" } : {}), ...options?.headers },
+    headers: {
+      ...(options?.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+      ...options?.headers,
+    },
     ...options,
   });
   const text = await res.text();

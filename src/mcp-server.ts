@@ -57,11 +57,22 @@ async function api(
   return { ok: res.ok, status: res.status, body: parsed };
 }
 
+/**
+ * Render a REST response as an MCP tool result string. Success returns pretty
+ * JSON. On failure we surface the API's standardized error envelope
+ * `{ error: { type, message, details? } }` so an agent can branch on `type`
+ * (e.g. `validation_error`, `rate_limit_exceeded`, `not_found`).
+ */
 function formatResult(res: ApiResponse): string {
   if (res.ok) {
     return JSON.stringify(res.body, null, 2);
   }
-  return `Error ${res.status}: ${JSON.stringify(res.body, null, 2)}`;
+  const err = (res.body as { error?: { type?: string; message?: string; details?: unknown } })?.error;
+  const type = err?.type ?? "http_error";
+  const message = err?.message ?? `HTTP ${res.status}`;
+  const payload: Record<string, unknown> = { status: res.status, type, message };
+  if (err?.details !== undefined) payload.details = err.details;
+  return `Error: ${JSON.stringify(payload, null, 2)}`;
 }
 
 // ---------------------------------------------------------------------------

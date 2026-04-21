@@ -2,8 +2,37 @@ import { SMTPServer } from "smtp-server";
 import { simpleParser } from "mailparser";
 import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
-import { domains, inboundEmails } from "../db/schema/index.js";
+import { domains, emails, inboundEmails } from "../db/schema/index.js";
 import { isRedisConfigured, getInboundEmailQueue } from "../queues/index.js";
+
+/**
+ * Look up the original outbound email this bounce/FBL is referring to.
+ *
+ * Forged DSNs are trivial to craft (just paste in arbitrary `Final-Recipient:`
+ * lines), so before we mutate suppression state we confirm that the
+ * Original-Message-Id actually names a message *we* sent from *this* account,
+ * to the recipient the DSN is claiming bounced.
+ *
+ * Returns the matching email row or null when the bounce can't be attributed.
+ */
+async function findOriginalSend(
+  accountId: string,
+  originalMessageId: string | undefined,
+  recipient: string,
+) {
+  if (!originalMessageId) return null;
+  const db = getDb();
+  const [row] = await db
+    .select({ id: emails.id, toAddresses: emails.toAddresses, accountId: emails.accountId })
+    .from(emails)
+    .where(and(eq(emails.accountId, accountId), eq(emails.messageId, originalMessageId)))
+    .limit(1);
+  if (!row) return null;
+  const target = recipient.toLowerCase();
+  const recipients = (row.toAddresses || []).map((r) => r.toLowerCase());
+  if (!recipients.includes(target)) return null;
+  return row;
+}
 
 /**
  * Check that a domain is verified and configured for receiving.
@@ -110,14 +139,20 @@ export function createInboundServer(): SMTPServer {
               if (isDsn(parsed)) {
                 const bounces = parseDsn(parsed);
                 for (const b of bounces) {
+                  const original = await findOriginalSend(deliveryAccountId, b.originalMessageId, b.recipient);
+                  if (!original) {
+                    // Unattributable DSN — likely forged or out-of-date. Drop silently
+                    // rather than letting it mutate suppression state.
+                    continue;
+                  }
                   if (b.permanent) {
-                    await addSuppression(deliveryAccountId, b.recipient, "bounce").catch(() => {});
+                    await addSuppression(deliveryAccountId, b.recipient, "bounce", original.id).catch(() => {});
                   }
                   await dispatchEvent(
                     deliveryAccountId,
                     b.permanent ? "email.bounced" : "email.soft_bounced",
                     crypto.randomUUID(),
-                    { recipient: b.recipient, status: b.status, diagnostic: b.diagnostic, original_message_id: b.originalMessageId },
+                    { recipient: b.recipient, status: b.status, diagnostic: b.diagnostic, original_message_id: b.originalMessageId, email_id: original.id },
                   ).catch(() => {});
                 }
                 continue; // skip inbox storage
@@ -126,12 +161,14 @@ export function createInboundServer(): SMTPServer {
               if (isFbl(parsed)) {
                 const complaints = parseFbl(parsed);
                 for (const c of complaints) {
-                  await addSuppression(deliveryAccountId, c.complainant, "complaint").catch(() => {});
+                  const original = await findOriginalSend(deliveryAccountId, c.originalMessageId, c.complainant);
+                  if (!original) continue;
+                  await addSuppression(deliveryAccountId, c.complainant, "complaint", original.id).catch(() => {});
                   await dispatchEvent(
                     deliveryAccountId,
                     "email.complained",
                     crypto.randomUUID(),
-                    { complainant: c.complainant, feedback_type: c.feedbackType, original_message_id: c.originalMessageId },
+                    { complainant: c.complainant, feedback_type: c.feedbackType, original_message_id: c.originalMessageId, email_id: original.id },
                   ).catch(() => {});
                 }
                 continue; // skip inbox storage

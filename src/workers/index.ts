@@ -1,4 +1,5 @@
 import type { Worker } from "bullmq";
+import { childLogger } from "../lib/logger.js";
 import { createEmailSendWorker } from "./email-send.worker.js";
 import { createDnsVerifyWorker } from "./dns-verify.worker.js";
 import { createWebhookDeliverWorker } from "./webhook-deliver.worker.js";
@@ -13,11 +14,20 @@ import { createAbTestWorker } from "./abtest.worker.js";
 import { createSequenceWorker } from "./sequence.worker.js";
 
 function attachErrorHandlers(worker: Worker, name: string) {
+  const log = childLogger(`worker:${name}`);
   worker.on("error", (err) => {
-    console.error(`[worker:${name}] Error:`, err.message);
+    log.error({ err: err.message }, "worker error");
   });
   worker.on("failed", (job, err) => {
-    console.error(`[worker:${name}] Job ${job?.id ?? "unknown"} failed:`, err.message);
+    log.error(
+      {
+        jobId: job?.id ?? null,
+        attemptsMade: job?.attemptsMade ?? null,
+        maxAttempts: job?.opts?.attempts ?? null,
+        err: err.message,
+      },
+      "job failed",
+    );
   });
 }
 
@@ -43,15 +53,10 @@ export function startAllWorkers() {
 
   const workers = workerEntries.map((e) => e.worker);
 
-  console.log(`Started ${workers.length} workers:`);
-  console.log("  - email.send (concurrency: 10)");
-  console.log("  - dns.verify (concurrency: 3)");
-  console.log("  - webhook.deliver (concurrency: 5)");
-  console.log("  - email.inbound (concurrency: 5)");
-  console.log("  - email.scheduled (concurrency: 1)");
-  console.log("  - email.warmup (concurrency: 1, recurring: 60m)");
-  console.log("  - trash.purge (concurrency: 1, recurring: 6h)");
-  console.log("  - mailbox.sync (concurrency: 1, recurring: 5m)");
+  childLogger("workers").info(
+    { count: workers.length, names: workerEntries.map((e) => e.name) },
+    "workers started",
+  );
 
   return workers;
 }

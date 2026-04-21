@@ -1,6 +1,8 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { ToastProvider } from "./components/Toast";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -9,6 +11,25 @@ import AdminPanel from "./pages/AdminPanel";
 import AcceptInvite from "./pages/AcceptInvite";
 import NotFound from "./pages/NotFound";
 import type { ReactNode } from "react";
+
+/**
+ * Update the browser tab title based on the current route. Keeps individual
+ * pages free of title boilerplate and gives users meaningful tab names when
+ * they have several dashboard tabs open.
+ */
+function RouteTitle() {
+  const location = useLocation();
+  useEffect(() => {
+    const base = "MailNowAPI";
+    const path = location.pathname;
+    const segment = path.split("/").filter(Boolean).slice(-1)[0] || "";
+    const pretty = segment
+      ? segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, " ")
+      : "";
+    document.title = pretty ? `${pretty} · ${base}` : base;
+  }, [location.pathname]);
+  return null;
+}
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -46,10 +67,13 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <AppRoutes />
-      </ToastProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ToastProvider>
+          <RouteTitle />
+          <AppRoutes />
+        </ToastProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

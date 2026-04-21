@@ -50,7 +50,10 @@ export function getWebhookDeliverQueue() {
   return getQueue("webhook.deliver", {
     defaultJobOptions: {
       attempts: 6,
-      backoff: { type: "exponential", delay: 30_000 },
+      // Jittered exponential backoff — a custom strategy of the same name
+      // must be registered on the worker (see src/workers/webhook-deliver.worker.ts).
+      // Prevents thousands of retries landing in lockstep when one endpoint flaps.
+      backoff: { type: "jitterExponential", delay: 30_000 },
       removeOnComplete: { count: 500 },
       removeOnFail: { age: 7 * 24 * 3600 },
     },

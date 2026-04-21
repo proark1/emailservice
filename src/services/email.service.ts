@@ -3,22 +3,24 @@ import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, suppressions } from "../db/schema/index.js";
 import { isRedisConfigured, getEmailSendQueue, getRedisConnection } from "../queues/index.js";
 import { transformHtml } from "../lib/html-transform.js";
-import { checkIdempotencyKey, storeIdempotencyKey } from "../lib/idempotency.js";
-import { ValidationError, NotFoundError, ForbiddenError, RateLimitError } from "../lib/errors.js";
+import { reserveIdempotencyKey, storeIdempotencyKey } from "../lib/idempotency.js";
+import { ValidationError, NotFoundError, ForbiddenError, RateLimitError, ConflictError } from "../lib/errors.js";
 import type { SendEmailInput } from "../schemas/email.schema.js";
 
 /**
  * Per-domain outbound rate limit. Shared-IP pools suffer when one domain
- * bursts — this is the safety valve. Redis INCR keyed per minute; when Redis
- * is absent the check is skipped (graceful degrade, matching the rest of the
- * queue-dependent code). Warmup still caps daily volume separately.
+ * bursts — this is the safety valve. Redis INCR keyed per minute. When Redis
+ * isn't configured at all we skip (this is a feature of deployments that opt
+ * out of Redis entirely). When Redis IS configured but unreachable we fail
+ * the send instead of silently bypassing — a misconfigured Redis must not
+ * turn a 100-per-min cap into unlimited.
  */
 async function checkDomainRateLimit(domainId: string, limitPerMinute: number): Promise<void> {
   if (!isRedisConfigured()) return;
+  const redis = getRedisConnection();
+  const bucket = Math.floor(Date.now() / 60_000);
+  const key = `rl:send:${domainId}:${bucket}`;
   try {
-    const redis = getRedisConnection();
-    const bucket = Math.floor(Date.now() / 60_000);
-    const key = `rl:send:${domainId}:${bucket}`;
     const count = await redis.incr(key);
     if (count === 1) await redis.expire(key, 65);
     if (count > limitPerMinute) {
@@ -26,8 +28,41 @@ async function checkDomainRateLimit(domainId: string, limitPerMinute: number): P
     }
   } catch (err) {
     if (err instanceof RateLimitError) throw err;
-    // Redis blip — don't block sends.
+    throw new RateLimitError();
   }
+}
+
+/**
+ * Fire-and-forget direct send with exponential backoff. Used when Redis is
+ * unavailable (either unconfigured or unreachable) and we need to attempt
+ * delivery without the queue worker pipeline.
+ *
+ * Three attempts at 0 / 2s / 4s. After that we mark the email as failed and
+ * stop — a caller can re-send with a fresh idempotency key.
+ */
+function sendDirectlyWithRetry(emailId: string, accountId: string): void {
+  const maxAttempts = 3;
+  const run = async () => {
+    const { sendEmailDirect } = await import("./email-sender.js");
+    let lastError: unknown;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        await sendEmailDirect(emailId, accountId);
+        return;
+      } catch (err) {
+        lastError = err;
+        if (attempt < maxAttempts - 1) {
+          await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt));
+        }
+      }
+    }
+    const msg = lastError instanceof Error ? lastError.message : String(lastError);
+    console.error(`[email-send] Direct send failed after ${maxAttempts} attempts for email ${emailId}: ${msg}`);
+    try {
+      await getDb().update(emails).set({ status: "failed" }).where(eq(emails.id, emailId));
+    } catch {}
+  };
+  run().catch(() => {});
 }
 
 export interface SendEmailOptions {
@@ -50,11 +85,16 @@ function parseFromAddress(from: string): { address: string; name?: string } {
 export async function sendEmail(accountId: string, input: SendEmailInput, options: SendEmailOptions = {}) {
   const db = getDb();
 
-  // Check idempotency
+  // Check + atomically reserve the idempotency key. Two concurrent requests
+  // with the same key can no longer both execute the handler — the second
+  // observes `in_flight` and is told to retry, or `cached` once we finalize.
   if (input.idempotency_key) {
-    const cached = await checkIdempotencyKey(accountId, input.idempotency_key);
-    if (cached) {
-      return { cached: true, response: cached };
+    const reservation = await reserveIdempotencyKey(accountId, input.idempotency_key);
+    if (reservation.status === "cached") {
+      return { cached: true, response: reservation.response };
+    }
+    if (reservation.status === "in_flight") {
+      throw new ConflictError("A request with this idempotency_key is still being processed. Retry after it completes.");
     }
   }
 
@@ -226,23 +266,14 @@ export async function sendEmail(accountId: string, input: SendEmailInput, option
     try {
       await getEmailSendQueue().add("send", { emailId: email.id, accountId });
     } catch {
-      // Queue failed, send directly
-      const { sendEmailDirect } = await import("./email-sender.js");
-      sendEmailDirect(email.id, accountId).catch((err) => {
-        console.error(`[email-send] Direct send failed for email ${email.id}:`, err?.message || err);
-        db.update(emails).set({ status: "failed" }).where(eq(emails.id, email.id)).catch(() => {});
-      });
+      sendDirectlyWithRetry(email.id, accountId);
     }
   } else if (delay > 0 && isRedisConfigured()) {
     // Scheduled emails need the queue
     await getEmailSendQueue().add("send", { emailId: email.id, accountId }, { delay });
   } else if (delay === 0) {
     // No Redis, immediate send — send directly (async, don't block the response)
-    const { sendEmailDirect } = await import("./email-sender.js");
-    sendEmailDirect(email.id, accountId).catch((err) => {
-      console.error(`[email-send] Direct send failed for email ${email.id}:`, err?.message || err);
-      db.update(emails).set({ status: "failed" }).where(eq(emails.id, email.id)).catch(() => {});
-    });
+    sendDirectlyWithRetry(email.id, accountId);
   } else {
     // Scheduled email but no Redis — leave in "queued" status for later processing
     console.warn(`[email-send] Email ${email.id} is scheduled but Redis is unavailable. Left in queued status.`);
@@ -258,28 +289,68 @@ export async function sendEmail(accountId: string, input: SendEmailInput, option
   return { cached: false, response };
 }
 
-export async function getEmail(accountId: string, emailId: string) {
+/**
+ * Constrain a query to the domains belonging to a company-scoped API key. When
+ * the key is user-scoped (companyScopeId is null/undefined) we don't filter on
+ * company at all and the caller sees every email on their account.
+ */
+async function companyScopeCondition(accountId: string, companyScopeId: string | null | undefined) {
+  if (!companyScopeId) return null;
   const db = getDb();
+  const { inArray } = await import("drizzle-orm");
+  const companyDomainIds = (
+    await db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(and(eq(domains.accountId, accountId), eq(domains.companyId, companyScopeId)))
+  ).map((d) => d.id);
+  if (companyDomainIds.length === 0) return inArray(emails.domainId, ["00000000-0000-0000-0000-000000000000"]);
+  return inArray(emails.domainId, companyDomainIds);
+}
+
+export async function getEmail(accountId: string, emailId: string, options: SendEmailOptions = {}) {
+  const db = getDb();
+  const conditions = [eq(emails.id, emailId), eq(emails.accountId, accountId)];
+  const scope = await companyScopeCondition(accountId, options.companyScopeId);
+  if (scope) conditions.push(scope);
+
   const [email] = await db
     .select()
     .from(emails)
-    .where(and(eq(emails.id, emailId), eq(emails.accountId, accountId)));
+    .where(and(...conditions));
 
   if (!email) throw new NotFoundError("Email");
   return email;
 }
 
-export async function listEmails(accountId: string, options: { limit: number; cursor?: string; status?: string }) {
+export async function listEmails(
+  accountId: string,
+  options: { limit: number; cursor?: string; status?: string; companyScopeId?: string | null },
+) {
   const db = getDb();
   const conditions = [eq(emails.accountId, accountId)];
 
-  // Cursor-based pagination: cursor is an email ID, fetch items created before it
+  const scope = await companyScopeCondition(accountId, options.companyScopeId);
+  if (scope) conditions.push(scope);
+
+  // Keyset pagination over (createdAt DESC, id DESC). The cursor is the last
+  // email id from the previous page; we look up its createdAt and then take
+  // rows strictly before it OR tied on createdAt but with a smaller id. This
+  // removes the duplicate-timestamp skip bug where two rows with identical
+  // createdAt could either be visited twice or skipped.
   if (options.cursor) {
-    const { lt } = await import("drizzle-orm");
-    // Look up the cursor email's createdAt to use for keyset pagination
-    const [cursorEmail] = await db.select({ createdAt: emails.createdAt }).from(emails).where(and(eq(emails.id, options.cursor), eq(emails.accountId, accountId)));
+    const { lt, or } = await import("drizzle-orm");
+    const [cursorEmail] = await db
+      .select({ createdAt: emails.createdAt, id: emails.id })
+      .from(emails)
+      .where(and(eq(emails.id, options.cursor), eq(emails.accountId, accountId)));
     if (cursorEmail) {
-      conditions.push(lt(emails.createdAt, cursorEmail.createdAt));
+      conditions.push(
+        or(
+          lt(emails.createdAt, cursorEmail.createdAt),
+          and(eq(emails.createdAt, cursorEmail.createdAt), lt(emails.id, cursorEmail.id))!,
+        )!,
+      );
     }
   }
 
@@ -291,16 +362,19 @@ export async function listEmails(accountId: string, options: { limit: number; cu
     .select()
     .from(emails)
     .where(and(...conditions))
-    .orderBy(desc(emails.createdAt))
+    .orderBy(desc(emails.createdAt), desc(emails.id))
     .limit(options.limit + 1);
 }
 
-export async function cancelScheduledEmail(accountId: string, emailId: string) {
+export async function cancelScheduledEmail(accountId: string, emailId: string, options: SendEmailOptions = {}) {
   const db = getDb();
+  const conditions = [eq(emails.id, emailId), eq(emails.accountId, accountId)];
+  const scope = await companyScopeCondition(accountId, options.companyScopeId);
+  if (scope) conditions.push(scope);
   const [email] = await db
     .select()
     .from(emails)
-    .where(and(eq(emails.id, emailId), eq(emails.accountId, accountId)));
+    .where(and(...conditions));
 
   if (!email) throw new NotFoundError("Email");
   if (email.status !== "queued" || !email.scheduledAt) {
