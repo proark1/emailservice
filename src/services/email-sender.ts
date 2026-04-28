@@ -407,7 +407,6 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    const errorStack = error instanceof Error ? error.stack : undefined;
     const errorName = error instanceof Error ? error.name : undefined;
     const failureCode = classifyFailure(errorMessage);
     const truncatedReason = errorMessage.length > 2000 ? errorMessage.slice(0, 2000) + "…" : errorMessage;
@@ -429,9 +428,10 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
         error: truncatedReason,
         code: failureCode,
         name: errorName,
-        // First couple of stack frames are useful for diagnosing transport-layer
-        // issues without dumping the whole node internals trace.
-        stack: errorStack?.split("\n").slice(0, 4).join("\n"),
+        // Intentionally no stack: in jsonb on a per-failure row it adds storage
+        // for little triage value — transport-layer errors typically dump
+        // node:net internals. failureReason + classified code on the email
+        // row are enough to grep / group by in admin Analytics.
       },
     });
 
