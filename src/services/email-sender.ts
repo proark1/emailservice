@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import crypto from "node:crypto";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, connectedMailboxes } from "../db/schema/index.js";
 import { getDkimPrivateKey } from "./dkim.service.js";
@@ -127,17 +127,36 @@ export async function sendSystemEmail(options: {
 }
 
 /**
+ * Coarse classifier for outbound failures. The error message is captured raw
+ * for human display; the code is a stable label we can group on in admin.
+ */
+function classifyFailure(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("econnrefused") || m.includes("etimedout") || m.includes("connection") || m.includes("connect ")) return "smtp_connection";
+  if (m.includes("eauth") || m.includes("authentication") || m.includes("invalid login") || m.includes("535")) return "smtp_auth";
+  if (m.includes("dkim")) return "dkim";
+  if (m.includes("dns") || m.includes("enotfound") || m.includes("getaddrinfo")) return "dns";
+  if (m.includes("certificate") || m.includes("self-signed") || m.includes("unable to verify")) return "tls";
+  if (m.includes("550") || m.includes("rejected") || m.includes("undeliverable") || m.includes("bounce")) return "rejected";
+  if (m.includes("rate") || m.includes("429") || m.includes("throttle")) return "rate_limited";
+  return "unknown";
+}
+
+/**
  * Send an email directly (no queue/Redis needed).
  * Used as fallback when Redis is unavailable, or called by the worker.
  */
 export async function sendEmailDirect(emailId: string, accountId: string): Promise<void> {
   const db = getDb();
 
-  // Atomically claim the email for sending — prevents duplicate sends from concurrent workers
+  // Atomically claim the email for sending. We include "failed" so a previous
+  // attempt that flipped the row to failed can be re-claimed by a retry —
+  // without this, BullMQ retries (attempts: 3) and the direct-send retry loop
+  // are silent no-ops because the WHERE never matches after the first failure.
   const [email] = await db
     .update(emails)
     .set({ status: "sending", updatedAt: new Date() })
-    .where(and(eq(emails.id, emailId), inArray(emails.status, ["queued", "sending"])))
+    .where(and(eq(emails.id, emailId), inArray(emails.status, ["queued", "sending", "failed"])))
     .returning();
 
   if (!email) return;
@@ -284,6 +303,9 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       messageId: info.messageId,
       lastEventAt: new Date(),
       updatedAt: new Date(),
+      // Clear any previous failure context once the send succeeds (e.g. on retry).
+      failureReason: null,
+      failureCode: null,
     }).where(eq(emails.id, emailId));
 
     await db.insert(emailEvents).values({
@@ -294,18 +316,32 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorName = error instanceof Error ? error.name : undefined;
+    const failureCode = classifyFailure(errorMessage);
+    const truncatedReason = errorMessage.length > 2000 ? errorMessage.slice(0, 2000) + "…" : errorMessage;
 
     await db.update(emails).set({
       status: "failed",
       lastEventAt: new Date(),
       updatedAt: new Date(),
+      failureReason: truncatedReason,
+      failureCode,
+      failureCount: sql`${emails.failureCount} + 1`,
     }).where(eq(emails.id, emailId));
 
     await db.insert(emailEvents).values({
       emailId,
       accountId,
       type: "failed",
-      data: { error: errorMessage },
+      data: {
+        error: truncatedReason,
+        code: failureCode,
+        name: errorName,
+        // First couple of stack frames are useful for diagnosing transport-layer
+        // issues without dumping the whole node internals trace.
+        stack: errorStack?.split("\n").slice(0, 4).join("\n"),
+      },
     });
 
     if (errorMessage.includes("550") || errorMessage.includes("bounce") || errorMessage.includes("rejected") || errorMessage.includes("undeliverable")) {

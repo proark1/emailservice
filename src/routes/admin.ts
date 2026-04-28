@@ -119,6 +119,20 @@ export default async function adminRoutes(app: FastifyInstance) {
     return { data: await adminAnalytics.getApiKeyUsage() };
   });
 
+  // Recent failed sends with captured error reason — used by the admin
+  // Analytics page to surface "why isn't this going out?" inline.
+  app.get("/analytics/failures", async (request) => {
+    const { limit, days } = z.object({
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+      days: z.coerce.number().int().min(1).max(90).default(7),
+    }).parse(request.query);
+    const [recent, breakdown] = await Promise.all([
+      adminAnalytics.getRecentFailures(limit),
+      adminAnalytics.getFailureBreakdown(days),
+    ]);
+    return { data: { recent, breakdown } };
+  });
+
   // --- Warmup management (admin can see all warmups across accounts) ---
   app.get("/warmups", async () => {
     const { warmupSchedules } = await import("../db/schema/index.js");
