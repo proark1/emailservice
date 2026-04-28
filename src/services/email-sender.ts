@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import crypto from "node:crypto";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, notInArray, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, connectedMailboxes } from "../db/schema/index.js";
 import { getDkimPrivateKey } from "./dkim.service.js";
@@ -127,6 +127,14 @@ export async function sendSystemEmail(options: {
 }
 
 /**
+ * Failure codes we treat as permanent — retrying these immediately is wasteful
+ * and (for `rejected` / `smtp_auth`) actively harmful to sender reputation.
+ * A retry only makes sense once the underlying config / target has changed,
+ * which the caller signals by re-enqueueing with a fresh idempotency key.
+ */
+const PERMANENT_FAILURE_CODES = ["rejected", "smtp_auth", "dkim", "tls"] as const;
+
+/**
  * Coarse classifier for outbound failures. The error message is captured raw
  * for human display; the code is a stable label we can group on in admin.
  */
@@ -153,10 +161,16 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
   // attempt that flipped the row to failed can be re-claimed by a retry —
   // without this, BullMQ retries (attempts: 3) and the direct-send retry loop
   // are silent no-ops because the WHERE never matches after the first failure.
+  // BUT: skip rows whose last failure was permanent (recipient rejection, auth,
+  // DKIM, TLS) — re-attempting those just burns SMTP attempts and hurts reputation.
   const [email] = await db
     .update(emails)
     .set({ status: "sending", updatedAt: new Date() })
-    .where(and(eq(emails.id, emailId), inArray(emails.status, ["queued", "sending", "failed"])))
+    .where(and(
+      eq(emails.id, emailId),
+      inArray(emails.status, ["queued", "sending", "failed"]),
+      or(isNull(emails.failureCode), notInArray(emails.failureCode, [...PERMANENT_FAILURE_CODES])),
+    ))
     .returning();
 
   if (!email) return;
@@ -344,7 +358,7 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       },
     });
 
-    if (errorMessage.includes("550") || errorMessage.includes("bounce") || errorMessage.includes("rejected") || errorMessage.includes("undeliverable")) {
+    if (failureCode === "rejected") {
       try {
         for (const addr of (email.toAddresses || [])) {
           await processDeliveryFailure(accountId, addr, "bounce");
