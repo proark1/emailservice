@@ -97,6 +97,7 @@ function AdminAnalytics() {
   const [webhookHealth, setWebhookHealth] = useState<any>(null);
   const [suppressions, setSuppressions] = useState<any>(null);
   const [activity, setActivity] = useState<any[]>([]);
+  const [failures, setFailures] = useState<{ recent: any[]; breakdown: { days: number; total: number; by_code: Record<string, number> } } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -112,6 +113,7 @@ function AdminAnalytics() {
       api("/admin/analytics/webhooks").then((r) => setWebhookHealth(r.data)),
       api("/admin/analytics/suppressions").then((r) => setSuppressions(r.data)),
       api("/admin/analytics/activity").then((r) => setActivity(r.data)),
+      api("/admin/analytics/failures?limit=50&days=7").then((r) => setFailures(r.data)),
     ]).then((results) => {
       const failed = results.filter((r) => r.status === "rejected");
       if (failed.length === results.length) setError("Failed to load analytics. Check admin access.");
@@ -211,6 +213,56 @@ function AdminAnalytics() {
           </div>
         )}
       </div>
+
+      {/* Send Failures — what's blocking outbound mail */}
+      {failures && (failures.recent.length > 0 || failures.breakdown.total > 0) && (
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="text-[14px] font-semibold text-gray-900">Send Failures (last {failures.breakdown.days}d)</h3>
+            <span className="text-[12px] text-red-600 font-mono">{failures.breakdown.total} failed</span>
+          </div>
+          {Object.keys(failures.breakdown.by_code).length > 0 && (
+            <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap gap-2">
+              {Object.entries(failures.breakdown.by_code).map(([code, n]) => (
+                <span key={code} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium border bg-rose-50 text-rose-700 border-rose-200">
+                  <span className="font-mono">{code}</span>
+                  <span className="text-rose-500">×{n}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          {failures.recent.length === 0 ? (
+            <div className="p-6 text-center text-[13px] text-gray-500">No recent failures.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Time</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Account</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">From → To</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Code</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Reason</th>
+                    <th className="text-right px-4 py-3 text-[11px] font-medium text-gray-500 uppercase">Attempts</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {failures.recent.map((f: any) => (
+                    <tr key={f.id} className="hover:bg-gray-50 align-top">
+                      <td className="px-4 py-2 text-[12px] text-gray-500 font-mono whitespace-nowrap">{f.last_event_at ? new Date(f.last_event_at).toLocaleString() : "—"}</td>
+                      <td className="px-4 py-2 text-[13px] text-gray-600">{f.account_name}<div className="text-[11px] text-gray-400">{f.account_email}</div></td>
+                      <td className="px-4 py-2 text-[12px] text-gray-600 font-mono">{f.from_address}<div className="text-[11px] text-gray-400 truncate max-w-[260px]">→ {Array.isArray(f.to_addresses) ? f.to_addresses.join(", ") : f.to_addresses}</div></td>
+                      <td className="px-4 py-2"><span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium border bg-rose-50 text-rose-700 border-rose-200 font-mono">{f.failure_code || "unknown"}</span></td>
+                      <td className="px-4 py-2 text-[12px] text-gray-700 font-mono whitespace-pre-wrap break-words max-w-[420px]">{f.failure_reason}</td>
+                      <td className="px-4 py-2 text-[13px] text-gray-600 text-right font-mono">{f.failure_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Recent Activity */}
       {activity.length > 0 && (

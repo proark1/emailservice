@@ -29,6 +29,15 @@ export const emails = pgTable("emails", {
   sentAt: timestamp("sent_at", { withTimezone: true }),
   deliveredAt: timestamp("delivered_at", { withTimezone: true }),
   lastEventAt: timestamp("last_event_at", { withTimezone: true }),
+  // Last-attempt failure details, captured directly on the email row so the
+  // dashboard / admin analytics can surface "why this didn't go out" without
+  // having to query email_events for every listed row. failureReason is the
+  // short error message (smtp transport error, dkim error, etc); failureCode
+  // is a coarse classifier (smtp_connection, smtp_auth, dkim, validation,
+  // unknown) so we can group failures in admin views.
+  failureReason: text("failure_reason"),
+  failureCode: varchar("failure_code", { length: 32 }),
+  failureCount: integer("failure_count").notNull().default(0),
   batchId: uuid("batch_id"),
   openCount: integer("open_count").notNull().default(0),
   clickCount: integer("click_count").notNull().default(0),

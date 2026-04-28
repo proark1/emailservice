@@ -416,6 +416,9 @@ export function formatEmailResponse(email: typeof emails.$inferSelect) {
     open_count: email.openCount,
     click_count: email.clickCount,
     tags: email.tags,
+    failure_reason: email.failureReason ?? null,
+    failure_code: email.failureCode ?? null,
+    failure_count: email.failureCount ?? 0,
     created_at: email.createdAt.toISOString(),
   };
 }

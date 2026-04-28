@@ -1,4 +1,4 @@
-import { eq, sql, count, gte, desc, isNull, isNotNull } from "drizzle-orm";
+import { eq, sql, count, gte, desc, isNull, isNotNull, and } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import {
   accounts, emails, emailEvents, domains, apiKeys,
@@ -237,6 +237,75 @@ export async function getRecentActivity(limit: number = 50) {
     subject: r.subject,
     account_name: r.accountName,
   }));
+}
+
+/**
+ * Recent failed sends across all accounts with the captured error message and
+ * classifier. Used by the admin Analytics page to answer "why aren't emails
+ * going out" without hopping into psql.
+ */
+export async function getRecentFailures(limit: number = 50) {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: emails.id,
+      subject: emails.subject,
+      fromAddress: emails.fromAddress,
+      toAddresses: emails.toAddresses,
+      failureReason: emails.failureReason,
+      failureCode: emails.failureCode,
+      failureCount: emails.failureCount,
+      lastEventAt: emails.lastEventAt,
+      createdAt: emails.createdAt,
+      domainName: domains.name,
+      accountName: accounts.name,
+      accountEmail: accounts.email,
+    })
+    .from(emails)
+    .innerJoin(accounts, eq(emails.accountId, accounts.id))
+    .leftJoin(domains, eq(emails.domainId, domains.id))
+    .where(and(eq(emails.status, "failed"), isNotNull(emails.failureReason)))
+    .orderBy(desc(emails.lastEventAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    id: r.id,
+    subject: r.subject,
+    from_address: r.fromAddress,
+    to_addresses: r.toAddresses,
+    failure_reason: r.failureReason,
+    failure_code: r.failureCode,
+    failure_count: r.failureCount,
+    last_event_at: r.lastEventAt?.toISOString() ?? null,
+    created_at: r.createdAt?.toISOString() ?? null,
+    domain_name: r.domainName,
+    account_name: r.accountName,
+    account_email: r.accountEmail,
+  }));
+}
+
+/**
+ * Aggregate failure-code counts so admins can see whether the spike is SMTP
+ * connection trouble vs. DKIM vs. provider rejections at a glance.
+ */
+export async function getFailureBreakdown(days: number = 7) {
+  const db = getDb();
+  const since = new Date(Date.now() - days * 86_400_000);
+  const rows = await db
+    .select({
+      code: emails.failureCode,
+      count: count(),
+    })
+    .from(emails)
+    .where(and(eq(emails.status, "failed"), isNotNull(emails.failureReason), gte(emails.lastEventAt, since)))
+    .groupBy(emails.failureCode);
+
+  const total = rows.reduce((sum, r) => sum + Number(r.count), 0);
+  return {
+    days,
+    total,
+    by_code: Object.fromEntries(rows.map((r) => [r.code ?? "unknown", Number(r.count)])),
+  };
 }
 
 export async function getApiKeyUsage() {
