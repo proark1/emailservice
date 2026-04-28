@@ -311,6 +311,7 @@ Modal supports Escape key dismissal and has ARIA attributes for accessibility.
 | `REDIS_URL` | No | Redis URL (queues disabled if absent) |
 | `ENCRYPTION_KEY` | Yes (prod) | 32-byte hex key for AES-256-GCM. Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `JWT_SECRET` | Yes | Secret for dashboard session JWTs |
+| `TRACKING_HMAC_SECRET` | Yes (prod) | 32-byte hex secret for click-tracking URL signatures. Independent of `ENCRYPTION_KEY` so a leak of one does not compromise the other. App refuses to start in production without it. **Must stay stable across restarts and identical across hosts** — rotating it invalidates every previously-emitted click-tracking URL. |
 | `BASE_URL` | Yes | Public URL of the API server |
 | `MAIL_HOST` | Recommended | Hostname for MX/SPF records. Auto-detected from Railway/Render env vars. |
 | `SMTP_HOST` | No | External SMTP relay host (skip for direct send) |
@@ -376,6 +377,101 @@ curl -X POST http://localhost:3000/v1/companies/$CID/members \
   -H "Authorization: Bearer es_ROOT" -H "Content-Type: application/json" \
   -d "{\"email\":\"alice@ext\",\"name\":\"Alice\",\"domain_id\":\"$DID\",\"local_part\":\"alice\",\"issue_api_key\":true}"
 ```
+
+---
+
+## Production deployment (mailnowapi.com)
+
+The production stack runs on a single **Hetzner box** (hostname `mail`, public IP `95.217.161.0`). GitHub → Railway is the CI/CD pipeline that pushes new images to that host; the app itself does **not** run on Railway.
+
+### Layout on the host
+
+```
+/opt/emailservice/                       # git checkout, deploy script rsyncs/pulls here
+  .env                                   # ← prod env vars live here (single source of truth)
+  docker-compose.yml                     # DEV compose (postgres+redis+mailpit). NOT used in prod.
+  deploy/
+    .env                                 # symlink → /opt/emailservice/.env
+    docker-compose.prod.yml              # ← actual prod compose, defines app/worker/smtp-relay
+    Caddyfile                            # TLS terminator on :80/:443 (caddy systemd service)
+    deploy.sh, setup.sh, sync-domains.sh
+    postfix/                             # Postfix config snippets
+```
+
+### Compose services (run from `/opt/emailservice/deploy`)
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+```
+
+| Container | Service | What it runs | Ports |
+|---|---|---|---|
+| `deploy-app-1` | `app` | `node dist/index.js` (API + dashboard + SMTP inbound :2525) | `127.0.0.1:3000`, `0.0.0.0:2525` |
+| `deploy-worker-1` | `worker` | `node dist/worker.js` (BullMQ workers) | — |
+| `deploy-smtp-relay-1` | `smtp-relay` | `node dist/smtp-relay.js` | `0.0.0.0:587`, `0.0.0.0:465` |
+| `deploy-postgres-1` | `postgres` | postgres:16-alpine | `127.0.0.1:5432` |
+| `deploy-redis-1` | `redis` | redis:7-alpine | `127.0.0.1:6379` |
+
+Caddy (host systemd, **not** in compose) terminates TLS on `:80/:443` and reverse-proxies to `127.0.0.1:3000`.
+
+**Pitfall:** running `docker compose ...` from `/opt/emailservice/deploy` without `-f docker-compose.prod.yml` walks up to `/opt/emailservice/docker-compose.yml` (the **dev** file with mailpit) and silently lies about which services exist. **Always pass `-f docker-compose.prod.yml`.**
+
+### Outbound mail path
+
+The host has its own **Postfix** (systemd, not containerized) listening on `0.0.0.0:25`. App containers reach it via the docker bridge gateway, which is in Postfix's `mynetworks`:
+
+```
+SMTP_HOST=172.18.0.1      # docker bridge gateway, in `mynetworks`
+SMTP_PORT=25
+# no SMTP_USER → email-sender.ts treats it as a local relay, no TLS auth
+```
+
+```
+postconf mynetworks
+  → 127.0.0.0/8 [::1]/128 172.16.0.0/12
+postconf smtpd_relay_restrictions
+  → permit_mynetworks, reject_unauth_destination
+```
+
+Public clients hitting `:25` from the internet are rejected — only loopback + docker bridge can relay. Don't widen `mynetworks`.
+
+### Required env vars in `/opt/emailservice/.env`
+
+`NODE_ENV=production`, `DATABASE_URL`, `REDIS_URL`, `BASE_URL`, `TRACKING_URL`, `MAIL_HOST=mail.mailnowapi.com`, `ENCRYPTION_KEY`, `JWT_SECRET`, `TRACKING_HMAC_SECRET`, `POSTGRES_PASSWORD`, `SMTP_HOST=172.18.0.1`, `SMTP_PORT=25`, `LOG_LEVEL`.
+
+The compose injects `DATABASE_URL=postgresql://emailservice:${POSTGRES_PASSWORD}@postgres:5432/emailservice` and `REDIS_URL=redis://redis:6379` itself, so those values in `.env` are overridden.
+
+### Common ops on the host
+
+```bash
+ssh root@95.217.161.0
+cd /opt/emailservice/deploy
+
+# Status + logs (always pass -f)
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs --tail=120 app worker smtp-relay
+docker compose -f docker-compose.prod.yml logs -f worker
+
+# Reload after .env change
+docker compose -f docker-compose.prod.yml up -d --force-recreate app worker smtp-relay
+
+# Health
+curl -s http://127.0.0.1:3000/readyz
+curl -sI https://mail.mailnowapi.com/health | head -1
+
+# Verify the app can reach Postfix
+docker exec deploy-app-1 sh -c 'getent hosts $SMTP_HOST; node -e "require(\"net\").createConnection({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT)}).on(\"connect\",()=>{console.log(\"OK\");process.exit(0)}).on(\"error\",e=>{console.error(\"FAIL\",e.message);process.exit(1)})"'
+
+# Migrations run automatically on app startup (src/index.ts → runMigrations)
+```
+
+### Crash-loop debugging
+
+Migrations run before Fastify starts listening, and `loadConfig()` runs even earlier. Most prod crash-loops are **one of**:
+
+1. **Missing required env var.** Look for `Failed to start server: Error: <NAME> environment variable must be set in production`. Add it to `/opt/emailservice/.env` and recreate the containers.
+2. **Migration failure.** Look for drizzle errors before "Migrations complete." Usually a hand-edited or partially-applied migration; never edit files under `drizzle/` directly.
+3. **Postgres/Redis unreachable.** The compose has `depends_on: condition: service_healthy`, so the app shouldn't start if those are unhealthy — check `docker compose ps` for the `(healthy)` marker on `postgres` and `redis` first.
 
 ---
 
