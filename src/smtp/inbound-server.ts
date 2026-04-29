@@ -187,8 +187,22 @@ export function createInboundServer(): SMTPServer {
                 continue; // skip inbox storage
               }
             } catch (err) {
-              // Parser errors should not break inbound delivery of real mail.
-              console.error("[inbound] bounce/FBL detection failed:", err);
+              // The DSN/FBL parser threw mid-classify or mid-parse. Two cases:
+              //   - The message looked like a machine report (the imports
+              //     succeeded, the type-detection or recipient-attribution
+              //     code threw on a malformed field).
+              //   - Some other unexpected error (rare).
+              // Either way, falling through into the inbox path lets bounce
+              // reports masquerade as user mail AND silently drops the
+              // suppression we should have produced. Skip inbox storage and
+              // surface the failure with structured logging so the operator
+              // can see an unparseable bounce arrived.
+              const { childLogger } = await import("../lib/logger.js");
+              childLogger("smtp-inbound").error(
+                { err, accountId: deliveryAccountId, from: parsed.from?.text, subject: parsed.subject },
+                "bounce/FBL parse threw — dropping message rather than storing in inbox",
+              );
+              continue;
             }
 
             // Extract References header

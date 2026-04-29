@@ -46,7 +46,7 @@ export async function createCompany(ownerAccountId: string, input: CreateCompany
       companyId: company.id,
       accountId: ownerAccountId,
       role: "owner",
-      provisioned: "false",
+      provisioned: false,
     });
 
     return company;

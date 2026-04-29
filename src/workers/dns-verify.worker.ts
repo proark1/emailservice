@@ -64,7 +64,13 @@ async function processDnsVerify(job: Job<DnsVerifyJobData>) {
 
   // If not yet fully verified, schedule next check
   if (!allVerified) {
-    const elapsedMs = Date.now() - job.data.startedAt;
+    // `startedAt` may be missing on older job payloads or manually-replayed
+    // jobs. `Date.now() - undefined` is NaN, and `NaN < ...` is false, which
+    // would silently skip the next-poll branch (no failure, no retry — the
+    // domain just stays "pending" forever). Default to "now" so a missing
+    // field gives the job a fresh 72h budget instead of dropping it.
+    const startedAt = typeof job.data.startedAt === "number" ? job.data.startedAt : Date.now();
+    const elapsedMs = Date.now() - startedAt;
     if (elapsedMs < MAX_POLLING_HOURS * 3_600_000) {
       const delayIndex = Math.min(attempt, POLL_INTERVALS_MS.length - 1);
       const delay = POLL_INTERVALS_MS[delayIndex];
@@ -72,7 +78,7 @@ async function processDnsVerify(job: Job<DnsVerifyJobData>) {
       await getDnsVerifyQueue().add("dns-verify", {
         domainId,
         attempt: attempt + 1,
-        startedAt: job.data.startedAt,
+        startedAt,
       }, { delay });
     } else {
       // Max polling exceeded — mark as failed

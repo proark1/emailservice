@@ -3,6 +3,7 @@ import { getDb } from "../db/index.js";
 import { domains, emails, inboundEmails, domainMembers } from "../db/schema/index.js";
 import { generateDkimForDomain } from "./dkim.service.js";
 import { generateDnsRecords } from "./dns.service.js";
+import { evictDkimCache } from "./email-sender.js";
 import { getConfig, getMailHost } from "../config/index.js";
 import { NotFoundError, ConflictError } from "../lib/errors.js";
 import type { CreateDomainInput } from "../schemas/domain.schema.js";
@@ -111,6 +112,8 @@ export async function deleteDomain(accountId: string, domainId: string) {
     .returning();
 
   if (!deleted) throw new NotFoundError("Domain");
+  // Drop any cached DKIM key — sends should not pick up the deleted domain.
+  evictDkimCache(domainId);
   return deleted;
 }
 
@@ -176,6 +179,12 @@ export async function updateDomain(
     .set(updates)
     .where(eq(domains.id, domainId))
     .returning();
+  // The DKIM cache snapshots the return-path domain alongside the private
+  // key, so we must invalidate when that field changes — otherwise sends
+  // will continue to use the old envelope from-address for up to 10 minutes.
+  if (patch.return_path_domain !== undefined) {
+    evictDkimCache(domainId);
+  }
   return updated;
 }
 

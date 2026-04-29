@@ -3,7 +3,10 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { domains, emails, emailEvents } from "../db/schema/index.js";
 import { isRedisConfigured, getEmailSendQueue } from "../queues/index.js";
+import { childLogger } from "../lib/logger.js";
 import type { Readable } from "node:stream";
+
+const log = childLogger("smtp-relay");
 
 export async function handleIncomingMessage(
   stream: Readable,
@@ -68,17 +71,34 @@ export async function handleIncomingMessage(
     data: { source: "smtp" },
   });
 
-  // Queue or direct send
+  // Queue or direct send. We log every failure path explicitly — the SMTP
+  // relay has already replied 250 OK to the upstream client, so any failure
+  // here would otherwise vanish silently and the user would assume the mail
+  // went out.
   if (isRedisConfigured()) {
     try {
       await getEmailSendQueue().add("send", { emailId: email.id, accountId });
-    } catch {
+    } catch (queueErr) {
+      log.warn(
+        { err: queueErr, emailId: email.id, accountId },
+        "queue.add failed; falling back to direct send",
+      );
       const { sendEmailDirect } = await import("../services/email-sender.js");
-      sendEmailDirect(email.id, accountId).catch(() => {});
+      sendEmailDirect(email.id, accountId).catch((sendErr) => {
+        log.error(
+          { err: sendErr, emailId: email.id, accountId },
+          "fallback direct send failed after queue.add error",
+        );
+      });
     }
   } else {
     const { sendEmailDirect } = await import("../services/email-sender.js");
-    sendEmailDirect(email.id, accountId).catch(() => {});
+    sendEmailDirect(email.id, accountId).catch((sendErr) => {
+      log.error(
+        { err: sendErr, emailId: email.id, accountId },
+        "direct send failed (no Redis configured)",
+      );
+    });
   }
 
   return { accepted: true, emailId: email.id };

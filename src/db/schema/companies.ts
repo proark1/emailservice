@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { accounts } from "./accounts.js";
 import { domains } from "./domains.js";
 
@@ -24,7 +24,7 @@ export const companyMembers = pgTable("company_members", {
   role: varchar("role", { length: 20 }).notNull().$type<CompanyRole>().default("member"),
   // True when the account was created by the provisioning flow (i.e. not a pre-existing user).
   // Used to decide whether hard-deleting the account on removal is safe.
-  provisioned: varchar("provisioned", { length: 5 }).notNull().default("false"),
+  provisioned: boolean("provisioned").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

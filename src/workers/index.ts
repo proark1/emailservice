@@ -12,6 +12,7 @@ import { createBroadcastWorker } from "./broadcast.worker.js";
 import { createImportWorker } from "./import.worker.js";
 import { createAbTestWorker } from "./abtest.worker.js";
 import { createSequenceWorker } from "./sequence.worker.js";
+import { createRetentionPurgeWorker } from "./retention-purge.worker.js";
 
 function attachErrorHandlers(worker: Worker, name: string) {
   const log = childLogger(`worker:${name}`);
@@ -45,6 +46,7 @@ export function startAllWorkers() {
     { worker: createImportWorker(), name: "contact.import" },
     { worker: createAbTestWorker(), name: "broadcast.abtest" },
     { worker: createSequenceWorker(), name: "sequence.process" },
+    { worker: createRetentionPurgeWorker(), name: "retention.purge" },
   ];
 
   for (const { worker, name } of workerEntries) {

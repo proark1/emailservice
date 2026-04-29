@@ -23,4 +23,8 @@ export const webhookDeliveries = pgTable("webhook_deliveries", {
   index("idx_webhook_deliveries_status").on(table.status),
   index("idx_webhook_deliveries_webhook_status").on(table.webhookId, table.status),
   index("idx_webhook_deliveries_status_retry").on(table.status, table.nextRetryAt),
+  // Used by the retention-purge worker to drop terminal-status rows older
+  // than the retention window in batches. Composite (status, created_at)
+  // matches the cleanup predicate exactly.
+  index("idx_webhook_deliveries_retention").on(table.status, table.createdAt),
 ]);

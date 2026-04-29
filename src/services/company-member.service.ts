@@ -80,7 +80,7 @@ export async function provisionMember(
         companyId,
         accountId: account.id,
         role: input.role as CompanyRole,
-        provisioned: createdAccount ? "true" : "false",
+        provisioned: createdAccount,
       })
       .returning();
 
@@ -248,7 +248,7 @@ export async function removeMember(
 
   // Only hard-delete the underlying account if it was provisioned by this flow
   // AND the caller explicitly opted in.
-  if (hardDelete && member.provisioned === "true") {
+  if (hardDelete && member.provisioned) {
     const [otherMemberships] = await db
       .select({ id: companyMembers.id })
       .from(companyMembers)
@@ -266,7 +266,7 @@ export function formatMemberResponse(row: {
   id: string;
   accountId: string;
   role: string;
-  provisioned: string;
+  provisioned: boolean;
   accountName: string | null;
   accountEmail: string | null;
   createdAt: Date;
@@ -277,7 +277,7 @@ export function formatMemberResponse(row: {
     account_name: row.accountName,
     account_email: row.accountEmail,
     role: row.role,
-    provisioned: row.provisioned === "true",
+    provisioned: row.provisioned,
     created_at: row.createdAt.toISOString(),
   };
 }

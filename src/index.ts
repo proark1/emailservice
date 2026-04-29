@@ -121,6 +121,7 @@ async function main() {
 
   // Background handles we need to drain on SIGTERM.
   const smtpServers: Array<{ name: string; server: { close: (cb?: (err?: Error) => void) => void } }> = [];
+  let inProcessWorkers: Array<{ close: () => Promise<void> }> = [];
 
   // Graceful shutdown — stop accepting new connections first (HTTP + SMTP),
   // then close workers/queues, then the DB. Orchestration platforms usually
@@ -148,7 +149,15 @@ async function main() {
     );
     // 2. Close the HTTP server — Fastify drains in-flight requests.
     try { await app.close(); } catch (err) { app.log.warn({ err }, "app.close failed"); }
-    // 3. Close BullMQ queues and Redis connection if workers were started.
+    // 3. Drain in-process BullMQ workers BEFORE closing the queue/Redis
+    //    connection. `worker.close()` waits for the currently-running job
+    //    handler to finish — without this step, in-flight email sends and
+    //    scheduled-email claims are abandoned mid-execution and either get
+    //    re-tried (potential duplicate sends) or dropped.
+    try {
+      await Promise.all(inProcessWorkers.map((w) => w.close()));
+    } catch (err) { app.log.warn({ err }, "worker close failed"); }
+    // 4. Close BullMQ queues and Redis connection.
     try {
       const { closeQueues } = await import("./queues/index.js");
       await closeQueues();
@@ -168,7 +177,7 @@ async function main() {
   const { isRedisConfigured } = await import("./queues/index.js");
   if (isRedisConfigured()) {
     const { startAllWorkers } = await import("./workers/index.js");
-    startAllWorkers();
+    inProcessWorkers = startAllWorkers();
     app.log.info("Background workers started (Redis connected)");
   } else {
     app.log.info("Running without Redis — emails will be sent directly (no queue)");
