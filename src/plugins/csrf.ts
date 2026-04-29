@@ -21,8 +21,14 @@ import { ForbiddenError } from "../lib/errors.js";
 const CSRF_COOKIE = "csrf_token";
 const CSRF_HEADER = "x-csrf-token";
 const UNSAFE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
-const PROTECTED_PREFIXES = ["/dashboard", "/admin"];
-const EXEMPT_PREFIXES = ["/auth/login", "/auth/register", "/auth/logout", "/auth/accept-invitation"];
+// Cookie-authed mutating routes covered by double-submit CSRF. /auth is
+// included so password change / profile edit / invitation accept are
+// protected — these are session-cookie mutations and must not be CSRF-able.
+const PROTECTED_PREFIXES = ["/dashboard", "/admin", "/auth"];
+// /auth endpoints that are reachable BEFORE a session exists (and therefore
+// before a CSRF cookie is in place). The frontend gets a CSRF cookie on the
+// 200 response from these so subsequent calls can echo it.
+const EXEMPT_PREFIXES = ["/auth/login", "/auth/register", "/auth/logout"];
 
 function generateCsrfToken(): string {
   return crypto.randomBytes(24).toString("base64url");
