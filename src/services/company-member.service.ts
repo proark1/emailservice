@@ -48,12 +48,22 @@ export async function provisionMember(
     let account = existingAccount;
     let createdAccount = false;
     if (!account) {
-      const [created] = await tx
-        .insert(accounts)
-        .values({ name: input.name, email: emailLower, passwordHash, role: "user" })
-        .returning();
-      account = created;
-      createdAccount = true;
+      try {
+        const [created] = await tx
+          .insert(accounts)
+          .values({ name: input.name, email: emailLower, passwordHash, role: "user" })
+          .returning();
+        account = created;
+        createdAccount = true;
+      } catch (err: any) {
+        // Concurrent provisioning of the same email loses the unique race on
+        // accounts.email (Postgres SQLSTATE 23505). Surface a 409 instead of
+        // letting the bare DB error bubble through as a 500.
+        if (err?.code === "23505") {
+          throw new ConflictError(`An account with email ${input.email} was just created by a concurrent request. Retry.`);
+        }
+        throw err;
+      }
     }
 
     const [existingMember] = await tx

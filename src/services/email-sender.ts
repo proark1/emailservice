@@ -192,18 +192,24 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       .where(and(eq(suppressions.accountId, accountId), inArray(suppressions.email, allRecipients)));
     if (suppressed.length > 0) {
       const reason = `Suppressed addresses: ${suppressed.map((r) => r.email).join(", ")}`;
-      await db.update(emails).set({
-        status: "failed",
-        failureReason: reason,
-        failureCode: "suppressed",
-        lastEventAt: new Date(),
-        updatedAt: new Date(),
-      }).where(eq(emails.id, emailId));
-      await db.insert(emailEvents).values({
-        emailId,
-        accountId,
-        type: "failed",
-        data: { reason, suppressed: suppressed.map((r) => r.email) },
+      // Mark the row failed and record the event atomically — if the event
+      // insert blew up after the status update, the row would be "failed"
+      // with no audit trail and nothing for analytics/webhook dispatchers
+      // to chain off.
+      await db.transaction(async (tx) => {
+        await tx.update(emails).set({
+          status: "failed",
+          failureReason: reason,
+          failureCode: "suppressed",
+          lastEventAt: new Date(),
+          updatedAt: new Date(),
+        }).where(eq(emails.id, emailId));
+        await tx.insert(emailEvents).values({
+          emailId,
+          accountId,
+          type: "failed",
+          data: { reason, suppressed: suppressed.map((r) => r.email) },
+        });
       });
       return;
     }
