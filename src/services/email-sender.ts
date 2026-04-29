@@ -62,6 +62,17 @@ const DKIM_CACHE_TTL_MS = 10 * 60 * 1000;
 interface DkimCacheEntry { privateKey: string; domainName: string; keySelector: string; returnPathDomain: string | null; expiresAt: number }
 const dkimCache = new Map<string, DkimCacheEntry>();
 
+/**
+ * Drop the cached DKIM key for a domain. Call this from any flow that
+ * mutates the domain's signing material (rotation, deletion, return-path
+ * change). Without invalidation, the cache continues to sign with the old
+ * key for up to 10 minutes after rotation, which fails DKIM verification at
+ * recipient mail servers and tanks deliverability for that window.
+ */
+export function evictDkimCache(domainId: string) {
+  dkimCache.delete(domainId);
+}
+
 function getOrCreateTransport(): nodemailer.Transporter {
   if (!_transport) _transport = createTransport();
   return _transport;

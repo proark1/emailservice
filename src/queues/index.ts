@@ -160,6 +160,17 @@ export function getBroadcastQueue() {
   });
 }
 
+export function getRetentionPurgeQueue() {
+  return getQueue("retention.purge", {
+    defaultJobOptions: {
+      attempts: 2,
+      backoff: { type: "exponential", delay: 30_000 },
+      removeOnComplete: { count: 10 },
+      removeOnFail: { age: 7 * 24 * 3600 },
+    },
+  });
+}
+
 export async function closeQueues() {
   const closePromises = Array.from(_queues.values()).map((q) => q.close());
   await Promise.all(closePromises);

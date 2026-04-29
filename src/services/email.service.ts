@@ -1,4 +1,4 @@
-import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, inArray, sql, isNull } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { emails, emailEvents, domains, suppressions } from "../db/schema/index.js";
 import { isRedisConfigured, getEmailSendQueue, getRedisConnection } from "../queues/index.js";
@@ -321,7 +321,15 @@ async function companyScopeCondition(accountId: string, companyScopeId: string |
 
 export async function getEmail(accountId: string, emailId: string, options: SendEmailOptions = {}) {
   const db = getDb();
-  const conditions = [eq(emails.id, emailId), eq(emails.accountId, accountId)];
+  // Exclude drafts (composed but not sent) and soft-deleted rows from the
+  // public sent-email API. The dashboard inbox/drafts/threads services have
+  // their own queries that include them when they need to.
+  const conditions = [
+    eq(emails.id, emailId),
+    eq(emails.accountId, accountId),
+    eq(emails.isDraft, false),
+    isNull(emails.deletedAt),
+  ];
   const scope = await companyScopeCondition(accountId, options.companyScopeId);
   if (scope) conditions.push(scope);
 
@@ -339,7 +347,13 @@ export async function listEmails(
   options: { limit: number; cursor?: string; status?: string; companyScopeId?: string | null },
 ) {
   const db = getDb();
-  const conditions = [eq(emails.accountId, accountId)];
+  // Same draft / soft-delete filter as getEmail — keep the two endpoints in
+  // lockstep so consumers don't see different sets of rows.
+  const conditions = [
+    eq(emails.accountId, accountId),
+    eq(emails.isDraft, false),
+    isNull(emails.deletedAt),
+  ];
 
   const scope = await companyScopeCondition(accountId, options.companyScopeId);
   if (scope) conditions.push(scope);
@@ -379,7 +393,15 @@ export async function listEmails(
 
 export async function cancelScheduledEmail(accountId: string, emailId: string, options: SendEmailOptions = {}) {
   const db = getDb();
-  const conditions = [eq(emails.id, emailId), eq(emails.accountId, accountId)];
+  // Cancellation goes through the same public-email lookup as getEmail —
+  // drafts can't be "cancelled" and soft-deleted rows shouldn't be
+  // re-targetable.
+  const conditions = [
+    eq(emails.id, emailId),
+    eq(emails.accountId, accountId),
+    eq(emails.isDraft, false),
+    isNull(emails.deletedAt),
+  ];
   const scope = await companyScopeCondition(accountId, options.companyScopeId);
   if (scope) conditions.push(scope);
   const [email] = await db

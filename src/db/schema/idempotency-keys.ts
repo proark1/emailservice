@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, integer, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, integer, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { accounts } from "./accounts.js";
 
 export const idempotencyKeys = pgTable("idempotency_keys", {
@@ -11,4 +11,6 @@ export const idempotencyKeys = pgTable("idempotency_keys", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   uniqueIndex("idx_idempotency_keys_account_key").on(table.accountId, table.key),
+  // Used by the retention-purge worker to drop expired rows in batches.
+  index("idx_idempotency_keys_expires_at").on(table.expiresAt),
 ]);

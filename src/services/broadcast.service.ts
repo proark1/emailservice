@@ -1,4 +1,4 @@
-import { eq, and, desc, lte, lt, inArray, count, sql } from "drizzle-orm";
+import { eq, and, desc, gt, lte, lt, inArray, count, sql } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { broadcasts, broadcastVariantSends, emails, emailEvents } from "../db/schema/index.js";
 import { contacts } from "../db/schema/index.js";
@@ -149,47 +149,79 @@ export async function executeBroadcast(broadcastId: string) {
     .set({ status: "sending", updatedAt: new Date() })
     .where(eq(broadcasts.id, broadcastId));
 
-  // Get all subscribed contacts in the audience
-  const subscribedContacts = await db
-    .select({ id: contacts.id, email: contacts.email })
-    .from(contacts)
-    .where(and(eq(contacts.audienceId, broadcast.audienceId), eq(contacts.subscribed, true)));
-
   // Reconstruct the "from" string
   const fromString = broadcast.fromName
     ? `${broadcast.fromName} <${broadcast.fromAddress}>`
     : broadcast.fromAddress;
 
-  // If A/B test, only send to test portion; rest waits for winner
+  // A/B test path needs to split the full audience deterministically and
+  // schedule winner selection, so it still loads everything (capped). For
+  // the regular path we stream the audience in chunks to avoid OOMing the
+  // worker on million-contact lists.
   if (broadcast.abTestEnabled && broadcast.abTestConfig) {
+    const AB_TEST_MAX_CONTACTS = 200_000;
+    const subscribedContacts = await db
+      .select({ id: contacts.id, email: contacts.email })
+      .from(contacts)
+      .where(and(eq(contacts.audienceId, broadcast.audienceId), eq(contacts.subscribed, true)))
+      .limit(AB_TEST_MAX_CONTACTS + 1);
+    if (subscribedContacts.length > AB_TEST_MAX_CONTACTS) {
+      throw new ValidationError(`A/B test audiences are capped at ${AB_TEST_MAX_CONTACTS} contacts`);
+    }
     return executeAbTestBroadcast(broadcast, subscribedContacts, fromString);
   }
 
   let sentCount = 0;
   let failedCount = 0;
+  let totalCount = 0;
 
-  // Process contacts in batches to avoid overwhelming the queue/DB
-  const BATCH_SIZE = 50;
-  for (let i = 0; i < subscribedContacts.length; i += BATCH_SIZE) {
-    const batch = subscribedContacts.slice(i, i + BATCH_SIZE);
-    const results = await Promise.allSettled(
-      batch.map((contact) =>
-        sendEmail(broadcast.accountId, {
-          from: fromString,
-          to: [contact.email],
-          subject: broadcast.subject,
-          html: broadcast.htmlBody ?? undefined,
-          text: broadcast.textBody ?? undefined,
-          reply_to: broadcast.replyTo ?? undefined,
-          headers: broadcast.headers ?? undefined,
-          tags: broadcast.tags ?? undefined,
-        }),
-      ),
-    );
-    for (const result of results) {
-      if (result.status === "fulfilled") sentCount++;
-      else failedCount++;
+  // Cursor-paginate over (id ASC) so memory stays bounded regardless of
+  // audience size. Each page is then split into smaller send-batches so
+  // we don't fan out 1000 sendEmail() calls at once into the queue.
+  const PAGE_SIZE = 500;
+  const SEND_BATCH_SIZE = 50;
+  let lastId: string | null = null;
+  while (true) {
+    const conditions = [
+      eq(contacts.audienceId, broadcast.audienceId),
+      eq(contacts.subscribed, true),
+    ];
+    if (lastId) conditions.push(gt(contacts.id, lastId));
+
+    const page = await db
+      .select({ id: contacts.id, email: contacts.email })
+      .from(contacts)
+      .where(and(...conditions))
+      .orderBy(contacts.id)
+      .limit(PAGE_SIZE);
+
+    if (page.length === 0) break;
+    totalCount += page.length;
+    lastId = page[page.length - 1].id;
+
+    for (let i = 0; i < page.length; i += SEND_BATCH_SIZE) {
+      const batch = page.slice(i, i + SEND_BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((contact) =>
+          sendEmail(broadcast.accountId, {
+            from: fromString,
+            to: [contact.email],
+            subject: broadcast.subject,
+            html: broadcast.htmlBody ?? undefined,
+            text: broadcast.textBody ?? undefined,
+            reply_to: broadcast.replyTo ?? undefined,
+            headers: broadcast.headers ?? undefined,
+            tags: broadcast.tags ?? undefined,
+          }),
+        ),
+      );
+      for (const result of results) {
+        if (result.status === "fulfilled") sentCount++;
+        else failedCount++;
+      }
     }
+
+    if (page.length < PAGE_SIZE) break;
   }
 
   // Update broadcast with final counts and status
@@ -205,7 +237,7 @@ export async function executeBroadcast(broadcastId: string) {
       sentCount,
       failedCount,
       status: finalStatus,
-      totalCount: subscribedContacts.length,
+      totalCount,
       sentAt: new Date(),
       completedAt: new Date(),
       updatedAt: new Date(),
