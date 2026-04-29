@@ -423,14 +423,7 @@ export async function selectAbTestWinner(broadcastId: string, manualWinnerId?: s
     .where(eq(broadcastVariantSends.broadcastId, broadcastId));
 
   const sentContactIds = new Set(alreadySent.map((s) => s.contactId));
-
-  // Get remaining contacts
-  const allContacts = await db
-    .select({ id: contacts.id, email: contacts.email })
-    .from(contacts)
-    .where(and(eq(contacts.audienceId, broadcast.audienceId), eq(contacts.subscribed, true)));
-
-  const remainingContacts = allContacts.filter((c) => !sentContactIds.has(c.id));
+  const totalTestSent = sentContactIds.size;
 
   const fromString = broadcast.fromName
     ? `${broadcast.fromName} <${broadcast.fromAddress}>`
@@ -438,29 +431,57 @@ export async function selectAbTestWinner(broadcastId: string, manualWinnerId?: s
 
   let additionalSent = 0;
   let additionalFailed = 0;
+  let totalSubscribed = 0;
 
-  // Send winner to remaining contacts
-  const BATCH_SIZE = 50;
-  for (let i = 0; i < remainingContacts.length; i += BATCH_SIZE) {
-    const batch = remainingContacts.slice(i, i + BATCH_SIZE);
-    const results = await Promise.allSettled(
-      batch.map((contact) =>
-        sendEmail(broadcast.accountId, {
-          from: fromString,
-          to: [contact.email],
-          subject: winnerVariant.subject,
-          html: winnerVariant.htmlBody ?? undefined,
-          text: winnerVariant.textBody ?? undefined,
-          reply_to: broadcast.replyTo ?? undefined,
-          headers: broadcast.headers ?? undefined,
-          tags: { ...broadcast.tags, ab_variant: "winner" },
-        }),
-      ),
-    );
-    for (const result of results) {
-      if (result.status === "fulfilled") additionalSent++;
-      else additionalFailed++;
+  // Cursor-paginate the audience and send to anyone not in the test slice.
+  // Loading the full audience into memory (the previous shape) OOMed the
+  // worker on million-contact lists. Bounded memory regardless of size.
+  const PAGE_SIZE = 500;
+  const SEND_BATCH_SIZE = 50;
+  let lastId: string | null = null;
+  while (true) {
+    const conditions = [
+      eq(contacts.audienceId, broadcast.audienceId),
+      eq(contacts.subscribed, true),
+    ];
+    if (lastId) conditions.push(gt(contacts.id, lastId));
+
+    const page = await db
+      .select({ id: contacts.id, email: contacts.email })
+      .from(contacts)
+      .where(and(...conditions))
+      .orderBy(contacts.id)
+      .limit(PAGE_SIZE);
+
+    if (page.length === 0) break;
+    totalSubscribed += page.length;
+    lastId = page[page.length - 1].id;
+
+    const remaining = page.filter((c) => !sentContactIds.has(c.id));
+
+    for (let i = 0; i < remaining.length; i += SEND_BATCH_SIZE) {
+      const batch = remaining.slice(i, i + SEND_BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((contact) =>
+          sendEmail(broadcast.accountId, {
+            from: fromString,
+            to: [contact.email],
+            subject: winnerVariant.subject,
+            html: winnerVariant.htmlBody ?? undefined,
+            text: winnerVariant.textBody ?? undefined,
+            reply_to: broadcast.replyTo ?? undefined,
+            headers: broadcast.headers ?? undefined,
+            tags: { ...broadcast.tags, ab_variant: "winner" },
+          }),
+        ),
+      );
+      for (const result of results) {
+        if (result.status === "fulfilled") additionalSent++;
+        else additionalFailed++;
+      }
     }
+
+    if (page.length < PAGE_SIZE) break;
   }
 
   const totalSent = broadcast.sentCount + additionalSent;
@@ -472,7 +493,10 @@ export async function selectAbTestWinner(broadcastId: string, manualWinnerId?: s
     .set({
       sentCount: totalSent,
       failedCount: totalFailed,
-      totalCount: allContacts.length,
+      // totalCount = subscribed audience at winner-roll-out time. The test
+      // slice was already counted in totalSubscribed above (it's the same
+      // audience), so this is the right denominator for analytics.
+      totalCount: totalSubscribed || totalTestSent,
       status: finalStatus,
       abTestStatus: "completed",
       completedAt: new Date(),

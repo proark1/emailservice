@@ -1,0 +1,1 @@
+CREATE INDEX "idx_contacts_audience_subscribed" ON "contacts" USING btree ("audience_id","subscribed");

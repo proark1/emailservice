@@ -308,13 +308,35 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
 
     // Sanitize user-provided headers — block dangerous ones that could hijack mail routing
     const BLOCKED_HEADERS = new Set(["from", "to", "cc", "bcc", "sender", "return-path", "envelope-from", "dkim-signature", "received", "authentication-results", "arc-seal", "arc-message-signature", "arc-authentication-results"]);
+    // Header injection guard: reject any header *name* or *value* containing a
+    // line terminator. CRLF is the obvious case; the Unicode terminators
+    // U+2028 / U+2029 / U+0085 (NEL) are treated as line breaks by some
+    // downstream MTAs and would let a crafted header smuggle a second one
+    // (e.g. "X-Foo<U+2028>Bcc: attacker@evil.com"). We also reject keys that
+    // aren't valid RFC 5322 token characters so an attacker can't sneak ":"
+    // or whitespace into the field-name half of the line.
+    // Test variant \u2014 used to *detect* any forbidden char so the offending
+    // header can be dropped outright. The replace variant below has the
+    // global + `+` flags so it collapses runs of terminators (CRLF pairs,
+    // repeated U+2028, \u2026) into a single replacement instead of leaving the
+    // tail of the run intact (which the prior /\u2026/  one-shot replace did).
+    const FORBIDDEN_LINE_CHARS = /[\r\n\u0085\u2028\u2029]/;
+    const FORBIDDEN_LINE_CHARS_G = /[\r\n\u0085\u2028\u2029]+/g;
+    const VALID_HEADER_NAME = /^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$/;
     const existingHeaders = email.headers || {};
     const sanitizedHeaders: Record<string, string> = {};
     for (const [key, value] of Object.entries(existingHeaders)) {
-      if (!BLOCKED_HEADERS.has(key.toLowerCase()) && !key.toLowerCase().startsWith("x-google-") && !value.includes("\n") && !value.includes("\r")) {
-        sanitizedHeaders[key] = value;
-      }
+      if (BLOCKED_HEADERS.has(key.toLowerCase())) continue;
+      if (key.toLowerCase().startsWith("x-google-")) continue;
+      if (!VALID_HEADER_NAME.test(key)) continue;
+      if (FORBIDDEN_LINE_CHARS.test(key) || FORBIDDEN_LINE_CHARS.test(value)) continue;
+      sanitizedHeaders[key] = value;
     }
+    // Strip line terminators from subject before passing to nodemailer.
+    // Zod blocks them at the API layer, but inbound SMTP relay and DB-level
+    // mutations could put a "\r\n" subject in the email row; this is the last
+    // line of defense.
+    const safeSubject = (email.subject || "").replace(FORBIDDEN_LINE_CHARS_G, " ");
     const mergedHeaders: Record<string, string> = {
       ...sanitizedHeaders,
       ...unsubscribeHeaders,
@@ -338,7 +360,7 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       cc: email.ccAddresses || undefined,
       bcc: email.bccAddresses || undefined,
       replyTo: email.replyTo || undefined,
-      subject: email.subject,
+      subject: safeSubject,
       html: html || undefined,
       text: textBody || undefined,
       messageId,
@@ -354,8 +376,12 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
         ].filter(Boolean),
       },
       headers: mergedHeaders,
+      // Strip line terminators from filenames before they hit nodemailer's
+      // Content-Disposition header builder. nodemailer percent-encodes
+      // exotic chars but doesn't reject CR/LF outright, and a malicious
+      // filename "report.pdf\r\nBcc: …" would otherwise inject a header.
       attachments: email.attachments?.map((a) => ({
-        filename: a.filename,
+        filename: a.filename.replace(FORBIDDEN_LINE_CHARS_G, "_"),
         content: Buffer.from(a.content, "base64"),
         contentType: a.contentType,
       })),

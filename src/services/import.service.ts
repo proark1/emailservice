@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { contactImports } from "../db/schema/index.js";
 import { contacts } from "../db/schema/index.js";
@@ -227,83 +227,138 @@ export async function processImport(importId: string) {
   for (let i = 0; i < dataRows.length; i += BATCH_SIZE) {
     const batch = dataRows.slice(i, i + BATCH_SIZE);
 
+    // Phase 1: parse and validate each row in the batch into an in-memory
+    // record. Rows that fail validation are tallied immediately so we don't
+    // try to insert them.
+    interface PendingContact {
+      rowNum: number;
+      email: string;
+      firstName: string | null;
+      lastName: string | null;
+      metadata: Record<string, unknown>;
+    }
+    const pending: PendingContact[] = [];
+
     for (let j = 0; j < batch.length; j++) {
       const row = batch[j];
       const rowNum = i + j + 2; // 1-indexed, +1 for header row
 
-      try {
-        const email = row[fieldToIndex.email]?.trim().toLowerCase();
-        if (!email || !emailRegex.test(email)) {
-          errors.push({ row: rowNum, message: `Invalid email: "${email || ""}"` });
-          errorRows++;
-          continue;
-        }
+      const email = row[fieldToIndex.email]?.trim().toLowerCase();
+      if (!email || !emailRegex.test(email)) {
+        errors.push({ row: rowNum, message: `Invalid email: "${email || ""}"` });
+        errorRows++;
+        continue;
+      }
 
-        const contactData: Record<string, any> = {
-          audienceId: importRecord.audienceId,
-          email,
-        };
+      const firstName = fieldToIndex.first_name !== undefined
+        ? (row[fieldToIndex.first_name]?.trim() || null)
+        : null;
+      const lastName = fieldToIndex.last_name !== undefined
+        ? (row[fieldToIndex.last_name]?.trim() || null)
+        : null;
 
-        if (fieldToIndex.first_name !== undefined) {
-          contactData.firstName = row[fieldToIndex.first_name]?.trim() || null;
-        }
-        if (fieldToIndex.last_name !== undefined) {
-          contactData.lastName = row[fieldToIndex.last_name]?.trim() || null;
-        }
-
-        // Collect unmapped columns as metadata
-        const metadata: Record<string, unknown> = {};
-        for (const [csvColumn, contactField] of Object.entries(mapping)) {
-          if (!["email", "first_name", "last_name"].includes(contactField)) {
-            const idx = headers.indexOf(csvColumn);
-            if (idx !== -1 && row[idx]?.trim()) {
-              metadata[contactField] = row[idx].trim();
-            }
+      const metadata: Record<string, unknown> = {};
+      for (const [csvColumn, contactField] of Object.entries(mapping)) {
+        if (!["email", "first_name", "last_name"].includes(contactField)) {
+          const idx = headers.indexOf(csvColumn);
+          if (idx !== -1 && row[idx]?.trim()) {
+            metadata[contactField] = row[idx].trim();
           }
         }
-        if (Object.keys(metadata).length > 0) {
-          contactData.metadata = metadata;
-        }
+      }
 
-        // Check if contact exists
-        const [existing] = await db
-          .select({ id: contacts.id })
-          .from(contacts)
-          .where(and(
-            eq(contacts.audienceId, importRecord.audienceId),
-            eq(contacts.email, email),
-          ));
+      pending.push({ rowNum, email, firstName, lastName, metadata });
+    }
 
-        if (existing) {
-          if (importRecord.duplicateStrategy === "update") {
-            const updateData: Record<string, any> = { updatedAt: new Date() };
-            if (contactData.firstName !== undefined) updateData.firstName = contactData.firstName;
-            if (contactData.lastName !== undefined) updateData.lastName = contactData.lastName;
-            if (contactData.metadata) updateData.metadata = contactData.metadata;
+    if (pending.length === 0) {
+      // Update progress and move on
+      await db
+        .update(contactImports)
+        .set({
+          processedRows: Math.min(i + BATCH_SIZE, dataRows.length),
+          createdRows, updatedRows, skippedRows, errorRows,
+        })
+        .where(eq(contactImports.id, importId));
+      continue;
+    }
 
-            await db
-              .update(contacts)
-              .set(updateData)
-              .where(eq(contacts.id, existing.id));
-            updatedRows++;
-          } else {
-            skippedRows++;
-          }
+    // De-dupe within the batch itself — the same email can appear twice in
+    // a single CSV. Keep the *last* occurrence so a "newer" row in the file
+    // wins; downstream we still respect duplicate strategy against rows
+    // that were already in the DB before this batch.
+    const byEmail = new Map<string, PendingContact>();
+    for (const p of pending) byEmail.set(p.email, p);
+    const dedupedPending = Array.from(byEmail.values());
+    const intraBatchSkipped = pending.length - dedupedPending.length;
+    skippedRows += intraBatchSkipped;
+
+    // Phase 2: ONE SELECT to find which emails already exist in the audience.
+    // Previously this ran a separate SELECT per row → 100 round-trips per
+    // batch. Now: 1 SELECT, in-memory partition, then bulk UPDATE/INSERT.
+    const emails = dedupedPending.map((p) => p.email);
+    const existingRows = await db
+      .select({ id: contacts.id, email: contacts.email })
+      .from(contacts)
+      .where(and(
+        eq(contacts.audienceId, importRecord.audienceId),
+        inArray(contacts.email, emails),
+      ));
+    const existingByEmail = new Map(existingRows.map((r) => [r.email, r.id]));
+
+    const toInsert: PendingContact[] = [];
+    const toUpdate: Array<PendingContact & { id: string }> = [];
+    for (const p of dedupedPending) {
+      const id = existingByEmail.get(p.email);
+      if (id) {
+        if (importRecord.duplicateStrategy === "update") {
+          toUpdate.push({ ...p, id });
         } else {
-          await db
-            .insert(contacts)
-            .values({
-              audienceId: contactData.audienceId,
-              email: contactData.email,
-              firstName: contactData.firstName || null,
-              lastName: contactData.lastName || null,
-              metadata: (contactData.metadata || {}) as Record<string, unknown>,
-              subscribed: true,
-            });
-          createdRows++;
+          skippedRows++;
         }
+      } else {
+        toInsert.push(p);
+      }
+    }
+
+    // Phase 3: bulk insert the new rows. ON CONFLICT is harmless here since
+    // we just looked them up, but a concurrent import could race; default
+    // to onConflictDoNothing so the second writer doesn't 500.
+    if (toInsert.length > 0) {
+      try {
+        await db
+          .insert(contacts)
+          .values(toInsert.map((p) => ({
+            audienceId: importRecord.audienceId,
+            email: p.email,
+            firstName: p.firstName,
+            lastName: p.lastName,
+            metadata: p.metadata,
+            subscribed: true,
+          })))
+          .onConflictDoNothing({ target: [contacts.audienceId, contacts.email] });
+        createdRows += toInsert.length;
       } catch (err: any) {
-        errors.push({ row: rowNum, message: err.message || "Unknown error" });
+        // If the bulk insert fails entirely, count each pending row as an
+        // error rather than swallowing the whole batch.
+        for (const p of toInsert) {
+          errors.push({ row: p.rowNum, message: err.message || "Unknown error" });
+          errorRows++;
+        }
+      }
+    }
+
+    // Phase 4: per-row updates for the duplicates. We can't bulk these
+    // with a single statement because each row has different field values.
+    for (const u of toUpdate) {
+      try {
+        const updateData: Record<string, any> = { updatedAt: new Date() };
+        if (fieldToIndex.first_name !== undefined) updateData.firstName = u.firstName;
+        if (fieldToIndex.last_name !== undefined) updateData.lastName = u.lastName;
+        if (Object.keys(u.metadata).length > 0) updateData.metadata = u.metadata;
+        await db.update(contacts).set(updateData).where(eq(contacts.id, u.id));
+        updatedRows++;
+      } catch (err: any) {
+        errors.push({ row: u.rowNum, message: err.message || "Unknown error" });
         errorRows++;
       }
     }
@@ -338,38 +393,88 @@ export async function processImport(importId: string) {
 }
 
 /**
- * Export all contacts in an audience as CSV text.
+ * CSV cell sanitizer. Two concerns:
+ *  1. RFC 4180 quoting — wrap fields containing comma / dquote / CR / LF in
+ *     dquotes and escape internal dquotes by doubling.
+ *  2. Formula-injection guard — Excel and Google Sheets evaluate any cell
+ *     starting with =, +, -, @, CR, LF, or TAB as a formula. A contact
+ *     email like `=cmd|'/c calc'!A1` becomes a live formula on open. We
+ *     prefix such fields with an apostrophe, which spreadsheet apps treat
+ *     as "this is text, not a formula".
  */
-export async function exportContacts(accountId: string, audienceId: string): Promise<string> {
+function escapeCsvField(field: string): string {
+  let f = field;
+  if (f.length > 0 && /^[=+\-@\t\r]/.test(f)) {
+    f = "'" + f;
+  }
+  if (f.includes(",") || f.includes('"') || f.includes("\n") || f.includes("\r")) {
+    return `"${f.replace(/"/g, '""')}"`;
+  }
+  return f;
+}
+
+/**
+ * Stream all contacts in an audience as CSV. The previous implementation
+ * loaded every row into memory and concatenated into a single string —
+ * 100k contacts ≈ 30 MB string allocation that blocked the request handler
+ * for tens of seconds. Now we cursor-paginate by id and yield rows so the
+ * route handler can pipe the stream straight to the response.
+ */
+export async function* streamExportContacts(
+  accountId: string,
+  audienceId: string,
+): AsyncGenerator<string> {
   await getAudience(accountId, audienceId);
   const db = getDb();
 
-  const allContacts = await db
-    .select()
-    .from(contacts)
-    .where(eq(contacts.audienceId, audienceId));
-
   const headers = ["email", "first_name", "last_name", "subscribed", "created_at"];
-  const rows = allContacts.map((c) => [
-    c.email,
-    c.firstName || "",
-    c.lastName || "",
-    c.subscribed ? "true" : "false",
-    c.createdAt.toISOString(),
-  ]);
+  yield headers.join(",") + "\n";
 
-  const escapeCsvField = (field: string) => {
-    if (field.includes(",") || field.includes('"') || field.includes("\n")) {
-      return `"${field.replace(/"/g, '""')}"`;
+  const PAGE_SIZE = 1000;
+  let lastId: string | null = null;
+  while (true) {
+    const conditions = [eq(contacts.audienceId, audienceId)];
+    if (lastId) conditions.push(gt(contacts.id, lastId));
+
+    const page = await db
+      .select()
+      .from(contacts)
+      .where(and(...conditions))
+      .orderBy(contacts.id)
+      .limit(PAGE_SIZE);
+
+    if (page.length === 0) return;
+    lastId = page[page.length - 1].id;
+
+    let chunk = "";
+    for (const c of page) {
+      chunk +=
+        [
+          c.email,
+          c.firstName || "",
+          c.lastName || "",
+          c.subscribed ? "true" : "false",
+          c.createdAt.toISOString(),
+        ]
+          .map(escapeCsvField)
+          .join(",") + "\n";
     }
-    return field;
-  };
+    yield chunk;
 
-  const csvLines = [headers.join(",")];
-  for (const row of rows) {
-    csvLines.push(row.map(escapeCsvField).join(","));
+    if (page.length < PAGE_SIZE) return;
   }
-  return csvLines.join("\n");
+}
+
+/**
+ * Back-compat: collect the streaming export into a single string. Avoid for
+ * large audiences — call `streamExportContacts` and pipe to the response.
+ */
+export async function exportContacts(accountId: string, audienceId: string): Promise<string> {
+  let out = "";
+  for await (const chunk of streamExportContacts(accountId, audienceId)) {
+    out += chunk;
+  }
+  return out;
 }
 
 /**

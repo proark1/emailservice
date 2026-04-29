@@ -364,27 +364,54 @@ export async function processSequenceSteps() {
     ))
     .limit(100); // Process in batches
 
+  // Pre-fetch the sequence rows, step rows, and contact rows for the whole
+  // batch in a constant number of queries. The previous shape ran 3 queries
+  // per enrollment — 100 due enrollments → 300 round-trips per worker tick,
+  // which dominated DB CPU at scale.
+  const sequenceIdSet = Array.from(new Set(dueEnrollments.map((e) => e.sequenceId)));
+  const contactIdSet = Array.from(new Set(dueEnrollments.map((e) => e.contactId)));
+
+  const sequenceRows = sequenceIdSet.length
+    ? await db
+        .select()
+        .from(sequences)
+        .where(and(inArray(sequences.id, sequenceIdSet), eq(sequences.status, "active")))
+    : [];
+  const sequenceById = new Map(sequenceRows.map((s) => [s.id, s]));
+
+  const stepRows = sequenceIdSet.length
+    ? await db
+        .select()
+        .from(sequenceSteps)
+        .where(inArray(sequenceSteps.sequenceId, sequenceIdSet))
+        .orderBy(asc(sequenceSteps.position))
+    : [];
+  const stepsBySequence = new Map<string, typeof stepRows>();
+  for (const s of stepRows) {
+    const list = stepsBySequence.get(s.sequenceId) ?? [];
+    list.push(s);
+    stepsBySequence.set(s.sequenceId, list);
+  }
+
+  const contactRows = contactIdSet.length
+    ? await db
+        .select({ id: contacts.id, email: contacts.email, subscribed: contacts.subscribed })
+        .from(contacts)
+        .where(inArray(contacts.id, contactIdSet))
+    : [];
+  const contactById = new Map(contactRows.map((c) => [c.id, c]));
+
   let processed = 0;
 
   for (const enrollment of dueEnrollments) {
     try {
-      // Get the sequence and verify it's still active
-      const [sequence] = await db
-        .select()
-        .from(sequences)
-        .where(and(eq(sequences.id, enrollment.sequenceId), eq(sequences.status, "active")));
-
+      const sequence = sequenceById.get(enrollment.sequenceId);
       if (!sequence) {
         // Sequence was paused/deleted, skip
         continue;
       }
 
-      // Get steps ordered by position
-      const steps = await db
-        .select()
-        .from(sequenceSteps)
-        .where(eq(sequenceSteps.sequenceId, enrollment.sequenceId))
-        .orderBy(asc(sequenceSteps.position));
+      const steps = stepsBySequence.get(enrollment.sequenceId) ?? [];
 
       // Find the next step to send (currentStep is 0-indexed count of steps sent)
       const nextStepIndex = enrollment.currentStep;
@@ -399,11 +426,7 @@ export async function processSequenceSteps() {
 
       const step = steps[nextStepIndex];
 
-      // Get contact email
-      const [contact] = await db
-        .select({ email: contacts.email, subscribed: contacts.subscribed })
-        .from(contacts)
-        .where(eq(contacts.id, enrollment.contactId));
+      const contact = contactById.get(enrollment.contactId);
 
       if (!contact || !contact.subscribed) {
         await db

@@ -9,10 +9,19 @@ function readCookie(name: string): string | undefined {
 }
 
 const UNSAFE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
+// Login / register / logout don't need CSRF — they predate the session
+// cookie. Every other /auth mutation (change-password, profile, accept
+// invitation) is now CSRF-protected on the server, so we echo the token.
+const CSRF_AUTH_EXEMPT = new Set(["/auth/login", "/auth/register", "/auth/logout"]);
 
 export async function api<T = any>(path: string, options?: RequestInit): Promise<T> {
   const method = (options?.method || "GET").toUpperCase();
-  const needsCsrf = UNSAFE_METHODS.has(method) && (path.startsWith("/dashboard") || path.startsWith("/admin"));
+  const csrfRequired =
+    UNSAFE_METHODS.has(method) &&
+    (path.startsWith("/dashboard") ||
+      path.startsWith("/admin") ||
+      (path.startsWith("/auth") && !CSRF_AUTH_EXEMPT.has(path.split("?")[0])));
+  const needsCsrf = csrfRequired;
   const csrfToken = needsCsrf ? readCookie("csrf_token") : undefined;
   const res = await fetch(path, {
     credentials: "include",

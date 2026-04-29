@@ -6,22 +6,35 @@ import { webhookDeliveries } from "../db/schema/index.js";
 import { signWebhookPayload } from "../lib/crypto.js";
 
 function isPrivateIP(ip: string): boolean {
-  // IPv4 private/reserved ranges
-  if (ip.startsWith("127.") || ip.startsWith("10.") || ip.startsWith("192.168.") || ip === "0.0.0.0") return true;
-  if (ip.startsWith("172.")) {
-    const second = parseInt(ip.split(".")[1], 10);
-    if (second >= 16 && second <= 31) return true;
+  // IPv4 private/reserved ranges. Kept in sync with the create-time check
+  // in src/schemas/webhook.schema.ts so a URL that the API rejected can't
+  // sneak past the worker via DNS rebinding (and vice versa).
+  const v4 = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (v4) {
+    const a = parseInt(v4[1], 10);
+    const b = parseInt(v4[2], 10);
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;     // CGNAT
+    if (a === 192 && b === 0) return true;                 // 192.0.0.0/24, 192.0.2.0/24
+    if (a === 198 && (b === 18 || b === 19)) return true;  // benchmarking
+    if (a === 198 && b === 51) return true;                // TEST-NET-2
+    if (a === 203 && b === 0) return true;                 // TEST-NET-3
+    if (a >= 224) return true;                             // multicast + reserved
+    return false;
   }
-  if (ip.startsWith("169.254.")) return true; // link-local
   // IPv6 private/reserved
   if (ip === "::1" || ip === "::") return true;
   const lower = ip.toLowerCase();
-  if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // unique local
-  if (lower.startsWith("fe80:")) return true; // link-local
+  if (lower.startsWith("fe80:") || lower.startsWith("fe80::")) return true; // link-local
+  if (lower.startsWith("fec0:")) return true;                                // deprecated site-local
+  if (/^f[cd][0-9a-f]{0,2}:/.test(lower)) return true;                       // fc00::/7 unique local
+  if (lower.startsWith("ff")) return true;                                   // multicast
   if (lower.startsWith("::ffff:")) {
     // IPv4-mapped IPv6 — extract and check the IPv4 portion
-    const v4 = lower.slice(7);
-    return isPrivateIP(v4);
+    return isPrivateIP(lower.slice(7));
   }
   return false;
 }
@@ -75,7 +88,11 @@ async function processWebhookDeliver(job: Job<WebhookDeliverJobData>) {
         ...(v4addrs.status === "fulfilled" ? v4addrs.value : []),
         ...(v6addrs.status === "fulfilled" ? v6addrs.value : []),
       ];
-      if (resolvedIPs.length > 0 && resolvedIPs.every((ip) => isPrivateIP(ip))) {
+      // Reject if ANY resolved IP is private. `.every` was wrong: a DNS
+      // round-robin returning [public, private] would have passed, letting
+      // an attacker rebind to localhost via a host that initially resolved
+      // public and now returns mixed results.
+      if (resolvedIPs.some((ip) => isPrivateIP(ip))) {
         throw new Error("Webhook URL targets a private/internal address");
       }
     } catch (err) {
