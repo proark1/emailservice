@@ -1,5 +1,5 @@
 {
-  "id": "e5e4c5b0-4100-45d2-b8bd-105cc042cb65",
+  "id": "32a9977b-3033-43c7-a7f3-d33958381950",
   "prevId": "286aef20-78db-4a86-b6c0-1b5cd7e6238b",
   "version": "7",
   "dialect": "postgresql",
@@ -5282,9 +5282,15 @@
           "method": "btree",
           "with": {}
         },
-        "idx_webhook_deliveries_created": {
-          "name": "idx_webhook_deliveries_created",
+        "idx_webhook_deliveries_retention": {
+          "name": "idx_webhook_deliveries_retention",
           "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "created_at",
               "isExpression": false,

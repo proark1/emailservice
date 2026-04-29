@@ -8,4 +8,4 @@ ALTER TABLE "company_members" ALTER COLUMN "provisioned" SET DATA TYPE boolean U
 ALTER TABLE "company_members" ALTER COLUMN "provisioned" SET DEFAULT false;--> statement-breakpoint
 ALTER TABLE "suppressions" ADD CONSTRAINT "suppressions_source_email_id_emails_id_fk" FOREIGN KEY ("source_email_id") REFERENCES "public"."emails"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "idx_idempotency_keys_expires_at" ON "idempotency_keys" USING btree ("expires_at");--> statement-breakpoint
-CREATE INDEX "idx_webhook_deliveries_created" ON "webhook_deliveries" USING btree ("created_at");
+CREATE INDEX "idx_webhook_deliveries_retention" ON "webhook_deliveries" USING btree ("status","created_at");

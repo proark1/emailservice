@@ -26,5 +26,5 @@ export const webhookDeliveries = pgTable("webhook_deliveries", {
   // Used by the retention-purge worker to drop terminal-status rows older
   // than the retention window in batches. Composite (status, created_at)
   // matches the cleanup predicate exactly.
-  index("idx_webhook_deliveries_created").on(table.createdAt),
+  index("idx_webhook_deliveries_retention").on(table.status, table.createdAt),
 ]);
