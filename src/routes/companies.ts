@@ -24,7 +24,7 @@ import { ForbiddenError } from "../lib/errors.js";
  *   otherwise treated as if the owning account had made the request.
  */
 function assertCompanyScope(request: FastifyRequest, companyId: string) {
-  const keyCompanyId = (request.apiKey as any)?.companyId as string | null | undefined;
+  const keyCompanyId = request.apiKey.companyId;
   if (keyCompanyId && keyCompanyId !== companyId) {
     throw new ForbiddenError("API key is not scoped to this company");
   }
@@ -40,7 +40,7 @@ export default async function companyRoutes(app: FastifyInstance) {
   app.post("/", async (request, reply) => {
     const input = createCompanySchema.parse(request.body);
     // Company-scoped keys cannot create new companies — user keys only.
-    if ((request.apiKey as any)?.companyId) {
+    if (request.apiKey.companyId) {
       throw new ForbiddenError("Company-scoped API keys cannot create companies");
     }
     const company = await companyService.createCompany(request.account.id, input);
@@ -48,10 +48,11 @@ export default async function companyRoutes(app: FastifyInstance) {
   });
 
   app.get("/", async (request) => {
-    const keyCompanyId = (request.apiKey as any)?.companyId as string | null | undefined;
-    const rows = await companyService.listCompaniesForAccount(request.account.id);
-    const filtered = keyCompanyId ? rows.filter((r) => r.id === keyCompanyId) : rows;
-    return { data: filtered.map((r) => companyService.formatCompanyResponse(r as any)) };
+    const keyCompanyId = request.apiKey.companyId;
+    const rows = await companyService.listCompaniesForAccount(request.account.id, {
+      companyId: keyCompanyId,
+    });
+    return { data: rows.map((r) => companyService.formatCompanyResponse(r as any)) };
   });
 
   app.get<{ Params: { companyId: string } }>("/:companyId", async (request) => {
@@ -69,7 +70,7 @@ export default async function companyRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { companyId: string } }>("/:companyId", async (request) => {
     assertCompanyScope(request, request.params.companyId);
-    if ((request.apiKey as any)?.companyId) {
+    if (request.apiKey.companyId) {
       throw new ForbiddenError("Company-scoped API keys cannot delete the company");
     }
     await companyService.deleteCompany(request.account.id, request.params.companyId);

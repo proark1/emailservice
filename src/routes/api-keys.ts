@@ -1,11 +1,15 @@
 import { FastifyInstance } from "fastify";
 import { createApiKeySchema } from "../schemas/api-key.schema.js";
 import * as apiKeyService from "../services/api-key.service.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 export default async function apiKeyRoutes(app: FastifyInstance) {
-  // All routes require authentication
+  // All routes require authentication. Account-level API key management is
+  // not exposed to company-scoped keys — those manage their own keys via
+  // POST /v1/companies/:id/api-keys.
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    assertNotCompanyScoped(request);
   });
 
   // POST /v1/api-keys

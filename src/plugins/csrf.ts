@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
+import { ForbiddenError } from "../lib/errors.js";
 
 /**
  * Double-submit CSRF for cookie-authenticated routes (dashboard + admin).
@@ -51,7 +52,7 @@ function isExempt(url: string): boolean {
   return EXEMPT_PREFIXES.some((p) => url.startsWith(p));
 }
 
-async function onRequest(request: FastifyRequest, reply: FastifyReply) {
+async function onRequest(request: FastifyRequest, _reply: FastifyReply) {
   const url = request.url.split("?")[0];
   if (isExempt(url)) return;
   if (!isProtected(url)) return;
@@ -61,18 +62,14 @@ async function onRequest(request: FastifyRequest, reply: FastifyReply) {
   const headerToken = request.headers[CSRF_HEADER];
 
   if (!cookieToken || !headerToken || typeof headerToken !== "string") {
-    return reply.status(403).send({
-      error: { type: "csrf_missing", message: "CSRF token required. Include the csrf_token cookie in the X-CSRF-Token header." },
-    });
+    throw new ForbiddenError("CSRF token required. Include the csrf_token cookie in the X-CSRF-Token header.");
   }
 
   // Constant-time compare so we don't leak timing information.
   const a = Buffer.from(cookieToken);
   const b = Buffer.from(headerToken);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-    return reply.status(403).send({
-      error: { type: "csrf_mismatch", message: "CSRF token mismatch." },
-    });
+    throw new ForbiddenError("CSRF token mismatch.");
   }
 }
 

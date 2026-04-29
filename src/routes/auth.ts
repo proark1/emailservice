@@ -87,32 +87,38 @@ export default async function authRoutes(app: FastifyInstance) {
       .send({ data: { message: "Logged out" } });
   });
 
-  // GET /auth/me
+  // GET /auth/me — returns the current session's account, or 401 with the
+  // standard error envelope when the cookie is missing/invalid. We rely on
+  // the global error handler so the response shape stays consistent with
+  // every other route ({ error: { type, message } }).
   app.get("/me", async (request, reply) => {
+    const { UnauthorizedError } = await import("../lib/errors.js");
+    const token = request.cookies.token;
+    if (!token) throw new UnauthorizedError();
+
+    let decoded: { id: string; role: string };
     try {
-      const token = request.cookies.token;
-      if (!token) return reply.status(401).send({ data: null });
-
-      const decoded = app.jwt.verify<{ id: string; role: string }>(token);
-      const account = await authService.getAccountById(decoded.id);
-      if (!account) return reply.status(401).send({ data: null });
-
-      // Refresh the CSRF cookie opportunistically — covers first-load after a
-      // deploy where the cookie wasn't in place yet.
-      if (!request.cookies?.csrf_token) issueCsrfToken(reply);
-
-      return reply.send({
-        data: {
-          id: account.id,
-          name: account.name,
-          email: account.email,
-          role: account.role,
-          owns_domains: await getOwnsDomains(account.id),
-        },
-      });
+      decoded = app.jwt.verify<{ id: string; role: string }>(token);
     } catch {
-      return reply.status(401).send({ data: null });
+      throw new UnauthorizedError();
     }
+
+    const account = await authService.getAccountById(decoded.id);
+    if (!account) throw new UnauthorizedError();
+
+    // Refresh the CSRF cookie opportunistically — covers first-load after a
+    // deploy where the cookie wasn't in place yet.
+    if (!request.cookies?.csrf_token) issueCsrfToken(reply);
+
+    return {
+      data: {
+        id: account.id,
+        name: account.name,
+        email: account.email,
+        role: account.role,
+        owns_domains: await getOwnsDomains(account.id),
+      },
+    };
   });
 
   // PATCH /auth/profile — update name

@@ -4,7 +4,25 @@ import { eq, isNull } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { apiKeys, accounts } from "../db/schema/index.js";
 import { verifyApiKey, getKeyPrefix } from "../lib/crypto.js";
-import { UnauthorizedError } from "../lib/errors.js";
+import { ForbiddenError, UnauthorizedError } from "../lib/errors.js";
+
+/**
+ * Reject company-scoped API keys on routes that don't yet enforce company
+ * isolation. Used by webhooks, audiences, templates, broadcasts, contacts,
+ * sequences, signatures, address-book, suppressions, analytics, and account
+ * API key management — these resources are scoped to `accountId`, so a
+ * company-scoped key would otherwise see/modify sibling companies' data on
+ * the same root account.
+ *
+ * Use on the route-plugin's onRequest hook AFTER `app.authenticate(request)`.
+ */
+export function assertNotCompanyScoped(request: FastifyRequest): void {
+  if (request.apiKey?.companyId) {
+    throw new ForbiddenError(
+      "This endpoint is not available for company-scoped API keys. Use a user-level API key.",
+    );
+  }
+}
 
 // Throttle lastUsedAt updates: only write once per key per 5 minutes
 const LAST_USED_THROTTLE_MS = 5 * 60 * 1000;

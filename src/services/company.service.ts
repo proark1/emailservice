@@ -29,26 +29,41 @@ export async function requireCompanyRole(
 export async function createCompany(ownerAccountId: string, input: CreateCompanyInput) {
   const db = getDb();
 
-  const [existing] = await db.select().from(companies).where(eq(companies.slug, input.slug));
-  if (existing) throw new ConflictError(`A company with slug "${input.slug}" already exists`);
+  // Wrap company + owner-member creation in a transaction so a partial failure
+  // can't leave an orphaned company row that no one can manage. The slug check
+  // is also inside the transaction; the unique index on slug is the real
+  // guard, but the pre-check produces a friendlier 409.
+  return db.transaction(async (tx) => {
+    const [existing] = await tx.select().from(companies).where(eq(companies.slug, input.slug));
+    if (existing) throw new ConflictError(`A company with slug "${input.slug}" already exists`);
 
-  const [company] = await db
-    .insert(companies)
-    .values({ ownerAccountId, name: input.name, slug: input.slug })
-    .returning();
+    const [company] = await tx
+      .insert(companies)
+      .values({ ownerAccountId, name: input.name, slug: input.slug })
+      .returning();
 
-  await db.insert(companyMembers).values({
-    companyId: company.id,
-    accountId: ownerAccountId,
-    role: "owner",
-    provisioned: "false",
+    await tx.insert(companyMembers).values({
+      companyId: company.id,
+      accountId: ownerAccountId,
+      role: "owner",
+      provisioned: "false",
+    });
+
+    return company;
   });
-
-  return company;
 }
 
-export async function listCompaniesForAccount(accountId: string) {
+export async function listCompaniesForAccount(
+  accountId: string,
+  options: { companyId?: string | null } = {},
+) {
   const db = getDb();
+  const conditions = [eq(companyMembers.accountId, accountId)];
+  // Push the company-scope filter into SQL so we can't leak a sibling company
+  // through a future query change that returns extra rows.
+  if (options.companyId) {
+    conditions.push(eq(companyMembers.companyId, options.companyId));
+  }
   return db
     .select({
       id: companies.id,
@@ -60,7 +75,7 @@ export async function listCompaniesForAccount(accountId: string) {
     })
     .from(companyMembers)
     .innerJoin(companies, eq(companies.id, companyMembers.companyId))
-    .where(eq(companyMembers.accountId, accountId))
+    .where(and(...conditions))
     .orderBy(companies.createdAt);
 }
 

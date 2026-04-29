@@ -21,44 +21,82 @@ export async function provisionMember(
   const db = getDb();
 
   const emailLower = input.email.toLowerCase();
-  const [existingAccount] = await db.select().from(accounts).where(eq(accounts.email, emailLower));
 
-  let account = existingAccount;
-  let createdAccount = false;
-  let generatedPassword: string | null = null;
+  // Slow operations (argon2 hash, key derivation) happen outside the
+  // transaction so we don't hold row locks during them.
+  const password = input.password ?? randomBytes(18).toString("base64url");
+  const generatedPassword: string | null = input.password ? null : password;
+  const passwordHashPromise = argon2.hash(password);
+  const apiKeyMaterialPromise = input.issue_api_key
+    ? (async () => {
+        const fullKey = generateApiKey();
+        const keyHash = await hashApiKey(fullKey);
+        const keyPrefix = getKeyPrefix(fullKey);
+        return { fullKey, keyHash, keyPrefix };
+      })()
+    : Promise.resolve(null);
+  const [passwordHash, apiKeyMaterial] = await Promise.all([passwordHashPromise, apiKeyMaterialPromise]);
 
-  if (!account) {
-    const password = input.password ?? randomBytes(18).toString("base64url");
-    if (!input.password) generatedPassword = password;
-    const passwordHash = await argon2.hash(password);
-    const [created] = await db
-      .insert(accounts)
-      .values({ name: input.name, email: emailLower, passwordHash, role: "user" })
+  // Wrap the account/member/api-key writes in a transaction so a partial
+  // failure can't leave an orphaned account or a member without a key.
+  // Mailbox assignment stays outside because it goes through a service
+  // function with its own auth checks; if it fails, the member exists but
+  // has no handle yet — recoverable by re-invoking the mailbox endpoint.
+  const txResult = await db.transaction(async (tx) => {
+    const [existingAccount] = await tx.select().from(accounts).where(eq(accounts.email, emailLower));
+
+    let account = existingAccount;
+    let createdAccount = false;
+    if (!account) {
+      const [created] = await tx
+        .insert(accounts)
+        .values({ name: input.name, email: emailLower, passwordHash, role: "user" })
+        .returning();
+      account = created;
+      createdAccount = true;
+    }
+
+    const [existingMember] = await tx
+      .select()
+      .from(companyMembers)
+      .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.accountId, account.id)));
+    if (existingMember) {
+      throw new ConflictError(`${input.email} is already a member of this company`);
+    }
+
+    const [member] = await tx
+      .insert(companyMembers)
+      .values({
+        companyId,
+        accountId: account.id,
+        role: input.role as CompanyRole,
+        provisioned: createdAccount ? "true" : "false",
+      })
       .returning();
-    account = created;
-    createdAccount = true;
-  }
 
-  // Attach to company (or reject if already a member)
-  const [existingMember] = await db
-    .select()
-    .from(companyMembers)
-    .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.accountId, account.id)));
-  if (existingMember) {
-    throw new ConflictError(`${input.email} is already a member of this company`);
-  }
+    let issuedKey: { id: string; fullKey: string; prefix: string } | null = null;
+    if (apiKeyMaterial) {
+      const [apiKey] = await tx
+        .insert(apiKeys)
+        .values({
+          accountId: account.id,
+          companyId: null,
+          name: input.api_key_name ?? `Provisioned — ${input.name}`,
+          keyPrefix: apiKeyMaterial.keyPrefix,
+          keyHash: apiKeyMaterial.keyHash,
+          permissions: {},
+          rateLimit: 60,
+        })
+        .returning();
+      issuedKey = { id: apiKey.id, fullKey: apiKeyMaterial.fullKey, prefix: apiKeyMaterial.keyPrefix };
+    }
 
-  const [member] = await db
-    .insert(companyMembers)
-    .values({
-      companyId,
-      accountId: account.id,
-      role: input.role as CompanyRole,
-      provisioned: createdAccount ? "true" : "false",
-    })
-    .returning();
+    return { account, createdAccount, member, issuedKey };
+  });
 
-  // Optional handle assignment
+  const { account, createdAccount, member, issuedKey } = txResult;
+
+  // Optional handle assignment — runs outside the tx by design (see comment above)
   let mailbox: typeof companyMailboxes.$inferSelect | null = null;
   if (input.domain_id && input.local_part) {
     mailbox = await assignMailbox(callerAccountId, companyId, {
@@ -66,27 +104,6 @@ export async function provisionMember(
       domainId: input.domain_id,
       localPart: input.local_part,
     });
-  }
-
-  // Optional per-member API key
-  let issuedKey: { id: string; fullKey: string; prefix: string } | null = null;
-  if (input.issue_api_key) {
-    const fullKey = generateApiKey();
-    const keyHash = await hashApiKey(fullKey);
-    const keyPrefix = getKeyPrefix(fullKey);
-    const [apiKey] = await db
-      .insert(apiKeys)
-      .values({
-        accountId: account.id,
-        companyId: null,
-        name: input.api_key_name ?? `Provisioned — ${input.name}`,
-        keyPrefix,
-        keyHash,
-        permissions: {},
-        rateLimit: 60,
-      })
-      .returning();
-    issuedKey = { id: apiKey.id, fullKey, prefix: keyPrefix };
   }
 
   // Welcome email (fire-and-forget). Skip when caller supplied their own password

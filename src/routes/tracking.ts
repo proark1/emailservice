@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import * as trackingService from "../services/tracking.service.js";
 import { addSuppression } from "../services/suppression.service.js";
+import { ValidationError } from "../lib/errors.js";
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -51,7 +52,7 @@ export default async function trackingRoutes(app: FastifyInstance) {
     const data = trackingService.decodeClickTrackingData(trackingId);
 
     if (!data) {
-      return reply.status(400).send({ error: { type: "bad_request", message: "Invalid tracking link" } });
+      throw new ValidationError("Invalid tracking link");
     }
 
     // Parse the URL and enforce http/https only. Using URL() also rejects
@@ -61,13 +62,13 @@ export default async function trackingRoutes(app: FastifyInstance) {
     try {
       parsedTarget = new URL(data.url);
     } catch {
-      return reply.status(400).send({ error: { type: "bad_request", message: "Invalid redirect URL" } });
+      throw new ValidationError("Invalid redirect URL");
     }
     if (parsedTarget.protocol !== "http:" && parsedTarget.protocol !== "https:") {
-      return reply.status(400).send({ error: { type: "bad_request", message: "Invalid redirect URL" } });
+      throw new ValidationError("Invalid redirect URL");
     }
     if (parsedTarget.username || parsedTarget.password) {
-      return reply.status(400).send({ error: { type: "bad_request", message: "Invalid redirect URL" } });
+      throw new ValidationError("Invalid redirect URL");
     }
 
     // Record the click (fire and forget)
@@ -101,7 +102,7 @@ export default async function trackingRoutes(app: FastifyInstance) {
   app.post<{ Params: { encodedData: string } }>("/unsubscribe/:encodedData", async (request, reply) => {
     const result = await applyUnsubscribeToken(request.params.encodedData);
     if (!result) {
-      return reply.status(400).send({ error: { type: "bad_request", message: "Invalid unsubscribe link" } });
+      throw new ValidationError("Invalid unsubscribe link");
     }
     return reply.status(204).send();
   });

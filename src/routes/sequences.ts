@@ -5,10 +5,12 @@ import {
 } from "../schemas/sequence.schema.js";
 import * as sequenceService from "../services/sequence.service.js";
 import { paginationSchema } from "../lib/pagination.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 export default async function sequenceRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    assertNotCompanyScoped(request);
   });
 
   // --- Sequences ---

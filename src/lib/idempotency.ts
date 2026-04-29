@@ -58,37 +58,52 @@ export async function reserveIdempotencyKey(
   const db = getDb();
   const expiresAt = new Date(Date.now() + TTL_HOURS * 3_600_000);
 
-  const inserted = await db
-    .insert(idempotencyKeys)
-    .values({
-      accountId,
-      key,
-      responseStatus: STATUS_PENDING,
-      responseBody: null,
-      expiresAt,
-    })
-    .onConflictDoNothing()
-    .returning();
+  // Transactional read-with-lock then insert/refresh. The previous two-step
+  // (INSERT … ON CONFLICT DO NOTHING; then SELECT WHERE expires_at > NOW())
+  // had a bug: if a stale row existed for the same key, the insert was a
+  // no-op and the select returned nothing, so the function returned
+  // "reserved" without actually claiming the key — letting two concurrent
+  // callers both run the handler. Holding a row-level lock through the
+  // upsert closes that gap.
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(idempotencyKeys)
+      .where(and(eq(idempotencyKeys.accountId, accountId), eq(idempotencyKeys.key, key)))
+      .for("update");
 
-  if (inserted.length > 0) return { status: "reserved" };
+    const now = new Date();
+    if (existing && existing.expiresAt > now) {
+      if (existing.responseStatus === STATUS_PENDING) return { status: "in_flight" } as const;
+      return {
+        status: "cached",
+        response: { status: existing.responseStatus, body: existing.responseBody },
+      } as const;
+    }
 
-  const [existing] = await db
-    .select()
-    .from(idempotencyKeys)
-    .where(
-      and(
-        eq(idempotencyKeys.accountId, accountId),
-        eq(idempotencyKeys.key, key),
-        gt(idempotencyKeys.expiresAt, new Date()),
-      ),
-    );
+    // No live row — claim it. onConflictDoUpdate covers the case where a
+    // stale row existed (overwrites it) and the case where no row existed
+    // (insert). Either way we now own the reservation.
+    await tx
+      .insert(idempotencyKeys)
+      .values({
+        accountId,
+        key,
+        responseStatus: STATUS_PENDING,
+        responseBody: null,
+        expiresAt,
+      })
+      .onConflictDoUpdate({
+        target: [idempotencyKeys.accountId, idempotencyKeys.key],
+        set: {
+          responseStatus: STATUS_PENDING,
+          responseBody: null,
+          expiresAt,
+        },
+      });
 
-  if (!existing) return { status: "reserved" }; // expired between insert and select
-  if (existing.responseStatus === STATUS_PENDING) return { status: "in_flight" };
-  return {
-    status: "cached",
-    response: { status: existing.responseStatus, body: existing.responseBody },
-  };
+    return { status: "reserved" } as const;
+  });
 }
 
 /**
