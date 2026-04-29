@@ -127,7 +127,7 @@ Workers live in `src/workers/`. Queues declared in `src/queues/index.ts`.
 4. Loads DKIM private key (decrypts AES-256-GCM), signs with nodemailer, sends via configured transport:
    - Dev → Mailpit (localhost:1025)
    - Production + `SMTP_HOST` set → relay (your own Postfix, Gmail, SendGrid, etc.)
-   - Production, no `SMTP_HOST` → `nodemailer direct:true` (resolves MX, connects port 25 — blocked on Railway)
+   - Production, no `SMTP_HOST` → `nodemailer direct:true` (resolves MX, connects port 25 — typically blocked on cloud egress)
 
 ### DNS verification flow
 `POST /v1/domains` → generates DKIM RSA-2048 key pair + DNS record values → saves to DB → enqueues `dns:verify` job with 60s delay. Worker polls with exponential backoff (1min → 5min intervals → 30min) for up to 72 hours. Uses `Date.now() - job.data.startedAt` for elapsed time tracking.
@@ -382,7 +382,9 @@ curl -X POST http://localhost:3000/v1/companies/$CID/members \
 
 ## Production deployment (mailnowapi.com)
 
-The production stack runs on a single **Hetzner box** (hostname `mail`, public IP `95.217.161.0`). GitHub → Railway is the CI/CD pipeline that pushes new images to that host; the app itself does **not** run on Railway.
+The production stack runs on a single **Hetzner box** (hostname `mail`, public IP `95.217.161.0`), reached at `https://mailnowapi.com` (Caddy fronts the API on `:443` → `127.0.0.1:3000`). The app, the workers, the database, and Redis all live on this one box. **There is no Railway, no Render, no Cloud Run** — earlier scaffolding ran a parallel app + Postgres on Railway; that was retired (see "Cutover from Railway" below).
+
+CI/CD is **GitHub Actions → SSH → Hetzner**: a push to `main` runs `.github/workflows/deploy.yml`, which SSHes into the box, fast-forwards `/opt/emailservice` to `origin/main`, and `docker compose ... up -d --build app worker smtp-relay`. Migrations run automatically on app startup (`src/index.ts → runMigrations`).
 
 ### Layout on the host
 
@@ -435,11 +437,59 @@ postconf smtpd_relay_restrictions
 
 Public clients hitting `:25` from the internet are rejected — only loopback + docker bridge can relay. Don't widen `mynetworks`.
 
+### Database & Redis
+
+**Both run as containers on this same Hetzner box** — no managed services, no Railway plugin, no external DB. Persistence:
+
+| Service | Container | Bind | Volume | Notes |
+|---|---|---|---|---|
+| Postgres 16 | `deploy-postgres-1` | `127.0.0.1:5432` | `pgdata` (docker named volume) | Loopback-only — not exposed to the public internet. Connect from inside another container as `postgres:5432`, or from the host via `127.0.0.1:5432`. |
+| Redis 7 | `deploy-redis-1` | `127.0.0.1:6379` | `redisdata` | Loopback-only. AOF on (`--appendonly yes`). |
+
+The app and worker reach them via the docker bridge — DNS names `postgres` and `redis` are resolved by the compose network.
+
+```bash
+# Connect from the host (psql installed on the box; otherwise use docker exec)
+docker exec -it deploy-postgres-1 psql -U emailservice -d emailservice
+docker exec -it deploy-redis-1 redis-cli
+
+# Backups (cron these — there are no automated backups otherwise)
+docker exec deploy-postgres-1 pg_dump -U emailservice --no-owner --no-acl emailservice \
+  | gzip > /opt/backups/pg-$(date +%Y%m%d-%H%M).sql.gz
+
+# Volume disk usage
+docker system df -v | grep -E 'pgdata|redisdata'
+```
+
+Schema is owned by Drizzle. Migrations live under `drizzle/` and are applied automatically on app startup (`src/db/index.ts:runMigrations`). To inspect what's applied:
+
+```bash
+docker exec deploy-postgres-1 psql -U emailservice -d emailservice -c \
+  "SELECT id, hash, created_at FROM __drizzle_migrations ORDER BY id DESC LIMIT 5;"
+```
+
 ### Required env vars in `/opt/emailservice/.env`
 
 `NODE_ENV=production`, `DATABASE_URL`, `REDIS_URL`, `BASE_URL`, `TRACKING_URL`, `MAIL_HOST=mail.mailnowapi.com`, `ENCRYPTION_KEY`, `JWT_SECRET`, `TRACKING_HMAC_SECRET`, `POSTGRES_PASSWORD`, `SMTP_HOST=172.18.0.1`, `SMTP_PORT=25`, `LOG_LEVEL`.
 
-The compose injects `DATABASE_URL=postgresql://emailservice:${POSTGRES_PASSWORD}@postgres:5432/emailservice` and `REDIS_URL=redis://redis:6379` itself, so those values in `.env` are overridden.
+The compose **overrides** `DATABASE_URL=postgresql://emailservice:${POSTGRES_PASSWORD}@postgres:5432/emailservice` and `REDIS_URL=redis://redis:6379` per-service so the app/worker/smtp-relay always talk to the in-compose Postgres/Redis. Whatever you put in `.env` for those two is ignored by the app containers.
+
+### CI/CD: GitHub Actions → Hetzner
+
+A push to `main` triggers `.github/workflows/deploy.yml` which:
+
+1. SSHes into the Hetzner box using the `HETZNER_SSH_KEY` repo secret.
+2. `cd /opt/emailservice && git fetch origin main && git reset --hard origin/main`
+3. `cd deploy && docker compose -f docker-compose.prod.yml up -d --build app worker smtp-relay`
+
+`git reset --hard` is intentional — `/opt/emailservice` is a deploy target, not a workstation. **Never hand-edit files there**; everything lands as a PR. If the working tree drifts (someone edited a file on the box), the next deploy will silently nuke their changes.
+
+Required GitHub secrets:
+- `HETZNER_HOST` — `95.217.161.0` or `mailnowapi.com`
+- `HETZNER_USER` — `root`
+- `HETZNER_SSH_KEY` — private key whose pub half is in `/root/.ssh/authorized_keys` on the box
+
+Watch a deploy: GitHub repo → Actions tab → "Deploy to Hetzner" run. Failures there are usually one of: SSH connect failed (key/host wrong), docker build failed (typecheck/test errors locally would have caught it), or the post-deploy `docker compose ps` reports a container in `Restarting` (see "Crash-loop debugging" below).
 
 ### Common ops on the host
 
@@ -472,6 +522,14 @@ Migrations run before Fastify starts listening, and `loadConfig()` runs even ear
 1. **Missing required env var.** Look for `Failed to start server: Error: <NAME> environment variable must be set in production`. Add it to `/opt/emailservice/.env` and recreate the containers.
 2. **Migration failure.** Look for drizzle errors before "Migrations complete." Usually a hand-edited or partially-applied migration; never edit files under `drizzle/` directly.
 3. **Postgres/Redis unreachable.** The compose has `depends_on: condition: service_healthy`, so the app shouldn't start if those are unhealthy — check `docker compose ps` for the `(healthy)` marker on `postgres` and `redis` first.
+
+### Cutover from Railway (historical)
+
+There used to be a parallel deployment on Railway (`emailservice-production-4cad.up.railway.app`) with its own Postgres plugin. It was retired in April 2026 once the Hetzner deployment proved out. Things to know if you stumble across an old reference:
+
+- Railway's Postgres held minimal data (1 account, 2 domains, 9 emails — all our own test traffic). It was abandoned, not migrated. Final dump was archived to `/opt/backups/railway-final-YYYYMMDD.sql.gz` on the Hetzner box for cold-storage lookup.
+- If something in the codebase still references `railway.app` or the `emailservice-production-4cad` URL, that's stale — `grep -rE 'railway|RAILWAY' src/ web/ deploy/ .github/` should return nothing.
+- The deploy pipeline used to be GitHub → Railway → Hetzner. It is now **GitHub Actions → Hetzner directly** (see "CI/CD" above). If anything is still trying to push to Railway, the deploy will silently stop landing — switch it to GitHub Actions.
 
 ---
 
