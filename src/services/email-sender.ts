@@ -315,7 +315,13 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
     // (e.g. "X-Foo<U+2028>Bcc: attacker@evil.com"). We also reject keys that
     // aren't valid RFC 5322 token characters so an attacker can't sneak ":"
     // or whitespace into the field-name half of the line.
+    // Test variant \u2014 used to *detect* any forbidden char so the offending
+    // header can be dropped outright. The replace variant below has the
+    // global + `+` flags so it collapses runs of terminators (CRLF pairs,
+    // repeated U+2028, \u2026) into a single replacement instead of leaving the
+    // tail of the run intact (which the prior /\u2026/  one-shot replace did).
     const FORBIDDEN_LINE_CHARS = /[\r\n\u0085\u2028\u2029]/;
+    const FORBIDDEN_LINE_CHARS_G = /[\r\n\u0085\u2028\u2029]+/g;
     const VALID_HEADER_NAME = /^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$/;
     const existingHeaders = email.headers || {};
     const sanitizedHeaders: Record<string, string> = {};
@@ -330,7 +336,7 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
     // Zod blocks them at the API layer, but inbound SMTP relay and DB-level
     // mutations could put a "\r\n" subject in the email row; this is the last
     // line of defense.
-    const safeSubject = (email.subject || "").replace(FORBIDDEN_LINE_CHARS, " ");
+    const safeSubject = (email.subject || "").replace(FORBIDDEN_LINE_CHARS_G, " ");
     const mergedHeaders: Record<string, string> = {
       ...sanitizedHeaders,
       ...unsubscribeHeaders,
@@ -375,7 +381,7 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       // exotic chars but doesn't reject CR/LF outright, and a malicious
       // filename "report.pdf\r\nBcc: …" would otherwise inject a header.
       attachments: email.attachments?.map((a) => ({
-        filename: a.filename.replace(FORBIDDEN_LINE_CHARS, "_"),
+        filename: a.filename.replace(FORBIDDEN_LINE_CHARS_G, "_"),
         content: Buffer.from(a.content, "base64"),
         contentType: a.contentType,
       })),

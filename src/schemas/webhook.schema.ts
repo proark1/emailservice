@@ -1,4 +1,5 @@
 import { z } from "zod";
+import net from "node:net";
 import { WEBHOOK_EVENT_TYPES } from "../types/webhook-events.js";
 
 // Block private/internal targets at create time. The webhook delivery worker
@@ -14,10 +15,15 @@ const PRIVATE_HOSTNAMES = new Set([
 const PRIVATE_HOSTNAME_SUFFIXES = [".local", ".internal", ".localhost"];
 
 // IPv4 private / reserved ranges. Mirrors the worker's isPrivateIP helper.
+// Uses net.isIP for canonical detection so we don't get fooled by "127.1"
+// (3-part shorthand) or "012.0.0.1" (octal-prefixed form). Both are accepted
+// by some HTTP clients and OS resolvers, so a stricter regex would let
+// SSRF bypasses through. See isAmbiguousNumericHost below for the second
+// half of this defense — rejecting any "looks numeric but isn't a clean
+// dotted-quad" host outright.
 function isPrivateIPv4Literal(host: string): boolean {
-  if (!/^\d+\.\d+\.\d+\.\d+$/.test(host)) return false;
+  if (net.isIP(host) !== 4) return false;
   const parts = host.split(".").map((n) => parseInt(n, 10));
-  if (parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true; // malformed → reject
   const [a, b] = parts;
   if (a === 0) return true;                                   // 0.0.0.0/8 (current network)
   if (a === 10) return true;                                  // 10.0.0.0/8
@@ -32,6 +38,34 @@ function isPrivateIPv4Literal(host: string): boolean {
   if (a === 203 && b === 0) return true;                      // 203.0.113.0/24 TEST-NET-3
   if (a >= 224) return true;                                  // multicast + reserved
   return false;
+}
+
+/**
+ * Reject hostnames that *look* like an IP attempt but aren't a canonical one
+ * — e.g. `127.1` (3-part shorthand), `2130706433` (32-bit integer form),
+ * `0177.0.0.1` (octal-prefixed), `0x7f000001` (hex form). HTTP clients and
+ * OS resolvers accept many of these and they all collapse to 127.0.0.1, so
+ * an attacker could otherwise bypass the explicit private-range checks.
+ *
+ * The rule: if the hostname is purely digits / dots / `:` / `0x` style hex,
+ * it must be a canonical IPv4 or IPv6 — anything else is treated as an
+ * SSRF-bypass attempt and rejected.
+ */
+function isAmbiguousNumericHost(host: string): boolean {
+  // Strip IPv6 brackets if present so the regex below can match.
+  const stripped = host.replace(/^\[|\]$/g, "");
+  // Heuristic: pure-numeric host (digits + dots, or hex-prefixed digits).
+  // We deliberately do NOT match alpha hostnames here — a real domain like
+  // `example.com` is not "numeric-ish" and must pass through.
+  const looksNumeric =
+    /^[0-9.]+$/.test(stripped) ||                  // dotted-decimal or short-form
+    /^0x[0-9a-f]+$/i.test(stripped) ||             // single hex literal
+    /^[0-9]+$/.test(stripped) ||                   // single integer literal
+    /^[0-9.x]+$/i.test(stripped);                  // mix of dotted hex
+  if (!looksNumeric) return false;
+  // Canonical forms are fine — they'll be checked by the private-range tests.
+  if (net.isIP(stripped) !== 0) return false;
+  return true;
 }
 
 function isPrivateIPv6Literal(host: string): boolean {
@@ -64,6 +98,7 @@ const httpUrl = z.string().url().max(2048).refine(
       const hostname = parsed.hostname.toLowerCase();
       if (PRIVATE_HOSTNAMES.has(hostname)) return false;
       if (PRIVATE_HOSTNAME_SUFFIXES.some((s) => hostname.endsWith(s))) return false;
+      if (isAmbiguousNumericHost(hostname)) return false;
       if (isPrivateIPv4Literal(hostname)) return false;
       if (isPrivateIPv6Literal(hostname)) return false;
       return true;

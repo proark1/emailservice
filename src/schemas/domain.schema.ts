@@ -24,12 +24,14 @@ export const createDomainSchema = z.object({
     // dotted-quad IPv4 (e.g. "127.0.0.1") would otherwise match.
     if (net.isIP(lower) > 0) return false;
     if (RESERVED_DOMAIN_NAMES.has(lower)) return false;
-    // Require at least one dot AND a TLD of ≥2 alpha characters. A single
-    // label ("localhost") or a numeric-only TLD (e.g. "example.123") isn't
-    // valid for public mail delivery.
+    // Require at least one dot AND a TLD that is at least 2 chars long and
+    // not purely numeric. The outer regex on the whole name already
+    // restricts to alphanumerics + hyphens, so we don't need to re-check
+    // the alphabet here. Allowing IDN punycode TLDs like `.xn--p1ai` is the
+    // reason this only excludes numeric-only TLDs.
     if (!lower.includes(".")) return false;
     const tld = lower.split(".").pop() ?? "";
-    if (tld.length < 2 || !/^[a-z]+$/.test(tld)) return false;
+    if (tld.length < 2 || /^\d+$/.test(tld)) return false;
     return true;
   }, "Domain must be a public, dotted hostname (no IPs, localhost, or numeric TLDs)"),
   mode: z.enum(["send", "receive", "both"]).optional().default("both"),
