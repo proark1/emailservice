@@ -2,10 +2,12 @@ import { FastifyInstance } from "fastify";
 import { createBroadcastSchema } from "../schemas/broadcast.schema.js";
 import * as broadcastService from "../services/broadcast.service.js";
 import { paginationSchema } from "../lib/pagination.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 export default async function broadcastRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    assertNotCompanyScoped(request);
   });
 
   // POST /v1/broadcasts

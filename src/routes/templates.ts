@@ -2,10 +2,12 @@ import { FastifyInstance } from "fastify";
 import { createTemplateSchema, updateTemplateSchema } from "../schemas/template.schema.js";
 import * as templateService from "../services/template.service.js";
 import { paginationSchema } from "../lib/pagination.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 export default async function templateRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    assertNotCompanyScoped(request);
   });
 
   // POST /v1/templates

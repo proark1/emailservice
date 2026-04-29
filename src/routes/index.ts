@@ -93,6 +93,8 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(async (suppApp) => {
     suppApp.addHook("onRequest", async (request) => {
       await app.authenticate(request);
+      const { assertNotCompanyScoped } = await import("../plugins/auth.js");
+      assertNotCompanyScoped(request);
     });
 
     suppApp.get("/", async (request) => {
@@ -124,6 +126,8 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(async (analyticsApp) => {
     analyticsApp.addHook("onRequest", async (request) => {
       await app.authenticate(request);
+      const { assertNotCompanyScoped } = await import("../plugins/auth.js");
+      assertNotCompanyScoped(request);
     });
 
     analyticsApp.get("/", async (request) => {

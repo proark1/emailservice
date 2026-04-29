@@ -11,7 +11,7 @@ export default async function emailRoutes(app: FastifyInstance) {
   // POST /v1/emails
   app.post("/", async (request, reply) => {
     const input = sendEmailSchema.parse(request.body);
-    const companyScopeId = (request.apiKey as any)?.companyId ?? null;
+    const companyScopeId = request.apiKey.companyId;
     const result = await emailService.sendEmail(request.account.id, input, { companyScopeId });
 
     if (result.cached) {
@@ -25,7 +25,7 @@ export default async function emailRoutes(app: FastifyInstance) {
   // GET /v1/emails
   app.get("/", async (request) => {
     const { cursor, limit } = paginationSchema.parse(request.query);
-    const companyScopeId = (request.apiKey as any)?.companyId ?? null;
+    const companyScopeId = request.apiKey.companyId;
     const emailList = await emailService.listEmails(request.account.id, { limit, cursor, companyScopeId });
     return buildPaginatedResponse(
       emailList.map(emailService.formatEmailResponse),
@@ -35,14 +35,14 @@ export default async function emailRoutes(app: FastifyInstance) {
 
   // GET /v1/emails/:id
   app.get<{ Params: { id: string } }>("/:id", async (request) => {
-    const companyScopeId = (request.apiKey as any)?.companyId ?? null;
+    const companyScopeId = request.apiKey.companyId;
     const email = await emailService.getEmail(request.account.id, request.params.id, { companyScopeId });
     return { data: emailService.formatEmailResponse(email) };
   });
 
   // DELETE /v1/emails/:id (cancel scheduled)
   app.delete<{ Params: { id: string } }>("/:id", async (request) => {
-    const companyScopeId = (request.apiKey as any)?.companyId ?? null;
+    const companyScopeId = request.apiKey.companyId;
     const cancelled = await emailService.cancelScheduledEmail(request.account.id, request.params.id, { companyScopeId });
     return { data: emailService.formatEmailResponse(cancelled) };
   });

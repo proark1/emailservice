@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import crypto from "node:crypto";
 import { eq, and, inArray, notInArray, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "../db/index.js";
-import { emails, emailEvents, domains, connectedMailboxes } from "../db/schema/index.js";
+import { emails, emailEvents, domains, connectedMailboxes, suppressions } from "../db/schema/index.js";
 import { getDkimPrivateKey } from "./dkim.service.js";
 import { transformHtml } from "../lib/html-transform.js";
 import { getConfig } from "../config/index.js";
@@ -174,6 +174,46 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
     .returning();
 
   if (!email) return;
+
+  // Defensive suppression re-check at send time: a complaint or bounce
+  // webhook can land between sendEmail()'s pre-check and the actual send,
+  // suppressing a recipient mid-flight. The pre-check is a UX nicety; this
+  // is the authoritative gate. We mark the email failed and skip — no
+  // partial sends for the suppressed addresses.
+  const allRecipients = [
+    ...(email.toAddresses || []),
+    ...(email.ccAddresses || []),
+    ...(email.bccAddresses || []),
+  ].filter(Boolean).map((r) => r.toLowerCase());
+  if (allRecipients.length > 0) {
+    const suppressed = await db
+      .select({ email: suppressions.email })
+      .from(suppressions)
+      .where(and(eq(suppressions.accountId, accountId), inArray(suppressions.email, allRecipients)));
+    if (suppressed.length > 0) {
+      const reason = `Suppressed addresses: ${suppressed.map((r) => r.email).join(", ")}`;
+      // Mark the row failed and record the event atomically — if the event
+      // insert blew up after the status update, the row would be "failed"
+      // with no audit trail and nothing for analytics/webhook dispatchers
+      // to chain off.
+      await db.transaction(async (tx) => {
+        await tx.update(emails).set({
+          status: "failed",
+          failureReason: reason,
+          failureCode: "suppressed",
+          lastEventAt: new Date(),
+          updatedAt: new Date(),
+        }).where(eq(emails.id, emailId));
+        await tx.insert(emailEvents).values({
+          emailId,
+          accountId,
+          type: "failed",
+          data: { reason, suppressed: suppressed.map((r) => r.email) },
+        });
+      });
+      return;
+    }
+  }
 
   try {
     // Load domain for DKIM (cache decrypted key to avoid per-send AES-GCM decryption).

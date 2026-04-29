@@ -121,11 +121,19 @@ export async function sendEmail(accountId: string, input: SendEmailInput, option
     throw new ValidationError("Invalid 'from' address — must contain a valid email (e.g., user@example.com)");
   }
 
-  // Validate sender domain — check team membership (not just ownership)
-  const [domain] = await db
-    .select()
-    .from(domains)
-    .where(eq(domains.name, fromDomain));
+  // Validate sender domain — scope the lookup to domains the caller actually
+  // has access to (owns or is a team member of). The unique index on domains
+  // is (account_id, name), so two accounts can both register the same name;
+  // an unscoped lookup picks one non-deterministically and produces confusing
+  // "not verified" errors against the wrong tenant's row.
+  const { getAccessibleDomainIds } = await import("./team.service.js");
+  const accessibleDomainIds = await getAccessibleDomainIds(accountId);
+  const [domain] = accessibleDomainIds.length === 0
+    ? []
+    : await db
+        .select()
+        .from(domains)
+        .where(and(eq(domains.name, fromDomain), inArray(domains.id, accessibleDomainIds)));
 
   if (!domain) {
     throw new ValidationError(`Domain ${fromDomain} is not registered`);

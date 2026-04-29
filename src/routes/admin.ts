@@ -57,14 +57,14 @@ export default async function adminRoutes(app: FastifyInstance) {
   });
 
   // PATCH /admin/accounts/:id/role
-  app.patch<{ Params: { id: string } }>("/:id/role", async (request) => {
+  app.patch<{ Params: { id: string } }>("/accounts/:id/role", async (request) => {
     const { role } = z.object({ role: z.enum(["user", "admin"]) }).parse(request.body);
     const updated = await authService.updateAccountRole(request.params.id, role);
     return { data: updated };
   });
 
   // DELETE /admin/accounts/:id
-  app.delete<{ Params: { id: string } }>("/:id", async (request) => {
+  app.delete<{ Params: { id: string } }>("/accounts/:id", async (request) => {
     if (request.params.id === request.account.id) {
       throw new ForbiddenError("Cannot delete your own account");
     }

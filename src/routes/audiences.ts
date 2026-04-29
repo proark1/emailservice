@@ -6,10 +6,12 @@ import * as audienceService from "../services/audience.service.js";
 import * as importService from "../services/import.service.js";
 import { paginationSchema } from "../lib/pagination.js";
 import { ValidationError } from "../lib/errors.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 export default async function audienceRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    assertNotCompanyScoped(request);
   });
 
   // --- Audiences ---

@@ -39,11 +39,23 @@ async function processScheduledEmails(_job: Job) {
     )
     .returning();
 
+  // Use the email id as the BullMQ jobId so a re-claim after worker crash
+  // (the recovery loop above resets stuck "sending" rows back to "queued"
+  // and the next tick re-claims them) is deduplicated by BullMQ instead of
+  // producing two send jobs for the same email. Also: enqueue best-effort
+  // per email so a transient Redis hiccup on one job doesn't strand the
+  // other claims in "sending" — anything that fails to enqueue here will
+  // be picked up by the recovery loop on the next tick.
   for (const email of dueEmails) {
-    await getEmailSendQueue().add("send", {
-      emailId: email.id,
-      accountId: email.accountId,
-    });
+    try {
+      await getEmailSendQueue().add(
+        "send",
+        { emailId: email.id, accountId: email.accountId },
+        { jobId: `scheduled:${email.id}` },
+      );
+    } catch (err) {
+      console.error(`[scheduled-email] Failed to enqueue ${email.id}:`, err);
+    }
   }
 
   // Also process any scheduled broadcasts that are due

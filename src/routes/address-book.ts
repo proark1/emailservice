@@ -2,10 +2,12 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { createAddressBookContactSchema, updateAddressBookContactSchema } from "../schemas/address-book.schema.js";
 import * as addressBookService from "../services/address-book.service.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 export default async function addressBookRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    assertNotCompanyScoped(request);
   });
 
   // GET /v1/address-book/autocomplete

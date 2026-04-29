@@ -1,10 +1,12 @@
 import { FastifyInstance } from "fastify";
 import { createWebhookSchema, updateWebhookSchema } from "../schemas/webhook.schema.js";
 import * as webhookService from "../services/webhook.service.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 export default async function webhookRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    assertNotCompanyScoped(request);
   });
 
   // POST /v1/webhooks

@@ -1,10 +1,12 @@
 import { FastifyInstance } from "fastify";
 import { createSignatureSchema, updateSignatureSchema } from "../schemas/signature.schema.js";
 import * as signatureService from "../services/signature.service.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 export default async function signatureRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    assertNotCompanyScoped(request);
   });
 
   // GET /v1/signatures
