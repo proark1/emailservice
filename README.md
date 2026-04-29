@@ -221,25 +221,88 @@ Cursor integration.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `REDIS_URL` | No | Redis URL (queues disabled if absent) |
-| `ENCRYPTION_KEY` | Yes (prod) | 32-byte hex key for AES-256-GCM |
-| `JWT_SECRET` | Yes | Secret for dashboard session JWTs |
-| `BASE_URL` | Yes | Public URL of the API server |
+| `REDIS_URL` | No | Redis URL (queues disabled if absent — direct send fallback kicks in) |
+| `ENCRYPTION_KEY` | Yes (prod) | 32-byte hex key for AES-256-GCM (DKIM keys, mailbox creds) |
+| `JWT_SECRET` | Yes | 32+ char secret for dashboard session JWTs |
+| `TRACKING_HMAC_SECRET` | Yes (prod) | 32-byte hex secret for click-tracking URL signatures. Independent of `ENCRYPTION_KEY` so a leak of one does not compromise the other. **Must stay stable across restarts** — rotating invalidates every previously-emitted tracking URL. |
+| `BASE_URL` | Yes | Public URL of the API server (used in tracking links + Message-ID) |
 | `MAIL_HOST` | Recommended | Hostname for MX/SPF records |
-| `SMTP_HOST` | No | External SMTP relay host |
-| `NODE_ENV` | Yes | `development` or `production` |
+| `SMTP_HOST` | No | External SMTP relay host. If unset in production, falls back to `nodemailer direct:true` (port 25 to recipient MX — typically blocked on cloud egress) |
+| `SMTP_PORT` | No | SMTP relay port (default 587) |
+| `SMTP_USER` / `SMTP_PASS` | No | Relay credentials. If unset with `SMTP_HOST` set, the relay is treated as a trusted local relay (TLS off, no auth) |
+| `NODE_ENV` | Yes | `development` or `production`. In dev, all sends go to Mailpit at `localhost:1025` regardless of `SMTP_HOST` |
 
-See `.env.example` for all options with defaults.
+See `.env.example` for all options with defaults. Generate hex secrets with:
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
 ## Architecture
 
-Three separate Node processes in production:
+### Processes
 
-- **API server** (`src/index.ts`) — HTTP API + dashboard + SMTP inbound
-- **Worker** (`src/worker.ts`) — BullMQ workers for email send, DNS verify, webhooks, scheduling
-- **SMTP relay** (`src/smtp-relay.ts`) — SMTP server on 587/465
+Three Node processes in production, each a separate container:
 
-For full architecture details, see [CLAUDE.md](CLAUDE.md).
+- **API server** (`src/index.ts`) — Fastify HTTP API on `:3000` + dashboard SPA + SMTP inbound listener on `:2525`. When Redis is configured it also runs the BullMQ workers in-process so the worker container is technically optional but recommended for isolation.
+- **Worker** (`src/worker.ts`) — Standalone BullMQ workers. Twelve queues: `email.send`, `dns.verify`, `webhook.deliver`, `email.inbound`, `email.scheduled`, `email.warmup`, `trash.purge`, `mailbox.sync`, `broadcast.execute`, `contact.import`, `broadcast.abtest`, `sequence.process`.
+- **SMTP relay** (`src/smtp-relay.ts`) — SMTP server on `:587/:465` for clients sending through this service (e.g. an app pointing its `SMTP_HOST` at MailNowAPI). Authenticates the connection against an API key and re-enqueues into `email.send`.
+
+A fourth process — **MCP server** (`src/mcp-server.ts`) — runs on demand for AI-agent integrations (stdio transport, wraps the REST API).
+
+### Data flow
+
+**Outbound send.** `POST /v1/emails` → `email.service.ts:sendEmail()` validates the from-domain (must be verified, owner has access, recipient not on suppression list), creates a row in `emails` with status `queued`, enqueues an `email.send` job. The worker picks it up, atomically claims the row (`status: sending`), loads the DKIM key from the cache (or decrypts from DB on first hit), DKIM-signs the message via nodemailer, and hands it off to the configured transport. On success: row flips to `sent`, `email.sent` event recorded, webhooks dispatched. On failure: row flips to `failed` with `failure_reason` + classified `failure_code` (`smtp_connection`, `smtp_auth`, `dkim`, `dns`, `tls`, `rejected`, `rate_limited`, `unknown`), and BullMQ retries (skipped for permanent codes).
+
+**Inbound receive.** Internet → MX records → port 25 (host MTA, not this service) → forwards to `:2525` → `smtp/inbound-server.ts` parses the message, identifies bounces (RFC 3464 DSN) and complaints (RFC 5965 ARF), auto-adds suppressions for those, otherwise looks up the recipient mailbox and routes to the owning member's inbox. Webhooks fire (`email.received`, `email.bounced`, `email.complained`).
+
+**Tracking.** HTML emails get a 1×1 tracking pixel inserted before `</body>` and every `<a href>` rewritten to `/c/:encodedData` where the data is HMAC-signed with `TRACKING_HMAC_SECRET`. Opens hit `/t/:emailId`, clicks hit `/c/:encodedData` and 302 to the original URL after recording the event. Both endpoints update the `emails.open_count` / `click_count` and emit events.
+
+### Database
+
+PostgreSQL via [Drizzle ORM](https://orm.drizzle.team/). Schema files under `src/db/schema/`, migrations in `drizzle/`. Migrations apply automatically on app startup (`src/db/index.ts:runMigrations`). Never hand-edit `drizzle/*.sql` — always `pnpm db:generate` after a schema change.
+
+### Queues
+
+BullMQ on Redis. All queues are lazy-initialized — if Redis is unreachable, sends fall back to direct execution (no retries, no scheduling). Workers attach error handlers that log via pino with module/job context.
+
+## Production deployment
+
+The reference deployment (`https://mailnowapi.com`) runs everything on a **single Hetzner box** with five containers:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Hetzner host (mail.mailnowapi.com)                         │
+│                                                             │
+│   Caddy (host systemd) :80/:443  ──TLS termination          │
+│        │                                                    │
+│        ▼ reverse proxy                                      │
+│   ┌─────────────────────┐                                   │
+│   │  deploy-app-1 :3000 │ API + dashboard + SMTP inbound    │
+│   │  deploy-worker-1    │ BullMQ workers                    │
+│   │  deploy-smtp-relay-1│ :587/:465 client SMTP             │
+│   │  deploy-postgres-1  │ Postgres 16 (loopback only)       │
+│   │  deploy-redis-1     │ Redis 7 (loopback only)           │
+│   └─────────────────────┘                                   │
+│        │                                                    │
+│        ▼ via docker bridge (172.18.0.1:25)                  │
+│   Postfix (host systemd) — relays outbound to internet      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Compose file lives at `deploy/docker-compose.prod.yml` (a *separate* dev compose at `docker-compose.yml` includes Mailpit and is not used in prod). All env vars in `/opt/emailservice/.env`. Postfix's `mynetworks` includes the docker bridge `172.16.0.0/12` so containers can relay outbound without auth.
+
+### CI/CD
+
+A push to `main` triggers `.github/workflows/deploy.yml`:
+
+1. GitHub Actions runner SSHes into the host using the `DEPLOY_SSH_KEY` repo secret.
+2. `git fetch origin main && git reset --hard origin/main` — `/opt/emailservice` is a deploy target, never edited by hand.
+3. `bash deploy/deploy.sh` — `docker compose -f deploy/docker-compose.prod.yml build && up -d --remove-orphans`, health-check loop on `:3000/health`, prune dangling images.
+4. Migrations run on app startup via `runMigrations()`. The drizzle ledger lives in the `drizzle.__drizzle_migrations` table.
+
+Required GitHub secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`. Watch deploys at `Actions → Deploy to Hetzner`.
+
+For the full operational runbook (host paths, common ops, crash-loop triage), see [CLAUDE.md](CLAUDE.md#production-deployment-mailnowapicom).
 
 ## License
 
@@ -247,4 +310,4 @@ ISC
 
 ---
 
-Version 1.6.1 — Last updated: 2026-04-20
+Version 1.7.0 — Last updated: 2026-04-29

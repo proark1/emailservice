@@ -428,10 +428,13 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
         error: truncatedReason,
         code: failureCode,
         name: errorName,
-        // Intentionally no stack: in jsonb on a per-failure row it adds storage
-        // for little triage value — transport-layer errors typically dump
-        // node:net internals. failureReason + classified code on the email
-        // row are enough to grep / group by in admin Analytics.
+        // Stack only for "unknown" — the bucket where we couldn't classify the
+        // error from its message, so the trace is the only diagnostic we have.
+        // For classified codes (smtp_connection, dkim, rejected, ...) the stack
+        // is just node:net / nodemailer internals and pure jsonb bloat.
+        stack: failureCode === "unknown" && error instanceof Error
+          ? error.stack?.split("\n").slice(0, 4).join("\n")
+          : undefined,
       },
     });
 
