@@ -6,7 +6,7 @@ on:
 
 concurrency:
   group: deploy
-  cancel-in-progress: false
+  cancel-in-progress: false   # never cancel a running deploy with a newer one
 
 jobs:
   deploy:
@@ -22,38 +22,8 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: 22
           command_timeout: 10m
-          script: |
-            set -e
-            cd /opt/emailservice
-
-            echo "==> Pulling latest from main..."
-            git fetch origin main
-            git reset --hard origin/main
-
-            echo "==> Installing dependencies (needed for db:migrate)..."
-            pnpm install --frozen-lockfile
-
-            echo "==> Running database migrations..."
-            pnpm db:migrate
-
-            echo "==> Rebuilding containers..."
-            docker compose -f deploy/docker-compose.prod.yml build
-
-            echo "==> Restarting services..."
-            docker compose -f deploy/docker-compose.prod.yml up -d --remove-orphans
-
-            echo "==> Waiting for health check..."
-            sleep 5
-            for i in 1 2 3 4 5; do
-              if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
-                echo "==> Health check passed!"
-                break
-              fi
-              echo "    Attempt $i/5 - waiting..."
-              sleep 5
-            done
-
-            echo "==> Cleaning up old images..."
-            docker image prune -f
-
-            echo "==> Deploy complete!"
+          script_stop: true
+          # All deploy logic lives in deploy/deploy.sh — same script you can run
+          # manually on the host. Single source of truth: fixing the deploy means
+          # editing one file, not two.
+          script: bash /opt/emailservice/deploy/deploy.sh
