@@ -485,9 +485,9 @@ A push to `main` triggers `.github/workflows/deploy.yml` which:
 `git reset --hard` is intentional — `/opt/emailservice` is a deploy target, not a workstation. **Never hand-edit files there**; everything lands as a PR. If the working tree drifts (someone edited a file on the box), the next deploy will silently nuke their changes.
 
 Required GitHub secrets:
-- `HETZNER_HOST` — `95.217.161.0` or `mailnowapi.com`
-- `HETZNER_USER` — `root`
-- `HETZNER_SSH_KEY` — private key whose pub half is in `/root/.ssh/authorized_keys` on the box
+- `DEPLOY_HOST` — `95.217.161.0` or `mailnowapi.com`
+- `DEPLOY_USER` — `root`
+- `DEPLOY_SSH_KEY` — private key whose pub half is in `/root/.ssh/authorized_keys` on the box
 
 Watch a deploy: GitHub repo → Actions tab → "Deploy to Hetzner" run. Failures there are usually one of: SSH connect failed (key/host wrong), docker build failed (typecheck/test errors locally would have caught it), or the post-deploy `docker compose ps` reports a container in `Restarting` (see "Crash-loop debugging" below).
 
