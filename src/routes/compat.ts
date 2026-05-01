@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import * as emailService from "../services/email.service.js";
+import { ValidationError } from "../lib/errors.js";
 import type { SendEmailInput } from "../schemas/email.schema.js";
 
 /**
@@ -65,10 +66,10 @@ function tagsToRecord(
 function resendToInternal(body: z.infer<typeof resendSchema>): SendEmailInput {
   // Attachments with `path:` (URL-fetched) are not supported — we don't want
   // the API process to do outbound HTTP fetches per-send (SSRF surface,
-  // unbounded latency). Reject explicitly so callers get a 400 instead of
-  // their `path:` quietly being dropped.
+  // unbounded latency). Reject as a ValidationError so the error handler
+  // returns 400 instead of a generic 500.
   if (body.attachments?.some((a) => a.path && !a.content)) {
-    throw new Error(
+    throw new ValidationError(
       "attachments[].path is not supported — provide attachments[].content as base64",
     );
   }

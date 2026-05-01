@@ -153,7 +153,13 @@ export async function publicPreferenceRoutes(app: FastifyInstance) {
         .header("Content-Type", "text/html")
         .send("<html><body><h1>Contact not found</h1></body></html>");
     }
-    const topicsJson = JSON.stringify(prefs.topics);
+    // Escape `<`, U+2028 and U+2029 when embedding JSON in a <script> block.
+    // Without this, a topic label containing "</script>…" could break out of
+    // the script and execute arbitrary code on the preference-center page.
+    const safeJson = (v: unknown) =>
+      JSON.stringify(v).replace(/</g, "\\u003c").replace(new RegExp(String.fromCharCode(0x2028), "g"), "\\u2028").replace(new RegExp(String.fromCharCode(0x2029), "g"), "\\u2029");
+    const topicsJson = safeJson(prefs.topics);
+    const tokenJson = safeJson(request.params.token);
     const html = `<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><title>Email preferences</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -179,15 +185,25 @@ export async function publicPreferenceRoutes(app: FastifyInstance) {
 <div id="status" class="status"></div>
 <script>
   const topics = ${topicsJson};
-  const token = ${JSON.stringify(request.params.token)};
+  const token = ${tokenJson};
   const form = document.getElementById('prefs');
   for (const t of topics) {
     const id = 'topic-' + t.key;
     const wrap = document.createElement('label');
     const input = document.createElement('input');
     input.type = 'checkbox'; input.checked = t.subscribed; input.id = id; input.dataset.key = t.key;
+    // Build the label DOM with textContent so operator-supplied topic
+    // labels and descriptions can never inject HTML/JS.
     const span = document.createElement('span');
-    span.innerHTML = '<strong>' + t.label + '</strong>' + (t.description ? '<div class="desc">' + t.description + '</div>' : '');
+    const strong = document.createElement('strong');
+    strong.textContent = t.label;
+    span.appendChild(strong);
+    if (t.description) {
+      const desc = document.createElement('div');
+      desc.className = 'desc';
+      desc.textContent = t.description;
+      span.appendChild(desc);
+    }
     wrap.appendChild(input); wrap.appendChild(span);
     form.appendChild(wrap);
   }

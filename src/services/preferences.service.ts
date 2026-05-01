@@ -228,7 +228,9 @@ export function generatePreferenceToken(accountId: string, audienceId: string, e
 export function decodePreferenceToken(token: string): PreferenceTokenPayload | null {
   const config = getConfig();
   try {
-    const decrypted = decryptPrivateKey(decodeURIComponent(token), config.ENCRYPTION_KEY);
+    // Fastify already decodes the path parameter once. A second pass would
+    // corrupt encrypted payloads that happen to contain literal `%` sequences.
+    const decrypted = decryptPrivateKey(token, config.ENCRYPTION_KEY);
     const parsed = JSON.parse(decrypted);
     if (typeof parsed.a !== "string" || typeof parsed.au !== "string" || typeof parsed.e !== "string") {
       return null;

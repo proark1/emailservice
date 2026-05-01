@@ -44,7 +44,9 @@ export async function findStaleRecipients(
       MAX(e.created_at) AS last_sent_at
     FROM (
       SELECT
-        unnest(${emails.toAddresses}) AS recipient,
+        -- emails.to_addresses is jsonb. unnest() only handles native arrays;
+        -- jsonb_array_elements_text expands a jsonb string-array into rows.
+        jsonb_array_elements_text(${emails.toAddresses}) AS recipient,
         ${emails.createdAt} AS created_at,
         ${emails.id} AS email_id
       FROM ${emails}
