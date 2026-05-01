@@ -27,3 +27,5 @@ export { contactImports } from "./contact-imports.js";
 export { broadcastVariantSends } from "./broadcast-variants.js";
 export { sequences, sequenceSteps, sequenceEnrollments, sequenceSends } from "./sequences.js";
 export { companies, companyMembers, companyMailboxes } from "./companies.js";
+export { preferenceTopics, contactTopicSubscriptions } from "./preference-topics.js";
+export { tlsReports } from "./tls-reports.js";

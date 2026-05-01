@@ -40,10 +40,21 @@ export const createDomainSchema = z.object({
   send_rate_per_minute: z.number().int().min(1).max(100_000).optional(),
 });
 
+// Restrict BIMI URLs to https — the spec requires it (Gmail rejects http
+// logo URLs outright) and it stops `javascript:`/`data:` smuggling tricks.
+const httpsUrl = z
+  .string()
+  .url()
+  .refine((u) => u.startsWith("https://"), "Must be an https:// URL");
+
 export const updateDomainSchema = z.object({
   dmarc_rua_email: z.string().email().nullable().optional(),
   return_path_domain: z.string().min(1).max(255).nullable().optional(),
   send_rate_per_minute: z.number().int().min(1).max(100_000).nullable().optional(),
+  bimi_logo_url: httpsUrl.nullable().optional(),
+  bimi_vmc_url: httpsUrl.nullable().optional(),
+  mta_sts_mode: z.enum(["none", "testing", "enforce"]).optional(),
+  tls_rpt_rua_email: z.string().email().nullable().optional(),
 });
 
 export const domainResponseSchema = z.object({

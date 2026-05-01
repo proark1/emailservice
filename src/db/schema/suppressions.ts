@@ -2,7 +2,7 @@ import { pgTable, uuid, varchar, timestamp, uniqueIndex, index } from "drizzle-o
 import { accounts } from "./accounts.js";
 import { emails } from "./emails.js";
 
-export const suppressionReasonEnum = ["bounce", "complaint", "unsubscribe", "manual"] as const;
+export const suppressionReasonEnum = ["bounce", "complaint", "unsubscribe", "manual", "stale"] as const;
 export type SuppressionReason = (typeof suppressionReasonEnum)[number];
 
 export const suppressions = pgTable("suppressions", {

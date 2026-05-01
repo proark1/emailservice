@@ -29,6 +29,20 @@ export const domains = pgTable("domains", {
   returnPathVerified: boolean("return_path_verified").notNull().default(false),
   dmarcRuaEmail: varchar("dmarc_rua_email", { length: 255 }),
   sendRatePerMinute: integer("send_rate_per_minute"),
+  // BIMI: brand logo + (optional) VMC certificate URL. The TXT record is
+  // generated from these fields; eligibility additionally requires
+  // DMARC enforcement (p=quarantine or p=reject) which we already publish.
+  bimiLogoUrl: text("bimi_logo_url"),
+  bimiVmcUrl: text("bimi_vmc_url"),
+  bimiVerified: boolean("bimi_verified").notNull().default(false),
+  // MTA-STS: published policy mode. "none" disables publishing the TXT and
+  // policy file; "testing" advertises a policy but instructs receivers not
+  // to apply it; "enforce" requires receivers to use TLS.
+  mtaStsMode: varchar("mta_sts_mode", { length: 16 }).notNull().default("none"),
+  mtaStsPolicyId: varchar("mta_sts_policy_id", { length: 64 }),
+  // TLS-RPT (RFC 8460): SMTP TLS reporting endpoint — typically a
+  // mailto: address that aggregates daily TLS handshake reports.
+  tlsRptRuaEmail: varchar("tls_rpt_rua_email", { length: 255 }),
   // DNS provider credentials (encrypted)
   dnsProvider: varchar("dns_provider", { length: 20 }),
   dnsProviderKey: text("dns_provider_key"), // encrypted

@@ -23,6 +23,13 @@ import teamRoutes from "./team.js";
 import mailboxRoutes from "./mailboxes.js";
 import sequenceRoutes from "./sequences.js";
 import companyRoutes from "./companies.js";
+import sunsetRoutes from "./sunset.js";
+import compatRoutes from "./compat.js";
+import { audienceTopicRoutes, publicPreferenceRoutes } from "./preferences.js";
+import dsrRoutes from "./dsr.js";
+import deliverabilityRoutes from "./deliverability.js";
+import eventsRoutes from "./events.js";
+import wellKnownRoutes from "./well-known.js";
 import { addSuppression, listSuppressions, removeSuppression, formatSuppressionResponse } from "../services/suppression.service.js";
 import { getAccountAnalytics } from "../services/analytics.service.js";
 
@@ -59,6 +66,12 @@ export async function registerRoutes(app: FastifyInstance) {
   // Tracking routes (no auth, public)
   await app.register(trackingRoutes);
 
+  // Public preference center (no auth, token-based)
+  await app.register(publicPreferenceRoutes, { prefix: "/preferences" });
+
+  // Public well-known: MTA-STS policy file (host-matched on `mta-sts.<domain>`)
+  await app.register(wellKnownRoutes, { prefix: "/.well-known" });
+
   // Web auth routes
   await app.register(authRoutes, { prefix: "/auth" });
 
@@ -88,6 +101,14 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(mailboxRoutes, { prefix: "/v1/mailboxes" });
   await app.register(sequenceRoutes, { prefix: "/v1/sequences" });
   await app.register(companyRoutes, { prefix: "/v1/companies" });
+  await app.register(sunsetRoutes, { prefix: "/v1/sunset" });
+  await app.register(compatRoutes, { prefix: "/v1/compat" });
+  // Topics + per-contact preferences are mounted under /v1/audiences so the
+  // routes are discoverable next to the audience they belong to.
+  await app.register(audienceTopicRoutes, { prefix: "/v1/audiences" });
+  await app.register(dsrRoutes, { prefix: "/v1/privacy" });
+  await app.register(deliverabilityRoutes, { prefix: "/v1/deliverability" });
+  await app.register(eventsRoutes, { prefix: "/v1/events" });
 
   // Suppression routes
   await app.register(async (suppApp) => {

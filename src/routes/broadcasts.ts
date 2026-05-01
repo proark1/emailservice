@@ -3,6 +3,7 @@ import { createBroadcastSchema } from "../schemas/broadcast.schema.js";
 import * as broadcastService from "../services/broadcast.service.js";
 import { paginationSchema } from "../lib/pagination.js";
 import { assertNotCompanyScoped } from "../plugins/auth.js";
+import { lintEmail } from "../services/deliverability-lint.service.js";
 
 export default async function broadcastRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
@@ -11,10 +12,27 @@ export default async function broadcastRoutes(app: FastifyInstance) {
   });
 
   // POST /v1/broadcasts
+  // Pre-flight deliverability lint runs on every create. It surfaces
+  // findings on the response so dashboards can warn the operator, but it
+  // never blocks the send — `error`-severity findings are caught by zod
+  // earlier (empty subject etc).
   app.post("/", async (request, reply) => {
     const input = createBroadcastSchema.parse(request.body);
     const broadcast = await broadcastService.createBroadcast(request.account.id, input);
-    return reply.status(201).send({ data: broadcastService.formatBroadcastResponse(broadcast) });
+    const lint = lintEmail({
+      subject: input.subject,
+      html: input.html,
+      text: input.text,
+      from: input.from,
+    });
+    return reply.status(201).send({
+      data: broadcastService.formatBroadcastResponse(broadcast),
+      deliverability: {
+        score: lint.score,
+        ok: lint.ok,
+        findings: lint.findings,
+      },
+    });
   });
 
   // GET /v1/broadcasts
