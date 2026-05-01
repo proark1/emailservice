@@ -27,6 +27,23 @@ async function processInboundEmail(job: Job<InboundEmailJobData>) {
   const data = job.data;
   const db = getDb();
 
+  // RFC 8460 TLS-RPT report? If so, ingest into tls_reports and skip
+  // mailbox storage — these are machine-to-machine reports, not human mail.
+  if (data.attachments && data.attachments.length > 0) {
+    try {
+      const { maybeIngestInboundTlsReport } = await import("../services/tls-rpt.service.js");
+      const handled = await maybeIngestInboundTlsReport(
+        data.attachments.map((a) => ({
+          contentType: a.contentType,
+          content: Buffer.from(a.content, "base64"),
+        })),
+      );
+      if (handled) return;
+    } catch (err) {
+      console.error("[inbound-email] TLS-RPT ingest threw:", err);
+    }
+  }
+
   // Compute thread ID
   const { computeThreadId } = await import("../services/thread.service.js");
   const threadId = computeThreadId(data.messageId, data.inReplyTo, data.references, data.subject);

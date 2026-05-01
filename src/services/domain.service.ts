@@ -2,7 +2,12 @@ import { eq, and, inArray, isNull } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { domains, emails, inboundEmails, domainMembers } from "../db/schema/index.js";
 import { generateDkimForDomain } from "./dkim.service.js";
-import { generateDnsRecords } from "./dns.service.js";
+import {
+  generateDnsRecords,
+  generateBimiRecord,
+  generateMtaStsTxt,
+  generateTlsRptRecord,
+} from "./dns.service.js";
 import { evictDkimCache } from "./email-sender.js";
 import { getConfig, getMailHost } from "../config/index.js";
 import { NotFoundError, ConflictError } from "../lib/errors.js";
@@ -149,6 +154,10 @@ export async function updateDomain(
     dmarc_rua_email?: string | null;
     return_path_domain?: string | null;
     send_rate_per_minute?: number | null;
+    bimi_logo_url?: string | null;
+    bimi_vmc_url?: string | null;
+    mta_sts_mode?: "none" | "testing" | "enforce";
+    tls_rpt_rua_email?: string | null;
   },
 ) {
   const db = getDb();
@@ -172,6 +181,23 @@ export async function updateDomain(
   }
   if (patch.send_rate_per_minute !== undefined) {
     updates.sendRatePerMinute = patch.send_rate_per_minute;
+  }
+  if (patch.bimi_logo_url !== undefined) {
+    updates.bimiLogoUrl = patch.bimi_logo_url;
+    updates.bimiVerified = false;
+  }
+  if (patch.bimi_vmc_url !== undefined) {
+    updates.bimiVmcUrl = patch.bimi_vmc_url;
+    updates.bimiVerified = false;
+  }
+  if (patch.mta_sts_mode !== undefined) {
+    updates.mtaStsMode = patch.mta_sts_mode;
+    // Roll the policy id whenever the mode changes — senders need a fresh
+    // hint to re-fetch the policy file.
+    updates.mtaStsPolicyId = `${Date.now().toString(36)}`;
+  }
+  if (patch.tls_rpt_rua_email !== undefined) {
+    updates.tlsRptRuaEmail = patch.tls_rpt_rua_email;
   }
 
   const [updated] = await db
@@ -238,6 +264,52 @@ export function formatDomainResponse(domain: typeof domains.$inferSelect) {
     });
   }
 
+  // BIMI: only emit when a logo URL is configured. Eligibility additionally
+  // requires DMARC enforcement; the dashboard should warn when bimiLogoUrl
+  // is set but DMARC isn't verified yet.
+  if ((domain as any).bimiLogoUrl) {
+    records.push({
+      type: "TXT",
+      name: `default._bimi.${domain.name}`,
+      value: generateBimiRecord((domain as any).bimiLogoUrl, (domain as any).bimiVmcUrl ?? null),
+      purpose: "BIMI (brand logo in inbox)",
+      verified: (domain as any).bimiVerified ?? false,
+    });
+  }
+
+  // MTA-STS: emit the TXT record when the mode is anything other than
+  // "none". The policy file is served via HTTPS at the well-known URL —
+  // see `routes/well-known.ts`.
+  const mtaStsMode = (domain as any).mtaStsMode || "none";
+  if (mtaStsMode !== "none") {
+    const policyId = (domain as any).mtaStsPolicyId || "1";
+    records.push({
+      type: "TXT",
+      name: `_mta-sts.${domain.name}`,
+      value: generateMtaStsTxt(policyId),
+      purpose: `MTA-STS (${mtaStsMode})`,
+      verified: false,
+    });
+    records.push({
+      type: "CNAME",
+      name: `mta-sts.${domain.name}`,
+      value: mxHost,
+      purpose: "MTA-STS policy host",
+      verified: false,
+    });
+  }
+
+  // TLS-RPT (RFC 8460) — emit when an aggregate-report email is configured.
+  if ((domain as any).tlsRptRuaEmail) {
+    records.push({
+      type: "TXT",
+      name: `_smtp._tls.${domain.name}`,
+      value: generateTlsRptRecord((domain as any).tlsRptRuaEmail),
+      purpose: "TLS-RPT (TLS reporting)",
+      verified: false,
+    });
+  }
+
   return {
     id: domain.id,
     name: domain.name,
@@ -251,6 +323,12 @@ export function formatDomainResponse(domain: typeof domains.$inferSelect) {
     dmarc_rua_email: domain.dmarcRuaEmail ?? null,
     return_path_domain: domain.returnPathDomain ?? null,
     send_rate_per_minute: domain.sendRatePerMinute ?? null,
+    bimi_logo_url: (domain as any).bimiLogoUrl ?? null,
+    bimi_vmc_url: (domain as any).bimiVmcUrl ?? null,
+    bimi_verified: (domain as any).bimiVerified ?? false,
+    mta_sts_mode: (domain as any).mtaStsMode ?? "none",
+    mta_sts_policy_id: (domain as any).mtaStsPolicyId ?? null,
+    tls_rpt_rua_email: (domain as any).tlsRptRuaEmail ?? null,
     created_at: domain.createdAt.toISOString(),
   };
 }

@@ -160,6 +160,16 @@ export function getBroadcastQueue() {
   });
 }
 
+export function getSunsetSweepQueue() {
+  return getQueue("sunset.sweep", {
+    defaultJobOptions: {
+      attempts: 1,
+      removeOnComplete: { count: 10 },
+      removeOnFail: { age: 7 * 24 * 3600 },
+    },
+  });
+}
+
 export function getRetentionPurgeQueue() {
   return getQueue("retention.purge", {
     defaultJobOptions: {

@@ -30,6 +30,65 @@ export function generateDnsRecords(_domain: string, options: DnsRecordOptions = 
   };
 }
 
+/**
+ * Generate the BIMI TXT record value for the default selector. The record
+ * lives at `default._bimi.<domain>` and tells supporting mailbox providers
+ * (Gmail, Apple Mail, Yahoo) to render the brand logo at the named URL.
+ *
+ * `vmcUrl` is the optional Verified Mark Certificate (issued by a CA) — the
+ * "a=" tag. Gmail requires this for the logo to render. Without it, only
+ * Yahoo and a handful of others will use the SVG.
+ *
+ * Eligibility additionally requires the domain's DMARC policy to be
+ * `p=quarantine` or `p=reject` and `pct=100`. The caller (domain.service)
+ * is responsible for that gating; this helper only formats the TXT.
+ */
+export function generateBimiRecord(logoUrl: string, vmcUrl?: string | null): string {
+  const parts = ["v=BIMI1", `l=${logoUrl}`];
+  if (vmcUrl) parts.push(`a=${vmcUrl}`);
+  return parts.join("; ");
+}
+
+/**
+ * MTA-STS (RFC 8461) advertises a TLS-required policy to sending servers.
+ * Two records are published:
+ *   1. `_mta-sts.<domain>` TXT — a versioned pointer (`v=STSv1; id=…`) that
+ *      tells senders when the policy file changed.
+ *   2. The policy file itself, served over HTTPS at
+ *      `https://mta-sts.<domain>/.well-known/mta-sts.txt`.
+ *
+ * The `id` is a short opaque string; rotating it forces senders to refetch
+ * the policy. Common pattern: a timestamp or content hash.
+ */
+export function generateMtaStsTxt(policyId: string): string {
+  return `v=STSv1; id=${policyId}`;
+}
+
+export function generateMtaStsPolicyFile(
+  mode: "enforce" | "testing" | "none",
+  mxHost: string,
+  maxAgeSeconds = 86400,
+): string {
+  // `mode: none` is a withdrawal signal — publish a policy file with mode:
+  // none for at least max_age before removing the TXT, otherwise senders
+  // that already cached the previous policy won't notice the change.
+  return [
+    "version: STSv1",
+    `mode: ${mode}`,
+    `mx: ${mxHost}`,
+    `max_age: ${maxAgeSeconds}`,
+    "",
+  ].join("\n");
+}
+
+/**
+ * TLS-RPT (RFC 8460): TXT record at `_smtp._tls.<domain>` listing where
+ * receivers should mail aggregate TLS reports.
+ */
+export function generateTlsRptRecord(ruaEmail: string): string {
+  return `v=TLSRPTv1; rua=mailto:${ruaEmail}`;
+}
+
 export interface DnsVerificationResult {
   spfVerified: boolean;
   dkimVerified: boolean;
