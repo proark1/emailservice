@@ -122,7 +122,12 @@ function parseDkimTags(record: string): Record<string, string> {
 }
 
 function extractExpectedDkimKey(expected: string): string | null {
-  const m = expected.match(/p=([A-Za-z0-9+/=]+)/);
+  // Strip whitespace before extracting — `parseDkimTags` removes whitespace
+  // from the resolved record's `p=` value, so a wrapped or manually-entered
+  // expected value (e.g. `p=ABC DEF`) would otherwise capture only `ABC` and
+  // never match the (whitespace-stripped) actual key.
+  const normalized = expected.replace(/\s+/g, "");
+  const m = normalized.match(/p=([A-Za-z0-9+/=]+)/);
   return m && m[1] ? m[1] : null;
 }
 

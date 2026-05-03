@@ -125,6 +125,13 @@ describe("matchDkimRecord", () => {
     expect(matchDkimRecord([`v=DKIM2; k=rsa; p=${b64}`], dnsValue)).toBe(false);
   });
 
+  it("matches when the expected value contains whitespace inside the base64", () => {
+    // Defensive: covers manually-entered or UI-wrapped expected values.
+    const { b64, dnsValue } = makeKey();
+    const wrappedExpected = `v=DKIM1; k=rsa; p=${b64.slice(0, 200)}\n  ${b64.slice(200)}`;
+    expect(matchDkimRecord([dnsValue], wrappedExpected)).toBe(true);
+  });
+
   it("accepts any DKIM record when no expected value is provided", () => {
     const { b64 } = makeKey();
     expect(matchDkimRecord([`v=DKIM1; k=rsa; p=${b64}`], "")).toBe(true);
