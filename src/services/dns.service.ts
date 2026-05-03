@@ -96,6 +96,73 @@ export interface DnsVerificationResult {
   mxVerified: boolean;
 }
 
+/**
+ * Parse a DKIM TXT record into its tag map. Handles real-world quirks we've
+ * seen from registrars when long records are pasted/auto-split:
+ *   - Literal `"` characters inside the joined string (some providers
+ *     serialize multi-segment TXT records as `"part1" "part2"`).
+ *   - Backslash-escaped semicolons (`\;`).
+ *   - Whitespace inside the base64 of the public key (registrars that
+ *     wrap long lines).
+ *   - Tag names in mixed case — RFC 6376 says tag names are case-insensitive.
+ */
+function parseDkimTags(record: string): Record<string, string> {
+  const cleaned = record.replace(/["\\]/g, "");
+  const tags: Record<string, string> = {};
+  for (const part of cleaned.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    const k = part.slice(0, eq).trim().toLowerCase();
+    // Strip whitespace inside the value — base64 has no whitespace and other
+    // tag values like `k=rsa` shouldn't either.
+    const v = part.slice(eq + 1).replace(/\s+/g, "");
+    if (k) tags[k] = v;
+  }
+  return tags;
+}
+
+function extractExpectedDkimKey(expected: string): string | null {
+  const m = expected.match(/p=([A-Za-z0-9+/=]+)/);
+  return m && m[1] ? m[1] : null;
+}
+
+/**
+ * Match a set of TXT records (already concatenated per-record) against the
+ * expected DKIM DNS value. A record matches when its parsed `p=` tag equals
+ * the expected base64 public key. If no single record matches but multiple
+ * records exist at the name (some registrars split a long DKIM value across
+ * separate TXT records instead of segments within one record), retry with
+ * the records concatenated.
+ */
+export function matchDkimRecord(records: string[], expectedDkimDnsValue: string): boolean {
+  const expectedKey = expectedDkimDnsValue
+    ? extractExpectedDkimKey(expectedDkimDnsValue)
+    : null;
+
+  const recordMatches = (raw: string): boolean => {
+    const tags = parseDkimTags(raw);
+    if (tags.v && tags.v.toLowerCase() !== "dkim1") return false;
+    if (!tags.p) return false;
+    if (!expectedKey) return true;
+    return tags.p === expectedKey;
+  };
+
+  if (records.some(recordMatches)) return true;
+
+  // Fallback: registrar split the record across multiple TXT entries.
+  // Reorder so the entry with the DKIM header (`v=DKIM1`) comes first,
+  // then concatenate the rest as raw key continuation.
+  if (expectedKey && records.length > 1) {
+    const headerIdx = records.findIndex((r) => /v\s*=\s*DKIM1/i.test(r));
+    if (headerIdx !== -1) {
+      const ordered = [records[headerIdx], ...records.filter((_, i) => i !== headerIdx)];
+      if (recordMatches(ordered.join(""))) return true;
+    }
+  }
+
+  return false;
+}
+
 export async function verifyDnsRecords(
   domain: string,
   expectedSpf: string,
@@ -135,22 +202,7 @@ export async function verifyDnsRecords(
     const dkimDomain = `${dkimSelector}._domainkey.${domain}`;
     const txtRecords = await dns.resolveTxt(dkimDomain);
     const flat = txtRecords.map((r) => r.join(""));
-    if (expectedDkimDnsValue) {
-      // Extract the public key portion from the expected value for comparison
-      const expectedKeyMatch = expectedDkimDnsValue.match(/p=([A-Za-z0-9+/=]+)/);
-      const expectedKey = expectedKeyMatch ? expectedKeyMatch[1] : null;
-      result.dkimVerified = flat.some((r) => {
-        if (!r.includes("v=DKIM1") || !r.includes("p=")) return false;
-        if (expectedKey) {
-          // Normalize whitespace and compare the public key
-          const normalizedRecord = r.replace(/\s+/g, "");
-          return normalizedRecord.includes(`p=${expectedKey}`);
-        }
-        return true;
-      });
-    } else {
-      result.dkimVerified = flat.some((r) => r.includes("v=DKIM1") && r.includes("p="));
-    }
+    result.dkimVerified = matchDkimRecord(flat, expectedDkimDnsValue);
   } catch {}
 
   // Check DMARC
