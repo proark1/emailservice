@@ -11,6 +11,22 @@ function decodeHtmlEntities(text: string): string {
 }
 
 /**
+ * Escape a string for safe interpolation inside a double-quoted HTML
+ * attribute. Without this, `decodeHtmlEntities` followed by raw `href="${...}"`
+ * lets a sender smuggle `"` into an attribute value, breaking out into
+ * arbitrary tag attributes (or fresh tags) in the rendered MIME — phishing /
+ * brand damage from authenticated outbound mail.
+ */
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
  * Injects an open-tracking pixel into HTML email body.
  */
 export function injectTrackingPixel(html: string, emailId: string): string {
@@ -38,15 +54,20 @@ export function rewriteLinks(html: string, emailId: string): string {
     (_match, before, url, after) => {
       // Decode HTML entities (e.g. &amp; → &) that email HTML requires in href attributes
       const cleanUrl = decodeHtmlEntities(url);
+      // ALWAYS re-escape before re-emitting inside href="...". Without this,
+      // a sender's body containing &quot;-encoded quotes inside an href would
+      // be decoded here and then written back verbatim, escaping the attribute
+      // and injecting attacker-controlled tag fragments into the rendered MIME.
+      const safeUrl = escapeAttribute(cleanUrl);
 
       // Don't track mailto:, tel:, anchor links, or unsubscribe links
       if (cleanUrl.startsWith("mailto:") || cleanUrl.startsWith("tel:") || cleanUrl.startsWith("#") || cleanUrl.includes("/unsubscribe/")) {
-        return `<a ${before}href="${cleanUrl}"${after}>`;
+        return `<a ${before}href="${safeUrl}"${after}>`;
       }
 
       // Don't rewrite links with data-no-track attribute
       if (before.includes("data-no-track") || after.includes("data-no-track")) {
-        return `<a ${before}href="${cleanUrl}"${after}>`;
+        return `<a ${before}href="${safeUrl}"${after}>`;
       }
 
       const payload = Buffer.from(JSON.stringify({ emailId, url: cleanUrl })).toString("base64url");

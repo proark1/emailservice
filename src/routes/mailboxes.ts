@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import * as mailboxService from "../services/mailbox.service.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 const providerEnum = ["gmail", "outlook", "yahoo", "icloud", "custom"] as const;
 
@@ -33,6 +34,10 @@ const updateMailboxSchema = z.object({
 export default async function mailboxRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    // Connected SMTP/IMAP credentials are scoped to accountId only; a
+    // company-scoped key would otherwise read sibling tenants' SMTP
+    // passwords (encrypted, but still data leakage).
+    assertNotCompanyScoped(request);
   });
 
   // GET /v1/mailboxes/providers — available provider presets

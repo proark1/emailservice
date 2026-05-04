@@ -1,5 +1,7 @@
 import { Worker, Job } from "bullmq";
 import dns from "node:dns/promises";
+import http from "node:http";
+import https from "node:https";
 import { getRedisConnection } from "../queues/index.js";
 import { getDb } from "../db/index.js";
 import { webhookDeliveries } from "../db/schema/index.js";
@@ -78,49 +80,111 @@ async function processWebhookDeliver(job: Job<WebhookDeliverJobData>) {
     if (blockedHostnames.includes(hostname) || blockedSuffixes.some((s) => hostname.endsWith(s))) {
       throw new Error("Webhook URL targets a private/internal address");
     }
-    // Resolve hostname to IPs and check each one
+    // Resolve hostname to IPs and check each one. We must use the IPs we
+    // validated for the actual TCP connect — handing the URL to fetch() lets
+    // it perform a SECOND DNS resolution that an attacker controlling DNS
+    // can flip to 127.0.0.1 / 169.254.169.254 / a docker bridge gateway
+    // (TOCTOU DNS rebinding). The `lookup` callback we pass to http(s).request
+    // pins the connect to a specific IP, so by the time the OS resolver might
+    // change its mind the socket is already established to a known-public host.
+    let pinnedIP: string | null = null;
+    let pinnedFamily: 4 | 6 = 4;
     try {
       const [v4addrs, v6addrs] = await Promise.allSettled([
         dns.resolve4(hostname),
         dns.resolve6(hostname),
       ]);
-      const resolvedIPs = [
-        ...(v4addrs.status === "fulfilled" ? v4addrs.value : []),
-        ...(v6addrs.status === "fulfilled" ? v6addrs.value : []),
-      ];
+      const v4 = v4addrs.status === "fulfilled" ? v4addrs.value : [];
+      const v6 = v6addrs.status === "fulfilled" ? v6addrs.value : [];
+      const resolvedIPs = [...v4, ...v6];
       // Reject if ANY resolved IP is private. `.every` was wrong: a DNS
       // round-robin returning [public, private] would have passed, letting
       // an attacker rebind to localhost via a host that initially resolved
       // public and now returns mixed results.
+      if (resolvedIPs.length === 0) {
+        throw new Error("Webhook URL did not resolve to any IPs");
+      }
       if (resolvedIPs.some((ip) => isPrivateIP(ip))) {
         throw new Error("Webhook URL targets a private/internal address");
       }
+      // Prefer v4 (more reliable in cloud/firewall configs); fall back to v6.
+      if (v4.length > 0) {
+        pinnedIP = v4[0];
+        pinnedFamily = 4;
+      } else {
+        pinnedIP = v6[0];
+        pinnedFamily = 6;
+      }
     } catch (err) {
-      if (err instanceof Error && err.message.includes("private/internal")) throw err;
-      // DNS resolution failed — allow the request to proceed and let fetch handle it
+      // Hostname is a literal IP? Validate and use it directly.
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname) || hostname.includes(":")) {
+        if (isPrivateIP(hostname)) throw new Error("Webhook URL targets a private/internal address");
+        pinnedIP = hostname;
+        pinnedFamily = hostname.includes(":") ? 6 : 4;
+      } else {
+        throw err;
+      }
     }
 
-    const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), 30_000);
+    const isHttps = parsedUrl.protocol === "https:";
+    if (!isHttps && parsedUrl.protocol !== "http:") {
+      throw new Error(`Unsupported protocol: ${parsedUrl.protocol}`);
+    }
+    const port = parsedUrl.port ? Number(parsedUrl.port) : (isHttps ? 443 : 80);
+    const path = parsedUrl.pathname + parsedUrl.search;
+    const lib = isHttps ? https : http;
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "webhook-id": webhookId,
-        "webhook-timestamp": timestamp.toString(),
-        "webhook-signature": signature,
-        "User-Agent": "EmailService-Webhook/1.0",
-      },
-      body,
-      signal: controller.signal,
+    const result = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const req = lib.request(
+        {
+          host: hostname,
+          port,
+          path,
+          method: "POST",
+          servername: isHttps ? hostname : undefined,
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(body).toString(),
+            "Host": parsedUrl.host,
+            "webhook-id": webhookId,
+            "webhook-timestamp": timestamp.toString(),
+            "webhook-signature": signature,
+            "User-Agent": "EmailService-Webhook/1.0",
+          },
+          // Pin the TCP connect to the IP we validated above. `lookup`
+          // shadows the OS resolver for this single request; fetch() does
+          // not expose this knob, which is why we drop down to http(s).request.
+          lookup: ((_h: string, _o: any, cb: any) => cb(null, pinnedIP!, pinnedFamily)) as any,
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          let total = 0;
+          res.on("data", (chunk: Buffer) => {
+            if (total < 1024) {
+              const remaining = 1024 - total;
+              chunks.push(chunk.length > remaining ? chunk.subarray(0, remaining) : chunk);
+              total += chunk.length;
+            }
+          });
+          res.on("end", () => {
+            resolve({ status: res.statusCode || 0, body: Buffer.concat(chunks).toString("utf8").slice(0, 1000) });
+          });
+          res.on("error", reject);
+        },
+      );
+      req.on("error", reject);
+      timeout = setTimeout(() => {
+        req.destroy(new Error("Webhook delivery timed out after 30s"));
+      }, 30_000);
+      req.write(body);
+      req.end();
     });
 
     clearTimeout(timeout);
-    responseStatus = response.status;
-    responseBody = (await response.text()).substring(0, 1000); // Truncate
+    responseStatus = result.status;
+    responseBody = result.body;
 
-    if (response.ok) {
+    if (result.status >= 200 && result.status < 300) {
       status = "success";
     }
   } catch (error) {

@@ -48,7 +48,7 @@ export function createRelayServer(): SMTPServer {
         return;
       }
 
-      handleIncomingMessage(stream, authResult.accountId)
+      handleIncomingMessage(stream, { accountId: authResult.accountId, companyId: authResult.companyId })
         .then((result) => {
           if (result.accepted) {
             callback();

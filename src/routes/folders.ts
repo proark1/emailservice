@@ -1,10 +1,12 @@
 import { FastifyInstance } from "fastify";
 import { createFolderSchema, updateFolderSchema } from "../schemas/folder.schema.js";
 import * as folderService from "../services/folder.service.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 export default async function folderRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    assertNotCompanyScoped(request);
   });
 
   // GET /v1/folders
