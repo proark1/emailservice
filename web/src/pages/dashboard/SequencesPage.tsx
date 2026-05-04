@@ -263,7 +263,7 @@ export default function SequencesPage() {
       </PageHeader>
 
       {sequences.length === 0 ? (
-        <EmptyState title="No sequences yet" description="Create your first automated email sequence to engage contacts over time." />
+        <EmptyState title="No sequences yet" desc="Sequences send a series of emails to a contact over time — onboarding, drip nurturing, re-engagement. Create one to start." />
       ) : (
         <Table
           columns={["Name", "Audience", "Status", "Trigger", "Created"]}

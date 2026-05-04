@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../../lib/auth";
-import { useToast } from "../../components/Toast";
 import { api, patch, post, del } from "../../lib/api";
-import { PageHeader, Button, Input, Textarea, Badge, CopyButton, Modal, useConfirmDialog } from "../../components/ui";
+import { PageHeader, Button, Input, Textarea, Badge, CopyButton, Modal, useConfirmDialog, useToast } from "../../components/ui";
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
-  const { toast } = useToast();
+  const { toastFn: toast } = useToast();
 
   const [name, setName] = useState(user?.name || "");
   const [savingName, setSavingName] = useState(false);
@@ -152,7 +151,7 @@ function SignaturesSection() {
   const [editSig, setEditSig] = useState<Signature | null>(null);
   const [form, setForm] = useState({ name: "", html_body: "", text_body: "", is_default: false });
   const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
+  const { toastFn: toast } = useToast();
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
   const load = async () => {

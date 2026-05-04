@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { api, post } from "../../lib/api";
-import { PageHeader, Button, Badge, Table, EmptyState, Modal, useToast } from "../../components/ui";
+import { PageHeader, Button, Badge, Table, EmptyState, Modal, SkeletonTable, useToast } from "../../components/ui";
 
 type Domain = {
   id: string;
@@ -89,10 +89,10 @@ export default function CompaniesPage() {
     }
   };
 
-  const statusVariant = (s: string): "success" | "warning" | "danger" | "default" => {
+  const statusVariant = (s: string): "success" | "warning" | "error" | "default" => {
     if (s === "verified") return "success";
     if (s === "pending") return "warning";
-    if (s === "failed") return "danger";
+    if (s === "failed") return "error";
     return "default";
   };
 
@@ -140,9 +140,9 @@ export default function CompaniesPage() {
       </Modal>
 
       {loading ? (
-        <div className="p-8 text-center text-gray-400">Loading...</div>
+        <SkeletonTable rows={4} cols={3} />
       ) : groups.length === 0 ? (
-        <EmptyState title="No domains" description="Add a domain to get started." />
+        <EmptyState title="No companies yet" desc="Companies let you carve out sub-tenants on this account — one per customer or project. Create one to delegate domains and mint scoped API keys." />
       ) : (
         <div className="space-y-6">
           {groups.map((g) => {

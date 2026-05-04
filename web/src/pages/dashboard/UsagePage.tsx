@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { PageHeader } from "../../components/ui";
+import { PageHeader, SkeletonCard } from "../../components/ui";
 import { api } from "../../lib/api";
 
 interface UsageData {
@@ -38,7 +38,7 @@ export default function UsagePage() {
     return (
       <div>
         <PageHeader title="Usage" desc="Monitor your email sending volume and resource usage" />
-        <div className="flex items-center justify-center py-16 text-[13px] text-gray-400">Loading...</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}</div>
       </div>
     );
   }

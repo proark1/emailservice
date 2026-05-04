@@ -16,6 +16,11 @@ export const accounts = pgTable("accounts", {
   sunsetPolicyEnabled: boolean("sunset_policy_enabled").notNull().default(false),
   sunsetPolicyDays: integer("sunset_policy_days").notNull().default(180),
   sunsetPolicyMinEmails: integer("sunset_policy_min_emails").notNull().default(5),
+  // Set when the user clicks "Got it" on the Get Started checklist on the
+  // dashboard Overview, so we don't keep showing it forever once they've
+  // either completed onboarding or chosen to dismiss it. Nullable so we can
+  // distinguish "never shown" from "never dismissed".
+  onboardingDismissedAt: timestamp("onboarding_dismissed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

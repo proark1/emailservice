@@ -9,6 +9,7 @@ import {
   Input,
   Textarea,
   Modal,
+  SkeletonTable,
   useConfirmDialog,
   useToast,
 } from "../../components/ui";
@@ -218,14 +219,12 @@ export default function TemplatesPage() {
 
       {/* Template list */}
       {loading && templates.length === 0 ? (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
-        </div>
+        <SkeletonTable rows={5} cols={5} />
       ) : templates.length === 0 ? (
         <EmptyState
           title="No templates yet"
-          desc="Create a template to reuse email content with variables"
-          action={<Button onClick={() => { resetForm(); setCreateOpen(true); }}>Create Template</Button>}
+          desc="Templates let you reuse email layouts and inject per-recipient variables — perfect for receipts, password resets, welcome emails. Create one to start."
+          action={<Button onClick={() => { resetForm(); setCreateOpen(true); }}>+ Create your first template</Button>}
         />
       ) : (
         <Table headers={["Name", "Subject", "Variables", "Version", "Last Updated", "Actions"]}>

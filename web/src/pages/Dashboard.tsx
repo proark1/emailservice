@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react";
 import { Link, Routes, Route, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { api, post, del } from "../lib/api";
-import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Textarea, Modal, CopyButton, Dot, useConfirmDialog, useToast } from "../components/ui";
+import { Badge, statusVariant, EmptyState, Table, PageHeader, Button, Input, Textarea, Modal, CopyButton, Dot, useConfirmDialog, useToast, Skeleton, SkeletonCard, SkeletonTable, InfoTooltip, Select } from "../components/ui";
+import { CommandPalette, KeyboardShortcuts, type Command } from "../components/CommandPalette";
 import { patch } from "../lib/api";
 import InboxPage from "./dashboard/InboxPage";
 import EmailsPage from "./dashboard/EmailsPage";
@@ -116,9 +117,10 @@ function SearchBar() {
           value={query}
           onChange={(e) => { setQuery(e.target.value); search(e.target.value); }}
           onFocus={() => { if (results) setOpen(true); }}
-          placeholder="Search..."
-          className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-[13px] text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition-colors"
+          placeholder="Search…"
+          className="w-full pl-8 pr-12 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-[13px] text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition-colors"
         />
+        <kbd className="absolute right-2 top-1/2 -translate-y-1/2 hidden lg:inline-block text-[10px] font-mono text-gray-400 dark:text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 pointer-events-none">⌘K</kbd>
       </div>
       {open && results && (
         <div className="absolute left-2.5 right-2.5 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-50 max-h-80 overflow-y-auto">
@@ -322,7 +324,7 @@ function ActivityFeed() {
   );
 }
 
-function OnboardingWizard({ stats }: { stats: any }) {
+function OnboardingWizard({ status, onDismiss }: { status: { steps: { domain_added: boolean; domain_verified: boolean; api_key_created: boolean; email_sent: boolean }; dismissed_at: string | null }; onDismiss: () => void }) {
   const stepIcons = [
     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3" /></svg>,
     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>,
@@ -331,11 +333,10 @@ function OnboardingWizard({ stats }: { stats: any }) {
     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>,
   ];
   const steps = [
-    { label: "Add a domain", desc: "Configure DNS records for sending and receiving", done: stats.domains > 0, link: "/dashboard/domains" },
-    { label: "Verify DNS records", desc: "Complete SPF, DKIM, DMARC verification", done: stats.verified_domains > 0, link: "/dashboard/domains" },
-    { label: "Create an API key", desc: "Generate a key to authenticate API requests", done: stats.api_keys > 0, link: "/dashboard/api-keys" },
-    { label: "Send your first email", desc: "Try sending a test email via the dashboard", done: stats.emails > 0, link: "/dashboard/emails" },
-    { label: "Set up a webhook", desc: "Receive delivery notifications in real-time", done: stats.webhooks > 0, link: "/dashboard/webhooks" },
+    { label: "Add a domain", desc: "Tell MailNowAPI which domain you'll send from.", done: status.steps.domain_added, link: "/dashboard/domains" },
+    { label: "Verify DNS records", desc: "Add the SPF, DKIM and DMARC records so inboxes trust your mail.", done: status.steps.domain_verified, link: "/dashboard/domains" },
+    { label: "Create an API key", desc: "Get a key your app uses to send mail through the API.", done: status.steps.api_key_created, link: "/dashboard/api-keys" },
+    { label: "Send your first email", desc: "Run the curl example or use the dashboard composer.", done: status.steps.email_sent, link: "/dashboard/emails" },
   ];
   const completed = steps.filter((s) => s.done).length;
 
@@ -344,9 +345,14 @@ function OnboardingWizard({ stats }: { stats: any }) {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100">Get started with MailNowAPI</h2>
-          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">Complete these steps to start sending emails</p>
+          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">Four steps to your first delivered email.</p>
         </div>
-        <span className="text-[13px] font-medium text-violet-600 dark:text-violet-400">{completed} of {steps.length} complete</span>
+        <div className="flex items-center gap-3">
+          <span className="text-[13px] font-medium text-violet-600 dark:text-violet-400">{completed} of {steps.length}</span>
+          <button onClick={onDismiss} className="text-[12px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" aria-label="Dismiss onboarding checklist">
+            Skip
+          </button>
+        </div>
       </div>
       <div className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden mb-5">
         <div className="h-full bg-violet-500 rounded-full transition-all" style={{ width: `${(completed / steps.length) * 100}%` }} />
@@ -389,8 +395,15 @@ function OnboardingWizard({ stats }: { stats: any }) {
 
 function Overview() {
   const [stats, setStats] = useState<any>(null);
-  const [setupDismissed, setSetupDismissed] = useState(() => localStorage.getItem("mailnowapi-setup-dismissed") === "true");
-  useEffect(() => { api("/dashboard/stats").then((r) => setStats(r.data)).catch(() => {}); }, []);
+  const [onboarding, setOnboarding] = useState<{ steps: { domain_added: boolean; domain_verified: boolean; api_key_created: boolean; email_sent: boolean }; dismissed_at: string | null } | null>(null);
+  useEffect(() => {
+    api("/dashboard/stats").then((r) => setStats(r.data)).catch(() => {});
+    api("/dashboard/onboarding").then((r) => setOnboarding(r.data)).catch(() => {});
+  }, []);
+  const dismissOnboarding = async () => {
+    setOnboarding((s) => s ? { ...s, dismissed_at: new Date().toISOString() } : s);
+    try { await post("/dashboard/onboarding/dismiss", {}); } catch {}
+  };
 
   const statIcons: Record<string, { gradient: string; icon: React.ReactNode }> = {
     Emails: { gradient: "from-violet-500 to-indigo-500", icon: <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg> },
@@ -414,44 +427,31 @@ function Overview() {
   };
 
   if (!stats) {
-    return (<div><PageHeader title="Overview" desc="Your email service at a glance" /></div>);
+    return (
+      <div>
+        <PageHeader title="Overview" desc="Your email service at a glance" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      </div>
+    );
   }
 
-  const allStepsDone = stats.domains > 0 && stats.verified_domains > 0 && stats.api_keys > 0 && stats.emails > 0 && stats.webhooks > 0;
+  // Show the onboarding wizard until either every step is done OR the user
+  // explicitly dismissed it. Driven by server state (`/dashboard/onboarding`)
+  // so progress survives across browsers.
+  const showOnboarding =
+    onboarding !== null &&
+    onboarding.dismissed_at === null &&
+    !(onboarding.steps.domain_added && onboarding.steps.domain_verified && onboarding.steps.api_key_created && onboarding.steps.email_sent);
 
   return (
     <div>
       <PageHeader title="Overview" desc="Your email service at a glance" />
 
-      {/* Setup complete banner */}
-      {allStepsDone && !setupDismissed && (
-        <div className="mb-4 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 dark:from-emerald-900/30 dark:via-teal-900/20 dark:to-cyan-900/20 p-5 flex items-center justify-between animate-fade-in">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/20">
-              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-[15px] font-semibold text-emerald-800 dark:text-emerald-200">All set! Your email service is ready.</p>
-              <p className="text-[13px] text-emerald-600 dark:text-emerald-400 mt-0.5">You have completed all onboarding steps. Start sending emails with confidence.</p>
-            </div>
-          </div>
-          <button
-            onClick={() => { setSetupDismissed(true); localStorage.setItem("mailnowapi-setup-dismissed", "true"); }}
-            className="text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-300 p-1.5 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-800/30 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {/* Onboarding wizard when not all steps are done */}
-      {!allStepsDone && (
+      {showOnboarding && (
         <div className="mb-6">
-          <OnboardingWizard stats={stats} />
+          <OnboardingWizard status={onboarding!} onDismiss={dismissOnboarding} />
         </div>
       )}
 
@@ -555,29 +555,55 @@ function DomainsPage() {
     finally { setSetupLoading(false); }
   };
 
-  const remove = (id: string) => {
+  const remove = (domain: any) => {
     confirm({
-      title: "Delete this domain?",
-      message: "DNS records and email history associated with this domain will be affected.",
-      confirmLabel: "Delete",
+      title: `Delete ${domain.name}?`,
+      message: "Deleting a domain stops sending and receiving on it immediately. Sent emails stay in your history. To prevent typos, type the domain name to confirm.",
+      confirmLabel: "Delete domain",
+      requireText: domain.name,
       onConfirm: async () => {
-        try { await del(`/dashboard/domains/${id}`); } catch (e: any) { showError(e.message || "Delete failed"); }
+        try { await del(`/dashboard/domains/${domain.id}`); } catch (e: any) { showError(e.message || "Delete failed"); }
         load();
       },
     });
   };
   const [verifyResult, setVerifyResult] = useState<any>(null);
   const [verifying, setVerifying] = useState(false);
+  const [lastVerifiedAt, setLastVerifiedAt] = useState<number | null>(null);
 
   const verify = async (id: string) => {
-    setVerifying(true); setVerifyResult(null);
+    setVerifying(true);
     try {
       const res = await post(`/dashboard/domains/${id}/verify`, {});
       setVerifyResult(res.data);
+      setLastVerifiedAt(Date.now());
       load();
     } catch (e: any) { setVerifyResult({ message: e.message }); }
     finally { setVerifying(false); }
   };
+
+  // Auto-poll the verify endpoint while the setup modal is open and the
+  // domain is not yet verified, so users see DNS propagation progress live
+  // instead of having to click "Verify" repeatedly. Backs off after 10 min
+  // (DNS TTLs > that are unusual but possible — at that point the user can
+  // re-trigger manually).
+  useEffect(() => {
+    if (!setupDomain) return;
+    const isVerified = verifyResult?.status === "verified" || setupDomain.status === "verified";
+    if (isVerified) return;
+    const startedAt = Date.now();
+    const tick = setInterval(() => {
+      if (Date.now() - startedAt > 10 * 60_000) {
+        clearInterval(tick);
+        return;
+      }
+      verify(setupDomain.id);
+    }, 10_000);
+    return () => clearInterval(tick);
+    // We intentionally don't include `verify` (recreated each render) — the
+    // setupDomain.id is the only dependency that should restart the poll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setupDomain?.id, verifyResult?.status]);
 
   const providerNames: Record<string, string> = { godaddy: "GoDaddy", cloudflare: "Cloudflare", namecheap: "Namecheap" };
 
@@ -589,20 +615,30 @@ function DomainsPage() {
       <Modal open={open} onClose={() => setOpen(false)} title="Add Domain">
         {error && <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[13px]">{error}</div>}
         <div className="space-y-3">
-          <Input label="Domain name" placeholder="mail.example.com" value={name} onChange={(e) => setName((e.target as HTMLInputElement).value)} />
+          <Input
+            label="Domain name"
+            placeholder="mail.example.com"
+            value={name}
+            onChange={(e) => setName((e.target as HTMLInputElement).value)}
+            validate={(v) => v && !/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(v.trim()) ? "Enter a domain like example.com" : null}
+            hint="Use a sub-domain like mail.example.com so you can keep your main domain for normal email."
+          />
           <div>
-            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Mode</label>
+            <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              What this domain is for
+              <InfoTooltip text="We use this to decide which DNS records you need. Sending requires SPF, DKIM and DMARC; receiving requires MX." />
+            </label>
             <div className="grid grid-cols-3 gap-2">
-              {([["both", "Send & Receive"], ["send", "Send Only"], ["receive", "Receive Only"]] as const).map(([m, label]) => (
+              {([["both", "Sending and receiving"], ["send", "Sending only"], ["receive", "Receiving only"]] as const).map(([m, label]) => (
                 <button key={m} onClick={() => setMode(m)} className={`px-3 py-2.5 rounded-xl text-[13px] font-medium border transition-all ${mode === m ? "border-violet-500/40 bg-violet-50 text-gray-900" : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"}`}>
                   {label}
                 </button>
               ))}
             </div>
             <p className="text-[11px] text-gray-400 mt-1.5">
-              {mode === "both" && "DNS records for SPF, DKIM, DMARC (sending) + MX (receiving) will be required. After verification, the service is fully active within 5-10 minutes."}
-              {mode === "send" && "Only SPF, DKIM, DMARC records required. No MX needed. Sending is active within 5-10 minutes after verification."}
-              {mode === "receive" && "Only MX record required. Receiving is active within 5-10 minutes after verification."}
+              {mode === "both" && "You'll add SPF, DKIM, DMARC (sending) and MX (receiving). Active within ~5–10 min after the records are live."}
+              {mode === "send" && "You'll add SPF, DKIM and DMARC records. No MX needed. Active within ~5–10 min after the records are live."}
+              {mode === "receive" && "You'll add a single MX record. Active within ~5–10 min after the record is live."}
             </p>
           </div>
           <Button onClick={add} disabled={loading}>{loading ? "Adding..." : "Add Domain"}</Button>
@@ -762,17 +798,25 @@ function DomainsPage() {
 
             {verifyResult && !verifyResult.dnsDebug && (
               <div className={`mt-3 p-3 rounded-xl border text-[13px] ${verifyResult.status === "verified" ? "bg-emerald-50 border-emerald-200 text-emerald-600" : "bg-amber-50 border-amber-200 text-amber-600"}`}>
-                <p className="font-medium mb-1">{verifyResult.status === "verified" ? "Domain verified!" : "Verification results:"}</p>
-                <p>{verifyResult.message}</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="font-medium">{verifyResult.status === "verified" ? "Verified — you're ready to send" : "Waiting for DNS to propagate"}</p>
+                  {lastVerifiedAt && (
+                    <span className="text-[11px] opacity-70">Last checked just now</span>
+                  )}
+                </div>
+                <p className="text-[12px]">{verifyResult.message}</p>
                 {verifyResult.status === "verified" && (
-                  <p className="text-[12px] mt-1 opacity-80">Sending and receiving will be fully active within 5-10 minutes.</p>
+                  <p className="text-[12px] mt-1 opacity-80">Sending and receiving will be fully active within 5–10 minutes.</p>
                 )}
                 {verifyResult.status !== "verified" && (
                   <div className="flex gap-3 mt-2 text-[12px]">
-                    <span>SPF: {verifyResult.spf ? "OK" : "pending"}</span>
-                    <span>DKIM: {verifyResult.dkim ? "OK" : "pending"}</span>
-                    <span>DMARC: {verifyResult.dmarc ? "OK" : "pending"}</span>
+                    <span>SPF: {verifyResult.spf ? "✓ live" : "waiting"}</span>
+                    <span>DKIM: {verifyResult.dkim ? "✓ live" : "waiting"}</span>
+                    <span>DMARC: {verifyResult.dmarc ? "✓ live" : "waiting"}</span>
                   </div>
+                )}
+                {verifyResult.status !== "verified" && (
+                  <p className="text-[11px] opacity-70 mt-1.5">We'll check again every 10 seconds. DNS usually propagates within a few minutes; up to an hour for some registrars.</p>
                 )}
               </div>
             )}
@@ -780,24 +824,33 @@ function DomainsPage() {
         )}
       </Modal>
 
-      {items.length === 0 ? <EmptyState title="No domains" desc="Add a domain to start sending and receiving emails" /> : (
-        <Table headers={["Domain", "Mode", "Status", "DNS Records", "Actions"]}>
-          {items.map((d) => (
-            <tr key={d.id} className="hover:bg-gray-50">
-              <td className="px-4 py-3 text-gray-900 text-[13px] font-medium font-mono cursor-pointer hover:text-violet-600" onClick={() => setDetail(d)}>{d.name}</td>
-              <td className="px-4 py-3"><Badge variant="default">{d.mode || "both"}</Badge></td>
-              <td className="px-4 py-3"><Badge variant={statusVariant(d.status)}>{d.status}</Badge></td>
-              <td className="px-4 py-3"><div className="flex gap-2">{d.records?.map((r:any) => <span key={r.purpose} className="flex items-center gap-1 text-[11px] text-gray-500"><Dot ok={r.verified} />{r.purpose.split(" ")[0]}</span>)}</div></td>
-              <td className="px-4 py-3 text-right">
-                <div className="flex gap-1">
-                  <button onClick={() => openSetup(d)} className="px-2 py-1 text-[12px] text-violet-600 hover:bg-violet-50 rounded-lg">Setup</button>
-                  <button onClick={() => verify(d.id)} className="px-2 py-1 text-[12px] text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg">Verify</button>
-                  <button onClick={() => navigate(`/dashboard/domains/${d.id}/team`)} className="px-2 py-1 text-[12px] text-blue-600 hover:bg-blue-50 rounded-lg">Team</button>
-                  <button onClick={() => remove(d.id)} className="px-2 py-1 text-[12px] text-red-600 hover:bg-red-50 rounded-lg">Delete</button>
-                </div>
-              </td>
-            </tr>
-          ))}
+      {items.length === 0 ? (
+        <EmptyState
+          title="No domains yet"
+          desc="A verified domain is the first step before you can send mail. Add one and we'll generate the DNS records you need to paste at your registrar."
+          action={<Button onClick={() => setOpen(true)}>+ Add your first domain</Button>}
+        />
+      ) : (
+        <Table headers={["Domain", "What it's for", "Status", "DNS Records", "Actions"]}>
+          {items.map((d) => {
+            const modeLabel = d.mode === "send" ? "Sending only" : d.mode === "receive" ? "Receiving only" : "Sending and receiving";
+            return (
+              <tr key={d.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                <td className="px-4 py-3 text-gray-900 dark:text-gray-100 text-[13px] font-medium font-mono cursor-pointer hover:text-violet-600" onClick={() => setDetail(d)}>{d.name}</td>
+                <td className="px-4 py-3"><Badge variant="default">{modeLabel}</Badge></td>
+                <td className="px-4 py-3"><Badge variant={statusVariant(d.status)}>{d.status === "verified" ? "Ready" : d.status === "pending" ? "Waiting on DNS" : d.status}</Badge></td>
+                <td className="px-4 py-3"><div className="flex gap-2">{d.records?.map((r:any) => <span key={r.purpose} className="flex items-center gap-1 text-[11px] text-gray-500"><Dot ok={r.verified} />{r.purpose.split(" ")[0]}</span>)}</div></td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex gap-1">
+                    <button onClick={() => openSetup(d)} className="px-2 py-1 text-[12px] text-violet-600 hover:bg-violet-50 rounded-lg">Setup</button>
+                    <button onClick={() => verify(d.id)} className="px-2 py-1 text-[12px] text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg">Verify</button>
+                    <button onClick={() => navigate(`/dashboard/domains/${d.id}/team`)} className="px-2 py-1 text-[12px] text-blue-600 hover:bg-blue-50 rounded-lg">Team</button>
+                    <button onClick={() => remove(d)} className="px-2 py-1 text-[12px] text-red-600 hover:bg-red-50 rounded-lg">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </Table>
       )}
       {confirmDialog}
@@ -812,68 +865,110 @@ function ApiKeysPage() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [newKey, setNewKey] = useState("");
+  const [savedAck, setSavedAck] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const { showError, toast } = useToast();
+  const { showError } = useToast();
 
   const load = () => api("/dashboard/api-keys").then((r) => setItems(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
 
   const create = async () => {
     setError(""); setLoading(true);
-    try { const res = await post("/dashboard/api-keys", { name }); setNewKey(res.data.key); setName(""); load(); }
+    try { const res = await post("/dashboard/api-keys", { name }); setNewKey(res.data.key); setName(""); setSavedAck(false); load(); }
     catch (e: any) { setError(e.message || "Failed to create API key"); } finally { setLoading(false); }
   };
 
-  const revoke = (id: string) => {
+  const revoke = (k: any) => {
     confirm({
-      title: "Revoke this API key?",
-      message: "Any applications using this key will lose access immediately.",
-      confirmLabel: "Revoke",
+      title: `Revoke "${k.name}"?`,
+      message: `Any app using this key will lose access immediately.\n\nType the key prefix below to confirm.`,
+      confirmLabel: "Revoke key",
+      requireText: k.key_prefix,
       onConfirm: async () => {
-        try { await del(`/dashboard/api-keys/${id}`); } catch (e: any) { showError(e.message || "Revoke failed"); }
+        try { await del(`/dashboard/api-keys/${k.id}`); } catch (e: any) { showError(e.message || "Revoke failed"); }
         load();
       },
     });
   };
 
+  // Build a ready-to-paste curl example using the new key + the user's domain
+  // (or a placeholder). Embedding the key directly removes a copy/paste step
+  // and gets the user from "key created" to "first email" in one click.
+  const curlExample = (key: string) => {
+    const base = typeof window !== "undefined" ? window.location.origin : "https://api.example.com";
+    return `curl -X POST ${base}/v1/emails \\
+  -H "Authorization: Bearer ${key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"from":"you@yourdomain.com","to":["test@example.com"],"subject":"Hello","html":"<p>Hi from MailNowAPI</p>"}'`;
+  };
+
   return (
     <div>
-      <PageHeader title="API Keys" desc="Create and manage API keys" action={<Button onClick={() => { setOpen(true); setNewKey(""); }}>+ Create Key</Button>} />
-      <Modal open={open} onClose={() => setOpen(false)} title={newKey ? "Key Created" : "Create API Key"}>
+      <PageHeader title="API Keys" desc="Create the key your app will use to send mail." action={<Button onClick={() => { setOpen(true); setNewKey(""); setSavedAck(false); }}>+ Create key</Button>} />
+      <Modal
+        open={open}
+        // Prevent accidentally losing the key by clicking outside while the
+        // reveal screen is up — user must explicitly tick the acknowledgment.
+        onClose={() => { if (!newKey || savedAck) setOpen(false); }}
+        title={newKey ? "Save this key now" : "Create API key"}
+        size="md"
+      >
         {newKey ? (
           <div>
-            <p className="text-[13px] text-gray-500 mb-3">Copy this key now — it won't be shown again.</p>
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-gray-50 border border-gray-200 shadow-sm">
-              <code className="text-[13px] text-emerald-600 font-mono flex-1 break-all">{newKey}</code>
-              <CopyButton text={newKey} />
+            <div className="mb-4 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-[13px] flex items-start gap-2">
+              <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+              <p>For security reasons we won't show this key again. Copy it now and store it in your password manager or a secret store.</p>
             </div>
-            <div className="mt-4"><Button onClick={() => setOpen(false)}>Done</Button></div>
+            <label className="block text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">Your new API key</label>
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+              <code className="text-[13px] text-emerald-600 font-mono flex-1 break-all">{newKey}</code>
+              <CopyButton text={newKey} label="API key" />
+            </div>
+            <div className="mt-4">
+              <label className="block text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">Send your first email — paste this in your terminal</label>
+              <div className="relative">
+                <pre className="p-3 rounded-xl bg-gray-900 text-gray-100 text-[12px] font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">{curlExample(newKey)}</pre>
+                <div className="absolute top-2 right-2"><CopyButton text={curlExample(newKey)} label="curl example" /></div>
+              </div>
+            </div>
+            <label className="mt-4 flex items-start gap-2 text-[13px] text-gray-700 dark:text-gray-300 select-none cursor-pointer">
+              <input type="checkbox" checked={savedAck} onChange={(e) => setSavedAck(e.target.checked)} className="mt-0.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+              <span>I've copied this key somewhere safe.</span>
+            </label>
+            <div className="mt-4 flex justify-end">
+              <Button onClick={() => setOpen(false)} disabled={!savedAck}>Done</Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-3">
-            <Input label="Key name" placeholder="e.g. Production" value={name} onChange={(e) => setName((e.target as HTMLInputElement).value)} />
+            <Input label="Key name" placeholder="e.g. Production app" value={name} onChange={(e) => setName((e.target as HTMLInputElement).value)} hint="A label so you can recognize this key on the list later." />
             {error && <p className="text-red-600 text-[13px]">{error}</p>}
-            <Button onClick={create} disabled={loading || !name}>{loading ? "Creating..." : "Create Key"}</Button>
+            <div className="flex justify-end"><Button onClick={create} loading={loading} disabled={loading || !name}>Create key</Button></div>
           </div>
         )}
       </Modal>
-      {items.length === 0 ? <EmptyState title="No API keys" desc="Create a key to authenticate API requests" /> : (
-        <Table headers={["Name", "Key", "Rate Limit", "Last Used", ""]}>
+      {items.length === 0 ? (
+        <EmptyState
+          title="No API keys yet"
+          desc="An API key lets your app authenticate with MailNowAPI. Each key is shown only once on creation, so create one when you're ready to copy it."
+          action={<Button onClick={() => { setOpen(true); setNewKey(""); setSavedAck(false); }}>+ Create your first key</Button>}
+        />
+      ) : (
+        <Table headers={["Name", "Key", "Rate limit", "Last used", ""]}>
           {items.map((k) => (
-            <tr key={k.id} className="hover:bg-gray-50">
-              <td className="px-4 py-3 text-gray-900 text-[13px] font-medium">{k.name}</td>
+            <tr key={k.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <td className="px-4 py-3 text-gray-900 dark:text-gray-100 text-[13px] font-medium">{k.name}</td>
               <td className="px-4 py-3 text-gray-500 text-[13px] font-mono">{k.key_prefix}••••••••</td>
               <td className="px-4 py-3 text-gray-500 text-[13px]">{k.rate_limit}/min</td>
               <td className="px-4 py-3 text-gray-500 text-[13px]">{k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : <span className="text-gray-300">Never</span>}</td>
-              <td className="px-4 py-3 text-right"><button onClick={() => revoke(k.id)} className="px-2 py-1 text-[12px] text-red-600 hover:bg-red-50 rounded-lg">Revoke</button></td>
+              <td className="px-4 py-3 text-right"><button onClick={() => revoke(k)} className="px-2 py-1 text-[12px] text-red-600 hover:bg-red-50 rounded-lg">Revoke</button></td>
             </tr>
           ))}
         </Table>
       )}
       {confirmDialog}
-      {toast}
     </div>
   );
 }
@@ -927,15 +1022,28 @@ function WebhooksPage() {
   return (
     <div>
       <PageHeader title="Webhooks" desc="Receive real-time email event notifications" action={<Button onClick={() => setOpen(true)}>+ Add Webhook</Button>} />
-      <Modal open={open} onClose={() => setOpen(false)} title="Add Webhook">
+      <Modal open={open} onClose={() => setOpen(false)} title="Add webhook">
         {error && <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[13px]">{error}</div>}
         <div className="space-y-3">
-          <Input label="Endpoint URL" placeholder="https://yourapp.com/webhook" value={url} onChange={(e) => setUrl((e.target as HTMLInputElement).value)} />
-          <p className="text-[12px] text-gray-500">Subscribes to: sent, delivered, bounced, opened, clicked, failed</p>
-          <Button onClick={create} disabled={loading || !url}>{loading ? "Adding..." : "Add Webhook"}</Button>
+          <Input
+            label="Endpoint URL"
+            placeholder="https://yourapp.com/webhook"
+            value={url}
+            onChange={(e) => setUrl((e.target as HTMLInputElement).value)}
+            validate={(v) => v && !/^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(v.trim()) ? "Enter a URL starting with http:// or https://" : null}
+            hint="We'll POST signed JSON to this URL when an email is sent, opened, bounces, etc."
+          />
+          <p className="text-[12px] text-gray-500">Events you'll receive: sent, delivered, bounced, opened, clicked, failed.</p>
+          <div className="flex justify-end"><Button onClick={create} loading={loading} disabled={loading || !url}>Add webhook</Button></div>
         </div>
       </Modal>
-      {items.length === 0 ? <EmptyState title="No webhooks" desc="Add a webhook to receive delivery events" /> : (
+      {items.length === 0 ? (
+        <EmptyState
+          title="No webhooks yet"
+          desc="Webhooks let your app react in real time to email events — opens, clicks, bounces, complaints. Add one to wire up notifications, CRM sync, or analytics."
+          action={<Button onClick={() => setOpen(true)}>+ Add your first webhook</Button>}
+        />
+      ) : (
         <Table headers={["URL", "Events", "Status", "Secret", ""]}>
           {items.map((w) => (
             <tr key={w.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => loadDeliveries(w)}>
@@ -1059,8 +1167,12 @@ function ApiDocsPage() {
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const location = useLocation();
   const mainRef = useRef<HTMLElement>(null);
+  const { user } = useAuth();
+  const isOwner = user?.owns_domains || user?.role === "admin";
 
   useEffect(() => {
     const saved = localStorage.getItem("mailnowapi-theme");
@@ -1072,6 +1184,54 @@ export default function Dashboard() {
   useEffect(() => {
     mainRef.current?.scrollTo(0, 0);
   }, [location.pathname]);
+
+  // Global keyboard shortcuts: ⌘K / Ctrl+K opens the palette; "?" opens the
+  // cheat sheet (but only when the user isn't typing in an input).
+  useEffect(() => {
+    const isTextField = (el: EventTarget | null) => {
+      if (!(el instanceof HTMLElement)) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
+    };
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+        return;
+      }
+      if (e.key === "?" && !isTextField(e.target)) {
+        e.preventDefault();
+        setShortcutsOpen((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  const commands: Command[] = useMemo(() => {
+    // Build from the same nav declaration so the palette never falls out of
+    // sync with the sidebar. Plus a few "do something" actions that don't
+    // map cleanly to a route.
+    const visibleNav = getVisibleSections(user).flatMap((s) =>
+      s.items.map((item) => ({
+        id: `nav-${item.to}`,
+        label: `Go to ${item.label}`,
+        path: item.to,
+        hint: s.label || undefined,
+      })),
+    );
+    const actions: Command[] = [
+      { id: "act-add-domain", label: "Add a domain", path: "/dashboard/domains", hint: "Action", show: () => isOwner },
+      { id: "act-create-key", label: "Create an API key", path: "/dashboard/api-keys", hint: "Action", show: () => isOwner },
+      { id: "act-add-webhook", label: "Add a webhook", path: "/dashboard/webhooks", hint: "Action", show: () => isOwner },
+      { id: "act-toggle-theme", label: "Toggle dark mode", run: () => {
+        const isDark = document.documentElement.classList.toggle("dark");
+        localStorage.setItem("mailnowapi-theme", isDark ? "dark" : "light");
+      }, hint: "Action" },
+      { id: "act-shortcuts", label: "Show keyboard shortcuts", run: () => setShortcutsOpen(true), hint: "Help" },
+    ];
+    return [...visibleNav, ...actions];
+  }, [user, isOwner]);
 
   return (
     <div className="flex min-h-screen bg-gray-50 antialiased">
@@ -1087,8 +1247,12 @@ export default function Dashboard() {
             <span className="font-semibold text-[14px] text-gray-900 tracking-tight">MailNowAPI</span>
           </Link>
         </div>
-        <div className="w-8" /> {/* Spacer for centering */}
+        <button onClick={() => setPaletteOpen(true)} aria-label="Open command palette" className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
+        </button>
       </div>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
+      <KeyboardShortcuts open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <main ref={mainRef} className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl overflow-y-auto pt-[4.5rem] lg:pt-8">
         <Routes>
           <Route index element={<Overview />} />

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { useToast } from "../../components/Toast";
 import { api, post, del } from "../../lib/api";
-import { PageHeader, Button, Input, Table, Modal, EmptyState, Badge } from "../../components/ui";
+import { PageHeader, Button, Input, Table, Modal, EmptyState, Badge, SkeletonTable, useToast } from "../../components/ui";
+import { compose, required, email as emailValidator } from "../../lib/validators";
 
 interface Suppression {
   id: string;
@@ -18,7 +18,7 @@ const reasonVariant = (r: string): "error" | "warning" | "default" | "success" =
 };
 
 export default function SuppressionsPage() {
-  const { toast } = useToast();
+  const { toastFn: toast } = useToast();
   const [items, setItems] = useState<Suppression[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -106,11 +106,12 @@ export default function SuppressionsPage() {
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-gray-400 text-sm">Loading...</div>
+        <SkeletonTable rows={5} cols={4} />
       ) : filtered.length === 0 ? (
         <EmptyState
-          title={search ? "No matching suppressions" : "No suppressions"}
-          desc={search ? "Try a different search term." : "Suppressed addresses will appear here when added manually or from bounces/complaints."}
+          title={search ? "No matching suppressions" : "Nothing on the suppression list"}
+          desc={search ? "Try a different search term." : "Suppressions block delivery to addresses that have bounced or complained. Add one manually if you've heard from a recipient who doesn't want mail."}
+          action={!search ? <Button onClick={() => setAddOpen(true)}>Add suppression</Button> : undefined}
         />
       ) : (
         <Table headers={["Email", "Reason", "Date Added", "Actions"]}>
@@ -136,6 +137,7 @@ export default function SuppressionsPage() {
             value={addEmail}
             onChange={(e) => setAddEmail(e.target.value)}
             placeholder="user@example.com"
+            validate={compose(required("Enter an email address"), emailValidator)}
           />
           <div>
             <label className="block text-[13px] font-medium text-gray-700 mb-1.5">Reason</label>

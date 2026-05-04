@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { api, post, patch, del } from "../../lib/api";
-import { PageHeader, Button, Modal, Input, Textarea, EmptyState, useConfirmDialog, useToast } from "../../components/ui";
+import { PageHeader, Button, Modal, Input, Textarea, EmptyState, SkeletonTable, useConfirmDialog, useToast } from "../../components/ui";
 
 interface Draft {
   id: string;
@@ -125,9 +125,9 @@ export default function DraftsPage() {
       </Modal>
 
       {loading ? (
-        <div className="p-8 text-center text-gray-400">Loading...</div>
+        <SkeletonTable rows={5} cols={3} />
       ) : drafts.length === 0 ? (
-        <EmptyState title="No drafts" description="Saved drafts will appear here." action={<Button onClick={openNewDraft}>+ New Draft</Button>} />
+        <EmptyState title="No drafts yet" desc="Drafts you save while composing land here so you can finish them later." action={<Button onClick={openNewDraft}>+ New draft</Button>} />
       ) : (
         <div className="divide-y divide-gray-100 dark:divide-gray-800">
           {drafts.map((draft) => (
