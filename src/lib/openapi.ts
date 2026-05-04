@@ -15,7 +15,6 @@ export { serializerCompiler, validatorCompiler };
  */
 export const OPENAPI_TAGS = [
   { name: "Emails", description: "Send transactional and one-off email; list, fetch, or cancel scheduled sends." },
-  { name: "Batch", description: "Send up to 100 emails in a single request." },
   { name: "Domains", description: "Verify and manage sending domains. Tunes DKIM, DMARC, return-path, BIMI, MTA-STS, and per-domain rate limits." },
   { name: "Api Keys", description: "Mint, list, and revoke API keys for the authenticated account." },
   { name: "Webhooks", description: "Subscribe to delivery, bounce, complaint, open, click, and inbound events. Includes delivery introspection and replay." },
@@ -30,6 +29,16 @@ export const OPENAPI_TAGS = [
   { name: "Deliverability", description: "Per-domain deliverability summary and TLS-RPT reports." },
   { name: "Events", description: "Stream email events (sent, delivered, bounced, opened, clicked, complained, unsubscribed)." },
   { name: "Inbox", description: "Read inbound email — folders, threads, messages, drafts." },
+  { name: "Drafts", description: "Compose and manage draft emails." },
+  { name: "Threads", description: "Conversation threads grouping inbound + outbound messages." },
+  { name: "Folders", description: "Organize inbound mail into folders." },
+  { name: "Signatures", description: "Reusable email signatures attached to outbound mail." },
+  { name: "Address Book", description: "Saved sender / recipient contacts (separate from audiences)." },
+  { name: "Team", description: "Per-domain team members and their access scope." },
+  { name: "Mailboxes", description: "Account-level mailbox-handle administration." },
+  { name: "Sunset", description: "Deprecated endpoints with end-of-life metadata." },
+  { name: "Compat", description: "Drop-in compatibility shims for Resend and Postmark." },
+  { name: "Batch", description: "Send up to 100 emails in a single request." },
   { name: "Privacy", description: "GDPR / CCPA data subject requests (export, delete)." },
 ] as const;
 
@@ -142,5 +151,113 @@ export const openapiTransform: typeof jsonSchemaTransform = (input) => {
     if (tag) schema.tags = [tag];
   }
 
+  // Auto-derive operationId so codegen tools produce nice SDK method names
+  // (`emailsCreate`, `domainsVerify`, `companiesAdoptDomains`, …) without us
+  // having to hand-write it on every route. Routes that set their own
+  // `operationId` win.
+  if (!schema.operationId) {
+    const methodArr = Array.isArray(method) ? method : method ? [method] : [];
+    const m = (methodArr[0] || "GET").toLowerCase();
+    schema.operationId = deriveOperationId(m, url);
+  }
+
   return { schema: schema as typeof result.schema, url };
 };
+
+const VERB_BY_METHOD: Record<string, string> = {
+  get: "list",
+  post: "create",
+  put: "update",
+  patch: "update",
+  delete: "delete",
+};
+
+/**
+ * Build a stable, human-readable operationId from method + URL.
+ *
+ *   POST   /v1/emails                            → emailsCreate
+ *   GET    /v1/emails                            → emailsList
+ *   GET    /v1/emails/{id}                       → emailsGet
+ *   DELETE /v1/emails/{id}                       → emailsDelete
+ *   POST   /v1/domains/{id}/verify               → domainsVerify
+ *   POST   /v1/companies/{companyId}/api-keys    → companiesApiKeysCreate
+ *   POST   /v1/companies/{companyId}/adopt-domains → companiesAdoptDomains
+ */
+function deriveOperationId(method: string, url: string): string {
+  const segments = url
+    .replace(/^\/v1\/?/, "")
+    .split("/")
+    .filter((s) => s.length > 0);
+
+  // URL params can arrive as Fastify-style `:id` or OpenAPI-style `{id}`
+  // depending on whether the transform sees the raw or rewritten URL.
+  const isParam = (s: string) =>
+    s.startsWith(":") || (s.startsWith("{") && s.endsWith("}"));
+  const lastSeg = segments[segments.length - 1];
+  const lastIsParam = lastSeg ? isParam(lastSeg) : false;
+
+  // Words: drop param segments; they become "Get"/"Update"/"Delete" verbs below.
+  const words = segments.filter((s) => !isParam(s));
+  if (words.length === 0) return method;
+
+  const camel = (s: string) =>
+    s
+      .replace(/[^a-zA-Z0-9]+(.)/g, (_, c) => c.toUpperCase())
+      .replace(/^([A-Z])/, (m) => m.toLowerCase());
+  const pascal = (s: string) => {
+    const c = camel(s);
+    return c.charAt(0).toUpperCase() + c.slice(1);
+  };
+
+  const head = camel(words[0]);
+  const rest = words.slice(1).map(pascal).join("");
+
+  // Decide the trailing verb. If the last URL segment is itself a verb-noun
+  // (like `verify`, `replay`, `select-winner`, `adopt-domains`, `apply`,
+  // `pause`, `resume`), keep it as the action and skip the generic verb.
+  // URL tails that are themselves verbs/actions — the operationId uses them
+  // as-is rather than appending a generic "Create"/"List"/"Get" verb. Pure
+  // sub-resource nouns (`deliveries`, `members`, `api-keys`, …) are NOT in
+  // here so they pick up a method-derived verb suffix instead.
+  const ACTION_LIKE = new Set([
+    "verify",
+    "replay",
+    "select-winner",
+    "adopt-domains",
+    "apply",
+    "pause",
+    "resume",
+    "activate",
+    "send",
+    "test",
+    "sync",
+    "preview",
+    "lint",
+    "stream",
+    "autocomplete",
+    "export",
+    "confirm",
+    "enroll",
+    "bulk",
+    "move",
+    "restore",
+    "permanent",
+    "my-memberships",
+  ]);
+  if (lastSeg && !lastIsParam && ACTION_LIKE.has(lastSeg.toLowerCase())) {
+    // For these "action" tails, just use METHOD as-is when it's a POST/DELETE.
+    if (method === "post") return head + rest;
+    if (method === "get") return head + rest + "List";
+    if (method === "delete") return head + rest + "Delete";
+    if (method === "patch" || method === "put") return head + rest + "Update";
+    return head + rest;
+  }
+
+  // Otherwise: GET /resource → resourceList; GET /resource/{id} → resourceGet;
+  // POST /resource → resourceCreate; PATCH /resource/{id} → resourceUpdate;
+  // DELETE /resource/{id} → resourceDelete.
+  let verb = VERB_BY_METHOD[method] ?? method;
+  if (method === "get" && lastIsParam) verb = "get";
+  if (method === "get" && !lastIsParam) verb = "list";
+  return head + rest + verb.charAt(0).toUpperCase() + verb.slice(1);
+}

@@ -66,9 +66,18 @@ All API routes require `Authorization: Bearer es_xxx` (API key auth).
 - `http://localhost:3000/openapi.json` — OpenAPI 3.1 document, ready to feed into Stainless,
   `openapi-generator`, Postman, Insomnia, or any other client-codegen tool.
 
-Every `/v1/*` endpoint has an OpenAPI schema with summary, request body, query params, and
-response shape — the same Zod schemas the server uses for runtime validation are reused for
-documentation, so the spec can never drift from the implementation.
+Or browse the committed `openapi.json` at the repo root — 85 paths / 139 operations, every
+endpoint has a `summary`, a stable `operationId` (e.g. `emailsCreate`, `domainsVerify`,
+`companiesAdoptDomains`), and Zod-derived request/response schemas. The same Zod schemas the
+server uses for runtime validation drive the docs, so the spec can never drift from the
+implementation.
+
+**Regenerate the spec** after any route change:
+
+```bash
+pnpm openapi:export   # rewrite openapi.json
+pnpm openapi:check    # CI step — fails if openapi.json is stale
+```
 
 | Method | Path | Description |
 |--------|------|-------------|

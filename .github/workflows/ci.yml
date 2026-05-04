@@ -36,3 +36,6 @@ jobs:
 
       - name: Test
         run: pnpm test --run
+
+      - name: OpenAPI spec is up to date
+        run: pnpm openapi:check

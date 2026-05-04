@@ -20,7 +20,12 @@ export default async function eventsRoutes(app: FastifyInstance) {
     assertNotCompanyScoped(request);
   });
 
-  app.get("/stream", async (request, reply) => {
+  app.get("/stream", {
+    schema: {
+      summary: "Stream events over Server-Sent Events",
+      description: "Long-lived `text/event-stream` connection delivering every email event for the authenticated account in realtime. The SSE event name matches the event type (e.g. `email.opened`). A `: ping` comment is sent every 25s so reverse proxies don't time the connection out. The OpenAPI tooling can't fully describe streaming semantics; treat this endpoint as informational documentation.",
+    },
+  }, async (request, reply) => {
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-store",

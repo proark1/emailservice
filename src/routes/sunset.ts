@@ -6,12 +6,40 @@ import { accounts } from "../db/schema/index.js";
 import { applySunsetPolicy, findStaleRecipients } from "../services/sunset.service.js";
 import { assertNotCompanyScoped } from "../plugins/auth.js";
 import { NotFoundError } from "../lib/errors.js";
+import { dataEnvelope, errorResponseSchema } from "../lib/openapi.js";
 
 const settingsSchema = z.object({
   enabled: z.boolean().optional(),
   days: z.number().int().min(30).max(730).optional(),
   min_emails: z.number().int().min(1).max(1000).optional(),
 });
+
+const policyResponse = z.object({
+  enabled: z.boolean(),
+  days: z.number(),
+  min_emails: z.number(),
+});
+
+const previewQuery = z.object({
+  days: z.coerce.number().int().min(30).max(730).optional(),
+  min_emails: z.coerce.number().int().min(1).max(1000).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+
+const previewResponse = z.object({
+  days: z.number(),
+  min_emails: z.number(),
+  candidate_count: z.number(),
+  candidates: z.array(z.object({
+    email: z.string().email(),
+    emails_sent: z.number(),
+    last_sent_at: z.string(),
+  })),
+});
+
+const applyResponse = z.object({
+  suppressed: z.number(),
+}).passthrough();
 
 export default async function sunsetRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
@@ -20,7 +48,13 @@ export default async function sunsetRoutes(app: FastifyInstance) {
   });
 
   // GET /v1/sunset — read current policy
-  app.get("/", async (request) => {
+  app.get("/", {
+    schema: {
+      summary: "Get the sunset policy",
+      description: "Sunset policy auto-suppresses recipients who haven't engaged after `days` days, given they received at least `min_emails` messages. Helps protect sender reputation by purging dead addresses.",
+      response: { 200: dataEnvelope(policyResponse) },
+    },
+  }, async (request) => {
     const db = getDb();
     const [a] = await db
       .select({
@@ -41,7 +75,13 @@ export default async function sunsetRoutes(app: FastifyInstance) {
   });
 
   // PATCH /v1/sunset — update policy
-  app.patch("/", async (request) => {
+  app.patch("/", {
+    schema: {
+      summary: "Update the sunset policy",
+      body: settingsSchema,
+      response: { 200: dataEnvelope(policyResponse), 400: errorResponseSchema },
+    },
+  }, async (request) => {
     const body = settingsSchema.parse(request.body);
     const db = getDb();
     const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -69,14 +109,15 @@ export default async function sunsetRoutes(app: FastifyInstance) {
   // GET /v1/sunset/preview — dry-run, returns candidate addresses without
   // suppressing them. Always uses the persisted policy values; callers can
   // override via query for what-if exploration.
-  app.get("/preview", async (request) => {
-    const query = z
-      .object({
-        days: z.coerce.number().int().min(30).max(730).optional(),
-        min_emails: z.coerce.number().int().min(1).max(1000).optional(),
-        limit: z.coerce.number().int().min(1).max(500).default(100),
-      })
-      .parse(request.query);
+  app.get("/preview", {
+    schema: {
+      summary: "Preview candidates that would be sunset",
+      description: "Dry-run — returns the addresses the policy would suppress. Override `days`/`min_emails` via query for what-if exploration.",
+      querystring: previewQuery,
+      response: { 200: dataEnvelope(previewResponse) },
+    },
+  }, async (request) => {
+    const query = previewQuery.parse(request.query);
     const db = getDb();
     const [a] = await db
       .select({
@@ -105,7 +146,13 @@ export default async function sunsetRoutes(app: FastifyInstance) {
 
   // POST /v1/sunset/apply — apply the policy synchronously. Useful for
   // operators who don't want to wait 24h for the scheduled sweep.
-  app.post("/apply", async (request) => {
+  app.post("/apply", {
+    schema: {
+      summary: "Apply the sunset policy now",
+      description: "Runs the suppression sweep synchronously rather than waiting for the next scheduled run.",
+      response: { 200: dataEnvelope(applyResponse) },
+    },
+  }, async (request) => {
     const db = getDb();
     const [a] = await db
       .select({

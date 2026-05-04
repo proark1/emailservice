@@ -156,9 +156,37 @@ export default async function audienceRoutes(app: FastifyInstance) {
 
   // --- CSV Import ---
 
+  const importPreviewBody = z.object({
+    csv: z.string(),
+    file_name: z.string().optional(),
+  });
+  const importResponse = z.object({
+    id: z.string().uuid(),
+    audience_id: z.string().uuid(),
+    status: z.string(),
+    total_rows: z.number().nullable(),
+    processed: z.number().nullable(),
+    created_at: z.string(),
+  }).passthrough();
+  const importPreviewResponse = z.object({
+    import: importResponse,
+    headers: z.array(z.string()),
+    suggested_mapping: z.record(z.string(), z.string()),
+    preview: z.array(z.record(z.string(), z.string())),
+    total_rows: z.number(),
+  });
+
   // POST /v1/audiences/:id/imports — Upload CSV and get preview with suggested column mapping
-  app.post<{ Params: { id: string } }>("/:id/imports", async (request, reply) => {
-    const body = request.body as any;
+  app.post<{ Params: { id: string } }>("/:id/imports", {
+    schema: {
+      summary: "Upload a CSV and preview the import",
+      description: "Step 1 of CSV import. Send the raw CSV text in `csv`; the server returns headers, a suggested column→field mapping, a row preview, and an `import_id` to confirm next.",
+      params: idParam,
+      body: importPreviewBody,
+      response: { 201: dataEnvelope(importPreviewResponse), 400: errorResponseSchema, 404: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const body = importPreviewBody.parse(request.body ?? {});
     if (!body || !body.csv) {
       throw new ValidationError("Request body must include 'csv' field with CSV text content");
     }
@@ -179,9 +207,20 @@ export default async function audienceRoutes(app: FastifyInstance) {
     });
   });
 
+  const importParam = z.object({ id: z.string().uuid(), importId: z.string().uuid() });
+
   // POST /v1/audiences/:id/imports/:importId/confirm — Confirm mapping and start processing
   app.post<{ Params: { id: string; importId: string } }>(
     "/:id/imports/:importId/confirm",
+    {
+      schema: {
+        summary: "Confirm a CSV import mapping and start processing",
+        description: "Step 2 of CSV import. Confirm the column→field mapping returned by step 1; the import is queued and processed asynchronously. Poll `GET /:id/imports/:importId` for progress.",
+        params: importParam,
+        body: confirmImportSchema,
+        response: { 200: dataEnvelope(importResponse), 400: errorResponseSchema, 404: errorResponseSchema },
+      },
+    },
     async (request) => {
       const input = confirmImportSchema.parse(request.body);
       const importRecord = await importService.confirmImport(
@@ -197,6 +236,13 @@ export default async function audienceRoutes(app: FastifyInstance) {
   // GET /v1/audiences/:id/imports/:importId — Get import status and progress
   app.get<{ Params: { id: string; importId: string } }>(
     "/:id/imports/:importId",
+    {
+      schema: {
+        summary: "Get CSV import status",
+        params: importParam,
+        response: { 200: dataEnvelope(importResponse), 404: errorResponseSchema },
+      },
+    },
     async (request) => {
       const importRecord = await importService.getImport(
         request.account.id,
@@ -210,7 +256,14 @@ export default async function audienceRoutes(app: FastifyInstance) {
   // --- CSV Export ---
 
   // GET /v1/audiences/:id/export — Download contacts as CSV
-  app.get<{ Params: { id: string } }>("/:id/export", async (request, reply) => {
+  app.get<{ Params: { id: string } }>("/:id/export", {
+    schema: {
+      summary: "Export contacts as CSV",
+      description: "Streams the audience's contacts as a CSV file with `Content-Disposition: attachment`.",
+      params: idParam,
+      response: { 404: errorResponseSchema },
+    },
+  }, async (request, reply) => {
     const csv = await importService.exportContacts(request.account.id, request.params.id);
     return reply
       .header("Content-Type", "text/csv")

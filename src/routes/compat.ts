@@ -3,6 +3,7 @@ import { z } from "zod";
 import * as emailService from "../services/email.service.js";
 import { ValidationError } from "../lib/errors.js";
 import type { SendEmailInput } from "../schemas/email.schema.js";
+import { errorResponseSchema } from "../lib/openapi.js";
 
 /**
  * Drop-in compatibility shim for clients written against Resend
@@ -164,7 +165,18 @@ export default async function compatRoutes(app: FastifyInstance) {
   });
 
   // Resend-style: POST /v1/compat/resend/emails
-  app.post("/resend/emails", async (request, reply) => {
+  app.post("/resend/emails", {
+    schema: {
+      summary: "Send an email (Resend-compatible)",
+      description: "Drop-in replacement for `POST https://api.resend.com/emails`. Accepts the Resend body shape and returns `{ id }`. Use this to migrate Resend clients without code changes — only the base URL.",
+      tags: ["Compat"],
+      body: resendSchema,
+      response: {
+        200: z.object({ id: z.string().uuid() }),
+        400: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
     const body = resendSchema.parse(request.body);
     const input = resendToInternal(body);
     const result = await emailService.sendEmail(request.account.id, input, {
@@ -172,7 +184,7 @@ export default async function compatRoutes(app: FastifyInstance) {
     });
     if (result.cached) {
       const cached = result.response as { status: number; body: unknown };
-      return reply.status(cached.status).send(cached.body);
+      return reply.status(cached.status as 200).send(cached.body as never);
     }
     const internal = result.response as { id: string; from: string; to: string[]; subject: string; created_at: string };
     // Resend returns: { id }
@@ -180,7 +192,24 @@ export default async function compatRoutes(app: FastifyInstance) {
   });
 
   // Postmark-style: POST /v1/compat/postmark/email
-  app.post("/postmark/email", async (request, reply) => {
+  app.post("/postmark/email", {
+    schema: {
+      summary: "Send an email (Postmark-compatible)",
+      description: "Drop-in replacement for `POST https://api.postmarkapp.com/email`. PascalCase keys (`From`, `To`, `Subject`, `HtmlBody`, ...) are translated server-side; the response matches Postmark's `{ To, SubmittedAt, MessageID, ErrorCode, Message }` envelope.",
+      tags: ["Compat"],
+      body: postmarkSchema,
+      response: {
+        200: z.object({
+          To: z.string(),
+          SubmittedAt: z.string(),
+          MessageID: z.string().uuid(),
+          ErrorCode: z.number(),
+          Message: z.string(),
+        }),
+        400: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
     const body = postmarkSchema.parse(request.body);
     const input = postmarkToInternal(body);
     const result = await emailService.sendEmail(request.account.id, input, {
@@ -188,7 +217,7 @@ export default async function compatRoutes(app: FastifyInstance) {
     });
     if (result.cached) {
       const cached = result.response as { status: number; body: unknown };
-      return reply.status(cached.status).send(cached.body);
+      return reply.status(cached.status as 200).send(cached.body as never);
     }
     const internal = result.response as { id: string; from: string; to: string[]; subject: string; created_at: string };
     // Postmark returns:
