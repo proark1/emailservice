@@ -20,7 +20,9 @@
     "format": "prettier --write 'src/**/*.ts'",
     "typecheck": "tsc --noEmit",
     "mcp": "tsx src/mcp-server.ts",
-    "mcp:build": "node dist/mcp-server.js"
+    "mcp:build": "node dist/mcp-server.js",
+    "openapi:export": "tsx scripts/openapi-export.ts",
+    "openapi:check": "tsx scripts/openapi-export.ts --check"
   },
   "keywords": [
     "email",

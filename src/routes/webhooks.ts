@@ -118,8 +118,20 @@ export default async function webhookRoutes(app: FastifyInstance) {
   });
 
   // POST /v1/webhooks/:id/deliveries/:deliveryId/replay — re-enqueue a single delivery
+  const deliveryParam = z.object({ id: z.string().uuid(), deliveryId: z.string().uuid() });
   app.post<{ Params: { id: string; deliveryId: string } }>(
     "/:id/deliveries/:deliveryId/replay",
+    {
+      schema: {
+        summary: "Replay a single webhook delivery",
+        description: "Re-enqueue a specific past delivery (success or failure) for redelivery.",
+        params: deliveryParam,
+        response: {
+          200: dataEnvelope(z.object({ queued: z.boolean(), delivery_id: z.string().uuid() }).passthrough()),
+          404: errorResponseSchema,
+        },
+      },
+    },
     async (request) => {
       const result = await webhookService.replayDelivery(
         request.account.id,
@@ -131,13 +143,24 @@ export default async function webhookRoutes(app: FastifyInstance) {
   );
 
   // POST /v1/webhooks/:id/replay — bulk re-enqueue dead-lettered or in-flight failures
-  app.post<{ Params: { id: string } }>("/:id/replay", async (request) => {
-    const body = z
-      .object({
-        status: z.enum(["exhausted", "failed"]).default("exhausted"),
-        limit: z.number().int().min(1).max(500).default(100),
-      })
-      .parse(request.body ?? {});
+  const bulkReplayBody = z.object({
+    status: z.enum(["exhausted", "failed"]).default("exhausted"),
+    limit: z.number().int().min(1).max(500).default(100),
+  });
+  app.post<{ Params: { id: string } }>("/:id/replay", {
+    schema: {
+      summary: "Bulk-replay webhook deliveries",
+      description: "Re-enqueue dead-lettered (`exhausted`) or `failed` deliveries for this webhook. Defaults to up to 100 exhausted deliveries.",
+      params: idParam,
+      body: bulkReplayBody,
+      response: {
+        200: dataEnvelope(z.object({ queued: z.number() }).passthrough()),
+        400: errorResponseSchema,
+        404: errorResponseSchema,
+      },
+    },
+  }, async (request) => {
+    const body = bulkReplayBody.parse(request.body ?? {});
     const result = await webhookService.replayDeliveriesBulk(
       request.account.id,
       request.params.id,
@@ -147,13 +170,19 @@ export default async function webhookRoutes(app: FastifyInstance) {
   });
 
   // GET /v1/webhooks/dead-letters — account-wide DLQ view
-  app.get("/dead-letters", async (request) => {
-    const query = z
-      .object({
-        cursor: z.string().uuid().optional(),
-        limit: z.coerce.number().int().min(1).max(100).default(50),
-      })
-      .parse(request.query);
+  const deadLettersQuery = z.object({
+    cursor: z.string().uuid().optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+  });
+  app.get("/dead-letters", {
+    schema: {
+      summary: "List account-wide dead-lettered deliveries",
+      description: "Paginated list of all webhook deliveries that exhausted their retry budget across all webhooks on the account.",
+      querystring: deadLettersQuery,
+      response: { 200: paginatedEnvelope(deliveryResponse) },
+    },
+  }, async (request) => {
+    const query = deadLettersQuery.parse(request.query);
     const result = await webhookService.listDeadLetters(request.account.id, query);
     return {
       data: result.data.map(webhookService.formatDeliveryResponse),

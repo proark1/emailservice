@@ -118,4 +118,25 @@ describe("openapi", () => {
     const sample = { error: { type: "not_found", message: "Email" } };
     expect(() => errorResponseSchema.parse(sample)).not.toThrow();
   });
+
+  it("derives stable operationIds from method + URL", async () => {
+    const app = await buildAppWithOpenapi();
+    app.post("/v1/emails", async () => ({ ok: true }));
+    app.get("/v1/emails", async () => ({ ok: true }));
+    app.get("/v1/emails/:id", async () => ({ ok: true }));
+    app.delete("/v1/emails/:id", async () => ({ ok: true }));
+    app.post("/v1/domains/:id/verify", async () => ({ ok: true }));
+    app.post("/v1/companies/:companyId/api-keys", async () => ({ ok: true }));
+    app.post("/v1/companies/:companyId/adopt-domains", async () => ({ ok: true }));
+    await app.ready();
+
+    const spec = app.swagger() as any;
+    expect(spec.paths["/v1/emails"].post.operationId).toBe("emailsCreate");
+    expect(spec.paths["/v1/emails"].get.operationId).toBe("emailsList");
+    expect(spec.paths["/v1/emails/{id}"].get.operationId).toBe("emailsGet");
+    expect(spec.paths["/v1/emails/{id}"].delete.operationId).toBe("emailsDelete");
+    expect(spec.paths["/v1/domains/{id}/verify"].post.operationId).toBe("domainsVerify");
+    expect(spec.paths["/v1/companies/{companyId}/api-keys"].post.operationId).toBe("companiesApiKeysCreate");
+    expect(spec.paths["/v1/companies/{companyId}/adopt-domains"].post.operationId).toBe("companiesAdoptDomains");
+  });
 });

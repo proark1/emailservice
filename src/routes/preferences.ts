@@ -3,6 +3,7 @@ import { z } from "zod";
 import * as prefsService from "../services/preferences.service.js";
 import { assertNotCompanyScoped } from "../plugins/auth.js";
 import { ValidationError } from "../lib/errors.js";
+import { dataEnvelope, errorResponseSchema } from "../lib/openapi.js";
 
 function escapeHtml(text: string): string {
   return text
@@ -27,6 +28,29 @@ const updatePreferencesSchema = z.object({
   master_unsubscribe: z.boolean().optional(),
 });
 
+const topicResponse = z.object({
+  id: z.string().uuid(),
+  key: z.string(),
+  label: z.string(),
+  description: z.string().nullable(),
+  default_subscribed: z.boolean(),
+  created_at: z.string(),
+}).passthrough();
+
+const audienceIdParam = z.object({ id: z.string().uuid() });
+const topicParam = z.object({ id: z.string().uuid(), topicId: z.string().uuid() });
+const emailParam = z.object({ id: z.string().uuid(), email: z.string() });
+
+const contactPreferences = z.object({
+  email: z.string().email(),
+  master_unsubscribe: z.boolean(),
+  topics: z.array(z.object({
+    key: z.string(),
+    label: z.string(),
+    subscribed: z.boolean(),
+  })),
+}).passthrough();
+
 /**
  * Authenticated CRUD: list/create/delete topics on an audience, and inspect
  * a contact's effective preferences. Mounted under /v1/audiences/:audienceId/topics
@@ -38,7 +62,15 @@ export async function audienceTopicRoutes(app: FastifyInstance) {
     assertNotCompanyScoped(request);
   });
 
-  app.get<{ Params: { id: string } }>("/:id/topics", async (request) => {
+  app.get<{ Params: { id: string } }>("/:id/topics", {
+    schema: {
+      summary: "List preference topics for an audience",
+      description: "A topic represents a granular subscription category (e.g. \"product-updates\", \"weekly-digest\"). Recipients can opt in/out per topic without unsubscribing from everything.",
+      tags: ["Audiences"],
+      params: audienceIdParam,
+      response: { 200: dataEnvelope(z.array(topicResponse)), 404: errorResponseSchema },
+    },
+  }, async (request) => {
     const topics = await prefsService.listTopics(request.account.id, request.params.id);
     return {
       data: topics.map((t) => ({
@@ -52,7 +84,15 @@ export async function audienceTopicRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post<{ Params: { id: string } }>("/:id/topics", async (request, reply) => {
+  app.post<{ Params: { id: string } }>("/:id/topics", {
+    schema: {
+      summary: "Create a preference topic",
+      tags: ["Audiences"],
+      params: audienceIdParam,
+      body: createTopicSchema,
+      response: { 201: dataEnvelope(topicResponse), 400: errorResponseSchema, 404: errorResponseSchema },
+    },
+  }, async (request, reply) => {
     const body = createTopicSchema.parse(request.body);
     const topic = await prefsService.createTopic(request.account.id, request.params.id, body);
     return reply.status(201).send({
@@ -69,6 +109,14 @@ export async function audienceTopicRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string; topicId: string } }>(
     "/:id/topics/:topicId",
+    {
+      schema: {
+        summary: "Delete a preference topic",
+        tags: ["Audiences"],
+        params: topicParam,
+        response: { 200: dataEnvelope(z.object({ id: z.string().uuid(), key: z.string() })), 404: errorResponseSchema },
+      },
+    },
     async (request) => {
       const deleted = await prefsService.deleteTopic(
         request.account.id,
@@ -82,6 +130,15 @@ export async function audienceTopicRoutes(app: FastifyInstance) {
   // GET /v1/audiences/:id/contacts/:email/preferences — inspect
   app.get<{ Params: { id: string; email: string } }>(
     "/:id/contacts/:email/preferences",
+    {
+      schema: {
+        summary: "Get a contact's effective preferences",
+        description: "Returns the contact's current per-topic subscription state, with defaults applied for topics they haven't explicitly chosen.",
+        tags: ["Audiences"],
+        params: emailParam,
+        response: { 200: dataEnvelope(contactPreferences), 404: errorResponseSchema },
+      },
+    },
     async (request) => {
       const result = await prefsService.getContactPreferences(
         request.account.id,
@@ -95,6 +152,16 @@ export async function audienceTopicRoutes(app: FastifyInstance) {
   // PATCH /v1/audiences/:id/contacts/:email/preferences — update
   app.patch<{ Params: { id: string; email: string } }>(
     "/:id/contacts/:email/preferences",
+    {
+      schema: {
+        summary: "Update a contact's preferences",
+        description: "Partially update a contact's per-topic subscriptions and/or master-unsubscribe flag.",
+        tags: ["Audiences"],
+        params: emailParam,
+        body: updatePreferencesSchema,
+        response: { 200: dataEnvelope(contactPreferences), 400: errorResponseSchema, 404: errorResponseSchema },
+      },
+    },
     async (request) => {
       const body = updatePreferencesSchema.parse(request.body);
       const result = await prefsService.updateContactPreferences(
@@ -111,6 +178,15 @@ export async function audienceTopicRoutes(app: FastifyInstance) {
   // signed link the operator can email to the recipient.
   app.post<{ Params: { id: string; email: string } }>(
     "/:id/contacts/:email/preferences/url",
+    {
+      schema: {
+        summary: "Mint a signed preference-center URL",
+        description: "Generates a token-signed URL the operator can email to the recipient so they can self-manage their preferences without auth.",
+        tags: ["Audiences"],
+        params: emailParam,
+        response: { 200: dataEnvelope(z.object({ url: z.string().url() })), 404: errorResponseSchema },
+      },
+    },
     async (request) => {
       const email = decodeURIComponent(request.params.email);
       // Sanity-check the contact exists before issuing a token.
