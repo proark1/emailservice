@@ -67,7 +67,7 @@ export function Button({ children, onClick, variant = "primary", disabled, type 
   children: ReactNode; onClick?: () => void; variant?: "primary" | "secondary" | "danger"; disabled?: boolean; type?: "button" | "submit"; size?: "sm" | "md" | "lg"; loading?: boolean; title?: string;
 }) {
   const variants: Record<string, string> = {
-    primary: "bg-violet-600 hover:bg-violet-700 text-white shadow-sm active:scale-[0.98]",
+    primary: "bg-[#1f2542] hover:bg-[#161a31] text-white shadow-sm active:scale-[0.98]",
     secondary: "border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 active:bg-gray-100 dark:active:bg-gray-600",
     danger: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800",
   };

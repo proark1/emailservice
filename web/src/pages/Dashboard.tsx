@@ -217,7 +217,7 @@ function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => void }) {
               )}
               <div className="space-y-0.5">
                 {section.items.map((item) => (
-                  <NavLink key={item.to} to={item.to} end={"end" in item ? item.end : undefined} onClick={onToggle} className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150 ${isActive ? "bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 border-l-[3px] border-violet-500 -ml-[3px]" : "text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-700"}`}>
+                  <NavLink key={item.to} to={item.to} end={"end" in item ? item.end : undefined} onClick={onToggle} className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150 ${isActive ? "bg-[#1f2542] text-white dark:bg-[#1f2542] dark:text-white" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-700"}`}>
                     {item.icon}{item.label}
                   </NavLink>
                 ))}
@@ -241,10 +241,21 @@ function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => void }) {
           </button>
         </div>
         <div className="px-2.5 py-3 border-t border-gray-200 dark:border-gray-700">
-          <div className="px-2.5 mb-2"><p className="text-[13px] text-gray-900 dark:text-gray-100 font-medium truncate">{user?.name}</p><p className="text-[11px] text-gray-400 truncate">{user?.email}</p></div>
-          <button onClick={async () => { await logout(); navigate("/"); }} className="w-full flex items-center gap-2 px-2.5 py-2 text-[13px] text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" /></svg>Sign out
-          </button>
+          <div className="flex items-center gap-2.5 px-1.5">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-700 to-indigo-800 flex items-center justify-center text-white text-[13px] font-semibold shrink-0">
+              {(user?.name || user?.email || "?").trim().charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] text-gray-900 dark:text-gray-100 font-medium truncate">{user?.email}</p>
+            </div>
+            <button
+              onClick={async () => { await logout(); navigate("/"); }}
+              className="px-3 py-1.5 text-[11px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition-colors shrink-0"
+              title="Sign out"
+            >
+              Out
+            </button>
+          </div>
         </div>
       </aside>
     </>
@@ -406,22 +417,35 @@ function Overview() {
   };
 
   const statIcons: Record<string, { gradient: string; icon: React.ReactNode }> = {
-    Emails: { gradient: "from-violet-500 to-indigo-500", icon: <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg> },
-    Domains: { gradient: "from-emerald-500 to-teal-500", icon: <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3" /></svg> },
-    "API Keys": { gradient: "from-amber-500 to-orange-500", icon: <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg> },
-    Webhooks: { gradient: "from-blue-500 to-cyan-500", icon: <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg> },
-    Audiences: { gradient: "from-rose-500 to-pink-500", icon: <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" /></svg> },
+    Emails: { gradient: "from-violet-500 to-indigo-500", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg> },
+    Domains: { gradient: "from-emerald-500 to-teal-500", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3" /></svg> },
+    "API Keys": { gradient: "from-amber-500 to-orange-500", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg> },
+    Webhooks: { gradient: "from-blue-500 to-cyan-500", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg> },
+    Audiences: { gradient: "from-rose-500 to-pink-500", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" /></svg> },
   };
 
-  const sc = (l: string, v: number) => {
+  const sc = (l: string, v: number, opts?: { primary?: boolean; subtitle?: string }) => {
     const si = statIcons[l] || { gradient: "from-gray-500 to-gray-600", icon: null };
+    if (opts?.primary) {
+      return (
+        <div key={l} className="rounded-2xl bg-gradient-to-br from-blue-700 via-indigo-700 to-indigo-900 shadow-sm p-5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-default text-white">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-4 h-4 flex items-center justify-center text-white/80">{si.icon}</div>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-white/80">{l}</span>
+          </div>
+          <div className="text-3xl font-bold tracking-tight animate-number-up">{v}</div>
+          {opts.subtitle && <div className="text-[12px] text-white/70 mt-1">{opts.subtitle}</div>}
+        </div>
+      );
+    }
     return (
       <div key={l} className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-default">
-        <div className="flex items-center gap-2.5 mb-2">
-          <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${si.gradient} flex items-center justify-center shrink-0`}>{si.icon}</div>
-          <span className="text-[13px] text-gray-500 dark:text-gray-400">{l}</span>
+        <div className="flex items-center gap-2 mb-3">
+          <div className={`w-4 h-4 flex items-center justify-center text-gray-500 dark:text-gray-400`}>{si.icon}</div>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{l}</span>
         </div>
-        <div className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight animate-number-up">{v}</div>
+        <div className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight animate-number-up">{v}</div>
+        {opts?.subtitle && <div className="text-[12px] text-gray-500 dark:text-gray-400 mt-1">{opts.subtitle}</div>}
       </div>
     );
   };
@@ -457,11 +481,11 @@ function Overview() {
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {sc("Emails", stats.emails)}
-        {sc("Domains", stats.domains)}
-        {sc("API Keys", stats.api_keys)}
-        {sc("Webhooks", stats.webhooks)}
-        {sc("Audiences", stats.audiences)}
+        {sc("Emails", stats.emails, { primary: true, subtitle: "Total sent" })}
+        {sc("Domains", stats.domains, { subtitle: "Verified senders" })}
+        {sc("API Keys", stats.api_keys, { subtitle: "Active keys" })}
+        {sc("Webhooks", stats.webhooks, { subtitle: "Endpoints" })}
+        {sc("Audiences", stats.audiences, { subtitle: "Lists" })}
       </div>
 
       <div className="mt-4"><ActivityFeed /></div>
@@ -1234,7 +1258,7 @@ export default function Dashboard() {
   }, [user, isOwner]);
 
   return (
-    <div className="flex min-h-screen bg-gray-50 antialiased">
+    <div className="flex min-h-screen bg-[#f3ecdc] dark:bg-gray-950 antialiased">
       <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
       {/* Mobile top bar */}
       <div className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 flex items-center px-4 z-30 lg:hidden">
