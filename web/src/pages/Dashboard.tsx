@@ -449,9 +449,9 @@ function Overview() {
     <div>
       <PageHeader title="Overview" desc="Your email service at a glance" />
 
-      {showOnboarding && (
+      {showOnboarding && onboarding && (
         <div className="mb-6">
-          <OnboardingWizard status={onboarding!} onDismiss={dismissOnboarding} />
+          <OnboardingWizard status={onboarding} onDismiss={dismissOnboarding} />
         </div>
       )}
 
