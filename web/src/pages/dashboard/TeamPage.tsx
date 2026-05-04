@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api, post, patch, del } from "../../lib/api";
-import { PageHeader, Button, Input, Modal, Badge, Table, EmptyState, Select, useConfirmDialog, useToast } from "../../components/ui";
+import { PageHeader, Button, Input, Modal, Badge, Table, EmptyState, Select, SkeletonTable, useConfirmDialog, useToast } from "../../components/ui";
 
 type Member = {
   id: string;
@@ -201,14 +201,14 @@ export default function TeamPage() {
       </Modal>
 
       {loading ? (
-        <div className="p-8 text-center text-gray-400">Loading...</div>
+        <SkeletonTable rows={4} cols={4} />
       ) : (
         <div className="space-y-6">
           {/* Members */}
           <div>
             <h3 className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 mb-3">Members ({members.length})</h3>
             {members.length === 0 ? (
-              <EmptyState title="No members" description="Add team members to share this domain." />
+              <EmptyState title="No team members yet" desc="Invite teammates so they can send and receive on this domain. Each person gets their own login, audit trail, and (optionally) per-mailbox restrictions." />
             ) : (
               <Table headers={["User", "Role", "Mailboxes", "Joined", ""]}>
                 {members.map((m) => (

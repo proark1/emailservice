@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { api, post, patch, del } from "../../lib/api";
-import { PageHeader, Button, Modal, Input, Textarea, Table, EmptyState, useConfirmDialog, useToast } from "../../components/ui";
+import { PageHeader, Button, Modal, Input, Textarea, Table, EmptyState, SkeletonTable, useConfirmDialog, useToast } from "../../components/ui";
 
 interface Contact {
   id: string;
@@ -129,12 +129,12 @@ export default function ContactsPage() {
       </Modal>
 
       {loading ? (
-        <div className="p-8 text-center text-gray-400">Loading...</div>
+        <SkeletonTable rows={6} cols={5} />
       ) : filtered.length === 0 ? (
         <EmptyState
-          title={search ? "No matches" : "No contacts"}
-          desc={search ? "Try a different search term." : "Add contacts to your address book for quick email composition."}
-          action={!search ? <Button onClick={openCreate}>+ Add Contact</Button> : undefined}
+          title={search ? "No contacts match your search" : "No contacts yet"}
+          desc={search ? "Try a different search term, or clear the search to see everyone." : "Your address book stores recipients you reach out to often. Add a contact and they'll autocomplete in the composer."}
+          action={!search ? <Button onClick={openCreate}>+ Add contact</Button> : undefined}
         />
       ) : (
         <Table headers={["Email", "Name", "Company", "Added", ""]}>

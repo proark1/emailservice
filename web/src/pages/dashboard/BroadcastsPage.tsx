@@ -268,7 +268,18 @@ export default function BroadcastsPage() {
       </Modal>
 
       {broadcasts.length === 0 ? (
-        <EmptyState title="No broadcasts yet" desc={hasVerifiedDomains && audiences.length > 0 ? "Click New Broadcast to send to an audience" : "Set up a verified domain and audience first"} />
+        hasVerifiedDomains && audiences.length > 0 ? (
+          <EmptyState
+            title="No broadcasts yet"
+            desc="A broadcast sends one email to every contact in an audience at once — newsletters, product updates, announcements. Schedule one to test the waters."
+            action={<Button onClick={() => setCreateOpen(true)}>+ Create broadcast</Button>}
+          />
+        ) : (
+          <EmptyState
+            title="One step away from broadcasts"
+            desc="You'll need at least one verified domain and one audience before you can send a broadcast. Set those up first."
+          />
+        )
       ) : (
         <Table headers={["Name", "Audience", "Status", "Sent / Total", "Date"]}>
           {broadcasts.map((b) => (

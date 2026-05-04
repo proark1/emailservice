@@ -78,7 +78,11 @@ export default function AudiencesPage() {
       </Modal>
 
       {audiences.length === 0 ? (
-        <EmptyState title="No audiences yet" desc="Create an audience to start collecting contacts" />
+        <EmptyState
+          title="No audiences yet"
+          desc="An audience is a list of recipients you can send broadcasts to — newsletter subscribers, beta users, paid customers. Create one to start adding contacts."
+          action={<Button onClick={() => setCreateOpen(true)}>+ Create your first audience</Button>}
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {audiences.map((a) => (

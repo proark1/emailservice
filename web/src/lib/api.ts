@@ -37,10 +37,19 @@ export async function api<T = any>(path: string, options?: RequestInit): Promise
   const text = await res.text();
   const data = text ? (() => { try { return JSON.parse(text); } catch { return {}; } })() : {};
   if (!res.ok) {
+    const message = data?.error?.message || `Request failed (${res.status})`;
     if ((res.status === 401 || res.status === 403) && !path.startsWith("/auth/")) {
+      // Surface a toast just before the redirect so the user sees WHY they got
+      // bounced — silently navigating away looks like the dashboard broke. The
+      // import is dynamic so api.ts stays usable in non-React contexts and
+      // avoids a circular component import.
+      try {
+        const { fireToast } = await import("../components/ui");
+        fireToast(message === "Unauthorized" ? "Your session expired — sign in again." : message, "error");
+      } catch {}
       window.location.href = "/login";
     }
-    throw new Error(data?.error?.message || `Request failed (${res.status})`);
+    throw new Error(message);
   }
   return data;
 }

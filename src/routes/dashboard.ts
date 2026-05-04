@@ -12,7 +12,7 @@ import * as warmupService from "../services/warmup.service.js";
 import * as mailboxService from "../services/mailbox.service.js";
 import * as templateService from "../services/template.service.js";
 import { getDb } from "../db/index.js";
-import { emails, domains, apiKeys, webhooks, audiences, inboundEmails, folders } from "../db/schema/index.js";
+import { emails, domains, apiKeys, webhooks, audiences, inboundEmails, folders, accounts } from "../db/schema/index.js";
 import { ForbiddenError } from "../lib/errors.js";
 import { getDnsVerifyQueue } from "../queues/index.js";
 import { getConfig } from "../config/index.js";
@@ -69,6 +69,40 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       db.select({ count: count() }).from(domains).where(and(eq(domains.accountId, id), eq(domains.status, "verified"))),
     ]);
     return { data: { emails: Number(e.count), domains: Number(d.count), verified_domains: Number(vd.count), api_keys: Number(a.count), webhooks: Number(w.count), audiences: Number(au.count) } };
+  });
+
+  // --- Onboarding checklist ---
+  // Returns the live status of each first-run step so the Overview can render
+  // a "Get started" card that ticks itself off as the user makes progress.
+  // We deliberately keep the response shape flat and stable so the frontend
+  // never has to interpret enums.
+  app.get("/onboarding", async (request) => {
+    const db = getDb();
+    const id = request.account.id;
+    const [[d], [vd], [a], [e]] = await Promise.all([
+      db.select({ count: count() }).from(domains).where(eq(domains.accountId, id)),
+      db.select({ count: count() }).from(domains).where(and(eq(domains.accountId, id), eq(domains.status, "verified"))),
+      db.select({ count: count() }).from(apiKeys).where(and(eq(apiKeys.accountId, id), isNull(apiKeys.revokedAt))),
+      db.select({ count: count() }).from(emails).where(and(eq(emails.accountId, id), eq(emails.isDraft, false))),
+    ]);
+    const [acct] = await db.select({ dismissedAt: accounts.onboardingDismissedAt }).from(accounts).where(eq(accounts.id, id));
+    return {
+      data: {
+        steps: {
+          domain_added: Number(d.count) > 0,
+          domain_verified: Number(vd.count) > 0,
+          api_key_created: Number(a.count) > 0,
+          email_sent: Number(e.count) > 0,
+        },
+        dismissed_at: acct?.dismissedAt?.toISOString() ?? null,
+      },
+    };
+  });
+
+  app.post("/onboarding/dismiss", async (request) => {
+    const db = getDb();
+    await db.update(accounts).set({ onboardingDismissedAt: new Date() }).where(eq(accounts.id, request.account.id));
+    return { data: { dismissed: true } };
   });
 
   // --- Emails ---
