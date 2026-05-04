@@ -35,26 +35,47 @@ console.log("queued", email.id);
 
 ## Resources
 
-The client groups endpoints by resource:
+Every public `/v1/*` endpoint is wrapped. The client groups operations by
+resource; nested resources (audience contacts, sequence steps, company
+members…) hang off their parent namespace.
 
 | Namespace | Methods |
 |-----------|---------|
 | `client.emails` | `create`, `list`, `get`, `cancel`, `sendBatch` |
 | `client.domains` | `create`, `list`, `get`, `update`, `delete`, `verify` |
 | `client.apiKeys` | `create`, `list`, `revoke` |
-| `client.webhooks` | `create`, `list`, `get`, `update`, `delete` |
+| `client.webhooks` | `create`, `list`, `get`, `update`, `delete`, `listDeliveries`, `replayDelivery`, `replayAll`, `listDeadLetters` |
+| `client.audiences` | `create`, `list`, `get`, `delete`, `exportContactsCsv`; `.contacts.*`; `.imports.*` |
+| `client.broadcasts` | `create`, `list`, `get`, `delete`, `listVariants`, `selectWinner` |
+| `client.warmup` | `create`, `list`, `get`, `delete`, `stats`, `pause`, `resume` |
+| `client.templates` | `create`, `list`, `get`, `update`, `delete` |
+| `client.sequences` | `create`, `list`, `get`, `update`, `delete`, `activate`, `pause`, `enroll`, `listEnrollments`; `.steps.*` |
+| `client.companies` | `create`, `list`, `get`, `update`, `delete`, `adoptDomains`; `.apiKeys.*`, `.domains.*`, `.members.*`, `.mailboxes.*` |
+| `client.inbox` | `list`, `bulk`, `get`, `update`, `delete`, `move`, `restore`, `permanentDelete`, `listAttachments`, `downloadAttachment` |
+| `client.threads` | `list`, `get` |
+| `client.drafts` | `list`, `create`, `get`, `update`, `delete`, `send` |
+| `client.folders` | `list`, `create`, `update`, `delete` |
+| `client.signatures` | `list`, `create`, `get`, `update`, `delete` |
+| `client.addressBook` | `autocomplete`, `list`, `create`, `get`, `update`, `delete` |
+| `client.team` | `listMembers`, `addMember`, `updateMember`, `removeMember`, `listInvitations`, `createInvitation`, `revokeInvitation`, `myMemberships` |
+| `client.mailboxes` | `listProviders`, `create`, `list`, `get`, `update`, `delete`, `test`, `sync` |
+| `client.compat` | `resendSendEmail`, `postmarkSendEmail` |
+| `client.deliverability` | `lint` |
 
-For endpoints not yet wrapped, use the typed escape hatch:
+Request and response types come from `types.gen.ts`, which is generated from
+the OpenAPI spec — import `paths` and `components` to type any value the SDK
+exchanges with the API. Resource methods that wrap richer response payloads
+(everything past `emails` / `domains` / `apiKeys` / `webhooks`) currently
+return `unknown`; cast with the `paths[...]` types or the helpers in
+`components["schemas"]` when you need a typed result.
+
+For anything not (yet) covered — or one-off requests — use the escape hatch:
 
 ```ts
-const result = await client.raw<{ data: unknown }>("POST", "/v1/audiences", {
-  name: "Newsletter",
+const result = await client.raw<{ data: unknown }>("POST", "/v1/some/path", {
+  // body
 });
 ```
-
-The full request and response types are exported from `types.gen.ts` (generated
-from the OpenAPI spec) — import `paths` and `components` to type any
-hand-rolled call.
 
 ## Errors
 
