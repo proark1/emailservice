@@ -32,6 +32,7 @@ import eventsRoutes from "./events.js";
 import wellKnownRoutes from "./well-known.js";
 import { addSuppression, listSuppressions, removeSuppression, formatSuppressionResponse } from "../services/suppression.service.js";
 import { getAccountAnalytics } from "../services/analytics.service.js";
+import { dataEnvelope, paginatedEnvelope, errorResponseSchema } from "../lib/openapi.js";
 
 export async function registerRoutes(app: FastifyInstance) {
   // Health check (liveness) — fast, cache-unfriendly. 200 = process is up.
@@ -111,6 +112,12 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(eventsRoutes, { prefix: "/v1/events" });
 
   // Suppression routes
+  const suppressionResponse = z.object({
+    id: z.string().uuid(),
+    email: z.string().email(),
+    reason: z.enum(["bounce", "complaint", "unsubscribe", "manual"]),
+    created_at: z.string(),
+  }).passthrough();
   await app.register(async (suppApp) => {
     suppApp.addHook("onRequest", async (request) => {
       await app.authenticate(request);
@@ -118,26 +125,48 @@ export async function registerRoutes(app: FastifyInstance) {
       assertNotCompanyScoped(request);
     });
 
-    suppApp.get("/", async (request) => {
-      const query = z.object({
-        cursor: z.string().uuid().optional(),
-        limit: z.coerce.number().int().min(1).max(100).default(50),
-      }).parse(request.query);
+    const listSuppressionsQuery = z.object({
+      cursor: z.string().uuid().optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+    });
+    const addSuppressionBody = z.object({
+      email: z.string().email(),
+      reason: z.enum(["bounce", "complaint", "unsubscribe", "manual"]).default("manual"),
+    });
+
+    suppApp.get("/", {
+      schema: {
+        summary: "List suppressions",
+        description: "Account-wide suppression list. Bounces, complaints, and unsubscribes are added automatically; `manual` entries are user-added.",
+        querystring: listSuppressionsQuery,
+        response: { 200: paginatedEnvelope(suppressionResponse) },
+      },
+    }, async (request) => {
+      const query = listSuppressionsQuery.parse(request.query);
       const result = await listSuppressions(request.account.id, query);
       return { data: result.data.map(formatSuppressionResponse), pagination: result.pagination };
     });
 
-    suppApp.post("/", async (request, reply) => {
-      const body = z.object({
-        email: z.string().email(),
-        reason: z.enum(["bounce", "complaint", "unsubscribe", "manual"]).default("manual"),
-      }).parse(request.body);
-
+    suppApp.post("/", {
+      schema: {
+        summary: "Add a suppression",
+        description: "Manually add an email to the suppression list. Future sends to this address will be skipped.",
+        body: addSuppressionBody,
+        response: { 201: dataEnvelope(suppressionResponse), 400: errorResponseSchema },
+      },
+    }, async (request, reply) => {
+      const body = addSuppressionBody.parse(request.body);
       const suppression = await addSuppression(request.account.id, body.email, body.reason);
       return reply.status(201).send({ data: formatSuppressionResponse(suppression) });
     });
 
-    suppApp.delete<{ Params: { id: string } }>("/:id", async (request) => {
+    suppApp.delete<{ Params: { id: string } }>("/:id", {
+      schema: {
+        summary: "Remove a suppression",
+        params: z.object({ id: z.string().uuid() }),
+        response: { 200: dataEnvelope(suppressionResponse), 404: errorResponseSchema },
+      },
+    }, async (request) => {
       const deleted = await removeSuppression(request.account.id, request.params.id);
       return { data: formatSuppressionResponse(deleted) };
     });
@@ -151,12 +180,29 @@ export async function registerRoutes(app: FastifyInstance) {
       assertNotCompanyScoped(request);
     });
 
-    analyticsApp.get("/", async (request) => {
-      const query = z.object({
-        start_date: z.string().datetime().optional(),
-        end_date: z.string().datetime().optional(),
-      }).parse(request.query);
+    const analyticsQuery = z.object({
+      start_date: z.string().datetime().optional(),
+      end_date: z.string().datetime().optional(),
+    });
+    const analyticsResponse = z.object({
+      sent: z.number(),
+      delivered: z.number(),
+      bounced: z.number(),
+      complained: z.number(),
+      opened: z.number(),
+      clicked: z.number(),
+      unsubscribed: z.number(),
+    }).passthrough();
 
+    analyticsApp.get("/", {
+      schema: {
+        summary: "Account analytics",
+        description: "Aggregate counts (sent, delivered, bounced, complained, opened, clicked, unsubscribed) over the requested date range. Defaults to all time when dates are omitted.",
+        querystring: analyticsQuery,
+        response: { 200: dataEnvelope(analyticsResponse) },
+      },
+    }, async (request) => {
+      const query = analyticsQuery.parse(request.query);
       const analytics = await getAccountAnalytics(
         request.account.id,
         query.start_date ? new Date(query.start_date) : undefined,

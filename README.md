@@ -60,6 +60,16 @@ cd web && pnpm dev     # Dashboard on :5173
 
 All API routes require `Authorization: Bearer es_xxx` (API key auth).
 
+**Interactive docs.** Run the API and open:
+
+- `http://localhost:3000/docs` — Swagger UI (try-it-out, persists your bearer token)
+- `http://localhost:3000/openapi.json` — OpenAPI 3.1 document, ready to feed into Stainless,
+  `openapi-generator`, Postman, Insomnia, or any other client-codegen tool.
+
+Every `/v1/*` endpoint has an OpenAPI schema with summary, request body, query params, and
+response shape — the same Zod schemas the server uses for runtime validation are reused for
+documentation, so the spec can never drift from the implementation.
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v1/emails` | Send an email |
