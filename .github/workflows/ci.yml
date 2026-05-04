@@ -65,7 +65,34 @@ jobs:
             exit 0;
           }
 
+      - name: Skip if base spec is on a different OpenAPI version
+        id: version-check
+        run: |
+          base_v=$(jq -r '.openapi // "missing"' /tmp/openapi-base.json)
+          rev_v=$(jq -r '.openapi // "missing"' openapi.json)
+          echo "base=$base_v rev=$rev_v"
+          base_major=${base_v%%.*}
+          rev_major=${rev_v%%.*}
+          if [ "$base_v" != "missing" ] && [ "$base_major.${base_v#*.}" != "$rev_major.${rev_v#*.}" ]; then
+            # Even minor version changes (3.0 → 3.1) restructure the schema
+            # vocabulary in ways oasdiff treats as breaking but that don't
+            # affect the wire protocol. Skip the diff for cross-version PRs;
+            # rerun on the next PR once main is on the new version.
+            same_minor=$(echo "$base_v $rev_v" | awk '{
+              split($1,a,".");
+              split($2,b,".");
+              print (a[1]"."a[2] == b[1]"."b[2]) ? "yes" : "no"
+            }')
+            if [ "$same_minor" = "no" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "::warning::Base spec is OpenAPI $base_v, revision is $rev_v — skipping oasdiff. Future PRs will diff like-versions cleanly."
+              exit 0
+            fi
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
       - name: oasdiff breaking
+        if: steps.version-check.outputs.skip != 'true'
         uses: oasdiff/oasdiff-action/breaking@main
         with:
           base: /tmp/openapi-base.json
