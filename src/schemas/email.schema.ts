@@ -16,7 +16,9 @@ const noLineTerm = (msg: string) =>
 const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
 
 export const sendEmailSchema = z.object({
-  from: z.string().min(1), // "Name <email@example.com>" or "email@example.com"
+  from: z.string().min(1).meta({
+    description: "Sender. Either `Name <email@example.com>` or a bare `email@example.com`. Must use a verified domain.",
+  }),
   to: z.array(emailAddress).min(1).max(50),
   cc: z.array(emailAddress).optional(),
   bcc: z.array(emailAddress).optional(),
@@ -43,6 +45,21 @@ export const sendEmailSchema = z.object({
   in_reply_to: z.string().max(500).optional(),
   references: z.array(z.string().max(500)).optional(),
   signature_id: z.string().uuid().optional(),
+}).meta({
+  description:
+    "Send a transactional email. Provide at least one of `html`, `text`, or `template_id`. " +
+    "Pass `scheduled_at` (ISO 8601) to delay the send. Set `idempotency_key` to make the call safely retryable.",
+  examples: [
+    {
+      from: "Acme <hello@yourdomain.com>",
+      to: ["customer@example.com"],
+      subject: "Welcome to Acme",
+      html: "<h1>Welcome!</h1><p>Thanks for signing up.</p>",
+      text: "Welcome! Thanks for signing up.",
+      tags: { template: "welcome", plan: "pro" },
+      idempotency_key: "welcome-user-1234",
+    },
+  ],
 }).refine((d) => d.html || d.text || d.template_id, {
   message: "At least one of html, text, or template_id is required",
   path: ["html"],

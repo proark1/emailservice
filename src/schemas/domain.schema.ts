@@ -38,6 +38,18 @@ export const createDomainSchema = z.object({
   dmarc_rua_email: z.string().email().optional(),
   return_path_domain: z.string().min(1).max(255).optional(),
   send_rate_per_minute: z.number().int().min(1).max(100_000).optional(),
+}).meta({
+  description:
+    "Register a sending domain. The response includes the SPF / DKIM / DMARC / MX records " +
+    "to add at your DNS host. Verification is queued automatically (60s delay) and retries " +
+    "with exponential backoff for up to 72 hours.",
+  examples: [
+    {
+      name: "yourdomain.com",
+      mode: "both",
+      dmarc_rua_email: "dmarc-reports@yourdomain.com",
+    },
+  ],
 });
 
 // Restrict BIMI URLs to https — the spec requires it (Gmail rejects http

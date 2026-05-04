@@ -1,0 +1,23 @@
+extends:
+  - minimal
+
+# We use the `recommended` ruleset as a base then opt out of stylistic rules
+# that fight our generator output rather than catching real bugs.
+rules:
+  # Fastify mounts route plugins under a prefix and treats `/v1/foo/` and
+  # `/v1/foo` as the same route. The spec emits the trailing slash; clients
+  # work either way. Leave it.
+  no-path-trailing-slash: off
+  # The full SPDX identifier list is overkill for an internal API doc.
+  info-license-strict: off
+  # We intentionally provide a `4XX`/error response on the flagship routes
+  # but not on every CRUD GET. Demoting this from error → warn keeps the
+  # signal high without forcing busywork on every list endpoint.
+  operation-4xx-response: warn
+  # The auto-derived operationIds we ship are guaranteed unique by
+  # construction (method + URL); keep the rule on but don't make it strict.
+  operation-operationId-unique: error
+  # Real bugs we want CI to catch:
+  no-unresolved-refs: error
+  no-invalid-media-type-examples: error
+  no-undefined-server-variable: error

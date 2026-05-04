@@ -15,6 +15,7 @@ import errorHandler from "./plugins/error-handler.js";
 import { registerRoutes } from "./routes/index.js";
 import {
   OPENAPI_TAGS,
+  buildOpenapiWebhooks,
   openapiTransform,
   serializerCompiler,
   validatorCompiler,
@@ -54,6 +55,10 @@ async function main() {
   // OpenAPI docs — UI at /docs, raw spec at /docs/json + /openapi.json.
   await app.register(swagger, {
     openapi: {
+      // OpenAPI 3.1 — needed for `examples` (array) at the schema level, JSON
+      // Schema 2020-12 alignment, and `webhooks` for documenting outbound
+      // events. Swagger UI 5.x renders 3.1 fine.
+      openapi: "3.1.0",
       info: {
         title: "MailNowAPI",
         description: [
@@ -78,7 +83,7 @@ async function main() {
         { url: "https://mailnowapi.com", description: "Production" },
         { url: "http://localhost:3000", description: "Local development" },
       ],
-      tags: [...OPENAPI_TAGS],
+      tags: [...OPENAPI_TAGS, { name: "Webhook events", description: "Outbound events MailNowAPI POSTs to subscribed webhooks." }],
       components: {
         securitySchemes: {
           bearerAuth: {
@@ -89,7 +94,8 @@ async function main() {
         },
       },
       security: [{ bearerAuth: [] }],
-    },
+      webhooks: buildOpenapiWebhooks() as any,
+    } as any,
     transform: openapiTransform,
     hideUntagged: false,
   });
