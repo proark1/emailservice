@@ -140,7 +140,13 @@ export function parseFbl(parsed: ParsedMail): FblResult[] {
   const body = flattenBodyText(parsed);
   if (!body) return [];
   const feedbackType = body.match(/feedback-type:\s*(\w+)/i)?.[1]?.toLowerCase() ?? "abuse";
-  const complainant = body.match(/original-(?:rcpt-to|mail-from):\s*<?([^\s<>]+@[^\s<>]+)>?/i)?.[1];
+  // Per RFC 5965 the complainant address is `Original-Rcpt-To`. We must NOT
+  // fall back to `Original-Mail-From` — that's the SENDER (e.g. our own
+  // bounces@yourdomain return-path), and suppressing it would self-DOS the
+  // sending domain: every subsequent send whose recipient list contained that
+  // address would be blocked, and the `email.complained` webhook would fire
+  // with the wrong subject. ARF reports without an Original-Rcpt-To are dropped.
+  const complainant = body.match(/original-rcpt-to:\s*<?([^\s<>]+@[^\s<>]+)>?/i)?.[1];
   if (!complainant) return [];
   const originalMessageId = body.match(/message-id:\s*(<[^>\s]+>)/i)?.[1];
   return [{ complainant: complainant.toLowerCase(), feedbackType, originalMessageId }];

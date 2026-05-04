@@ -2,10 +2,14 @@ import { FastifyInstance } from "fastify";
 import { listInboxSchema, updateInboxEmailSchema, moveEmailSchema, bulkActionSchema } from "../schemas/inbox.schema.js";
 import * as inboxService from "../services/inbox.service.js";
 import * as attachmentService from "../services/attachment.service.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 export default async function inboxRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    // Inbox rows are scoped to accountId only; a company-scoped key would
+    // resolve to the root owner account and read sibling tenants' mail.
+    assertNotCompanyScoped(request);
   });
 
   // GET /v1/inbox

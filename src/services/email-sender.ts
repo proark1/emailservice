@@ -143,7 +143,7 @@ export async function sendSystemEmail(options: {
  * A retry only makes sense once the underlying config / target has changed,
  * which the caller signals by re-enqueueing with a fresh idempotency key.
  */
-const PERMANENT_FAILURE_CODES = ["rejected", "smtp_auth", "dkim", "tls"] as const;
+const PERMANENT_FAILURE_CODES = ["rejected", "smtp_auth", "dkim", "tls", "cancelled"] as const;
 
 /**
  * Coarse classifier for outbound failures. The error message is captured raw
@@ -268,9 +268,19 @@ export async function sendEmailDirect(emailId: string, accountId: string): Promi
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     };
 
-    // Add web-based unsubscribe link if we have recipient info
-    if (email.toAddresses?.length) {
-      const recipientEmail = Array.isArray(email.toAddresses) ? email.toAddresses[0] : email.toAddresses;
+    // Add web-based unsubscribe link ONLY when this MIME message will land in
+    // exactly one mailbox. The encrypted token names a single recipient, but
+    // the same MIME bytes are delivered to every To/Cc/Bcc — if we embed a
+    // token bound to recipient #1 in a multi-recipient send, recipient #5
+    // hitting Gmail's one-click POST suppresses recipient #1 instead, while
+    // #5 keeps receiving mail (RFC 8058 / CAN-SPAM violation). When there's
+    // more than one recipient, we fall back to mailto-only unsubscribe — the
+    // recipient's own envelope address is conveyed by their MTA.
+    const toCount = Array.isArray(email.toAddresses) ? email.toAddresses.length : (email.toAddresses ? 1 : 0);
+    const ccCount = Array.isArray(email.ccAddresses) ? email.ccAddresses.length : 0;
+    const bccCount = Array.isArray(email.bccAddresses) ? email.bccAddresses.length : 0;
+    if (toCount === 1 && ccCount === 0 && bccCount === 0) {
+      const recipientEmail = (email.toAddresses as string[])[0];
       // Encrypt unsubscribe data to prevent accountId/email leakage
       const encodedData = encodeURIComponent(encryptPrivateKey(JSON.stringify({ a: accountId, e: recipientEmail }), config.ENCRYPTION_KEY));
       unsubscribeHeaders["List-Unsubscribe"] = `<${config.BASE_URL}/unsubscribe/${encodedData}>, <mailto:unsubscribe@${fromDomain}>`;

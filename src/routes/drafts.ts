@@ -3,10 +3,12 @@ import { z } from "zod";
 import { saveDraftSchema, updateDraftSchema } from "../schemas/draft.schema.js";
 import * as draftService from "../services/draft.service.js";
 import { formatEmailResponse } from "../services/email.service.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 export default async function draftRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    assertNotCompanyScoped(request);
   });
 
   // GET /v1/drafts

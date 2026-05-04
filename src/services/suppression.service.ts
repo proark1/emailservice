@@ -1,4 +1,4 @@
-import { eq, and, inArray, desc, lt } from "drizzle-orm";
+import { eq, and, inArray, desc, lt, or } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { suppressions } from "../db/schema/index.js";
 import { NotFoundError, ConflictError } from "../lib/errors.js";
@@ -35,15 +35,33 @@ export async function listSuppressions(accountId: string, pagination?: Paginatio
   const limit = pagination?.limit ?? 100;
   const conditions = [eq(suppressions.accountId, accountId)];
 
+  // Keyset pagination over (createdAt DESC, id DESC). Previous implementation
+  // used `lt(id, cursor)` while ordering by createdAt, but UUIDv4 has no
+  // relationship to creation order, so pages overlapped or skipped rows on
+  // a compliance-critical resource. The cursor is still a suppression id; we
+  // resolve it to its createdAt and ask for rows strictly older — or tied on
+  // createdAt with a smaller id — so duplicate timestamps neither double-yield
+  // nor skip.
   if (pagination?.cursor) {
-    conditions.push(lt(suppressions.id, pagination.cursor));
+    const [cursorRow] = await db
+      .select({ createdAt: suppressions.createdAt, id: suppressions.id })
+      .from(suppressions)
+      .where(and(eq(suppressions.id, pagination.cursor), eq(suppressions.accountId, accountId)));
+    if (cursorRow) {
+      conditions.push(
+        or(
+          lt(suppressions.createdAt, cursorRow.createdAt),
+          and(eq(suppressions.createdAt, cursorRow.createdAt), lt(suppressions.id, cursorRow.id))!,
+        )!,
+      );
+    }
   }
 
   const items = await db
     .select()
     .from(suppressions)
     .where(and(...conditions))
-    .orderBy(desc(suppressions.createdAt))
+    .orderBy(desc(suppressions.createdAt), desc(suppressions.id))
     .limit(limit + 1);
 
   return buildPaginatedResponse(items, limit);

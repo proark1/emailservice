@@ -149,10 +149,19 @@ export function createInboundServer(): SMTPServer {
               const { dispatchEvent } = await import("../services/webhook.service.js");
               const crypto = await import("node:crypto");
 
+              // Outbound emails sent under a company-scoped API key are written
+              // to `emails` with accountId = root_owner (the API key's owner),
+              // NOT the resolved member. Querying findOriginalSend with the
+              // member account would return null for every company-tenant
+              // bounce — silently dropping them. Always look up the send
+              // against the domain owner; once found, route the suppression
+              // and webhook to deliveryAccountId so company tenants see them.
+              const sendOwnerAccountId = domain.accountId;
+
               if (isDsn(parsed)) {
                 const bounces = parseDsn(parsed);
                 for (const b of bounces) {
-                  const original = await findOriginalSend(deliveryAccountId, b.originalMessageId, b.recipient);
+                  const original = await findOriginalSend(sendOwnerAccountId, b.originalMessageId, b.recipient);
                   if (!original) {
                     // Unattributable DSN — likely forged or out-of-date. Drop silently
                     // rather than letting it mutate suppression state.
@@ -174,7 +183,7 @@ export function createInboundServer(): SMTPServer {
               if (isFbl(parsed)) {
                 const complaints = parseFbl(parsed);
                 for (const c of complaints) {
-                  const original = await findOriginalSend(deliveryAccountId, c.originalMessageId, c.complainant);
+                  const original = await findOriginalSend(sendOwnerAccountId, c.originalMessageId, c.complainant);
                   if (!original) continue;
                   await addSuppression(deliveryAccountId, c.complainant, "complaint", original.id).catch(() => {});
                   await dispatchEvent(

@@ -277,8 +277,13 @@ export async function sendEmail(accountId: string, input: SendEmailInput, option
       sendDirectlyWithRetry(email.id, accountId);
     }
   } else if (delay > 0 && isRedisConfigured()) {
-    // Scheduled emails need the queue
-    await getEmailSendQueue().add("send", { emailId: email.id, accountId }, { delay });
+    // Scheduled emails need the queue. Use a deterministic jobId so cancel can
+    // remove the delayed job by id (cancelScheduledEmail() calls .remove()).
+    await getEmailSendQueue().add(
+      "send",
+      { emailId: email.id, accountId },
+      { delay, jobId: `scheduled:${email.id}` },
+    );
   } else if (delay === 0) {
     // No Redis, immediate send — send directly (async, don't block the response)
     sendDirectlyWithRetry(email.id, accountId);
@@ -414,13 +419,37 @@ export async function cancelScheduledEmail(accountId: string, emailId: string, o
     throw new ValidationError("Only scheduled emails in queued status can be cancelled");
   }
 
+  // Mark as failed AND tag failureCode="cancelled" — sendEmailDirect()'s atomic
+  // claim WHERE clause excludes any row whose failureCode is in the permanent
+  // set, which now includes "cancelled". Without this tag the delayed BullMQ
+  // job that fires at scheduled_at would re-claim the row (status was just
+  // flipped to "failed" with a null failureCode, both of which the claim
+  // permits) and the email would still be sent.
   const [updated] = await db
     .update(emails)
-    .set({ status: "failed", updatedAt: new Date() })
+    .set({
+      status: "failed",
+      failureCode: "cancelled",
+      failureReason: "Cancelled by API caller",
+      updatedAt: new Date(),
+      lastEventAt: new Date(),
+    })
     .where(and(eq(emails.id, emailId), eq(emails.accountId, accountId)))
     .returning();
 
   if (!updated) throw new NotFoundError("Email");
+
+  // Best-effort: remove the BullMQ delayed job. The failureCode guard above
+  // is the authoritative defense (in case the job already moved out of the
+  // delayed set, or was re-enqueued by a worker restart).
+  if (isRedisConfigured()) {
+    try {
+      const job = await getEmailSendQueue().getJob(`scheduled:${emailId}`);
+      if (job) await job.remove();
+    } catch {
+      // Job may have already executed or been GC'd — failureCode still blocks it.
+    }
+  }
 
   await db.insert(emailEvents).values({
     emailId: email.id,

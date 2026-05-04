@@ -6,6 +6,9 @@ import { verifyApiKey, getKeyPrefix } from "../lib/crypto.js";
 export interface SmtpAuthResult {
   accountId: string;
   apiKeyId: string;
+  // Forwarded into sendEmail() so SMTP-relay sends respect the same
+  // company-isolation boundary as HTTP /v1/emails sends.
+  companyId: string | null;
 }
 
 export async function authenticateSmtp(
@@ -30,7 +33,7 @@ export async function authenticateSmtp(
       // Verify account exists
       const [account] = await db.select().from(accounts).where(eq(accounts.id, candidate.accountId));
       if (account) {
-        return { accountId: account.id, apiKeyId: candidate.id };
+        return { accountId: account.id, apiKeyId: candidate.id, companyId: candidate.companyId ?? null };
       }
     }
   }

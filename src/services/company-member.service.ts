@@ -45,25 +45,35 @@ export async function provisionMember(
   const txResult = await db.transaction(async (tx) => {
     const [existingAccount] = await tx.select().from(accounts).where(eq(accounts.email, emailLower));
 
-    let account = existingAccount;
-    let createdAccount = false;
-    if (!account) {
-      try {
-        const [created] = await tx
-          .insert(accounts)
-          .values({ name: input.name, email: emailLower, passwordHash, role: "user" })
-          .returning();
-        account = created;
-        createdAccount = true;
-      } catch (err: any) {
-        // Concurrent provisioning of the same email loses the unique race on
-        // accounts.email (Postgres SQLSTATE 23505). Surface a 409 instead of
-        // letting the bare DB error bubble through as a 500.
-        if (err?.code === "23505") {
-          throw new ConflictError(`An account with email ${input.email} was just created by a concurrent request. Retry.`);
-        }
-        throw err;
+    // Provisioning may NEVER attach to a pre-existing account. Doing so would
+    // let a company admin take over any user whose email they know: with
+    // `issue_api_key: true` we'd mint a key bound to that account, and
+    // `input.password` would silently change their credentials. The only
+    // legitimate way to add an existing account to a company is via an
+    // explicit invitation that the account holder accepts from a session
+    // they own.
+    if (existingAccount) {
+      throw new ConflictError(
+        `An account with email ${input.email} already exists. Send them an invitation instead of provisioning a new member.`,
+      );
+    }
+
+    let account: typeof accounts.$inferSelect;
+    const createdAccount = true;
+    try {
+      const [created] = await tx
+        .insert(accounts)
+        .values({ name: input.name, email: emailLower, passwordHash, role: "user" })
+        .returning();
+      account = created;
+    } catch (err: any) {
+      // Concurrent provisioning of the same email loses the unique race on
+      // accounts.email (Postgres SQLSTATE 23505). Surface a 409 instead of
+      // letting the bare DB error bubble through as a 500.
+      if (err?.code === "23505") {
+        throw new ConflictError(`An account with email ${input.email} was just created by a concurrent request. Retry.`);
       }
+      throw err;
     }
 
     const [existingMember] = await tx

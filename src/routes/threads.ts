@@ -1,10 +1,12 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import * as threadService from "../services/thread.service.js";
+import { assertNotCompanyScoped } from "../plugins/auth.js";
 
 export default async function threadRoutes(app: FastifyInstance) {
   app.addHook("onRequest", async (request) => {
     await app.authenticate(request);
+    assertNotCompanyScoped(request);
   });
 
   // GET /v1/threads
