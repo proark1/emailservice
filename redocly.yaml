@@ -17,6 +17,10 @@ rules:
   # The auto-derived operationIds we ship are guaranteed unique by
   # construction (method + URL); keep the rule on but don't make it strict.
   operation-operationId-unique: error
+  # The localhost dev server is intentional — it lets users hit the API
+  # locally from generated SDKs / the rendered docs page. Redocly flags it
+  # under `no-server-example.com`; ignore.
+  no-server-example.com: off
   # Real bugs we want CI to catch:
   no-unresolved-refs: error
   no-invalid-media-type-examples: error

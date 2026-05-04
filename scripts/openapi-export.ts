@@ -21,6 +21,7 @@ import swagger from "@fastify/swagger";
 import {
   OPENAPI_TAGS,
   buildOpenapiWebhooks,
+  injectStandardResponses,
   openapiTransform,
   serializerCompiler,
   validatorCompiler,
@@ -111,7 +112,9 @@ async function build() {
   }
 
   await app.ready();
-  return app.swagger();
+  const spec = app.swagger() as any;
+  injectStandardResponses(spec);
+  return spec;
 }
 
 async function main() {

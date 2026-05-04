@@ -83,6 +83,119 @@ export const standardErrorResponses = {
 };
 
 /**
+ * JSON Schema mirror of `errorResponseSchema`, used by `injectStandardResponses`
+ * to populate `components.schemas.Error` so operation responses can `$ref` it
+ * instead of inlining the same envelope dozens of times.
+ */
+const ERROR_JSON_SCHEMA = {
+  type: "object",
+  required: ["error"],
+  properties: {
+    error: {
+      type: "object",
+      required: ["type", "message"],
+      properties: {
+        type: { type: "string" },
+        message: { type: "string" },
+        details: {},
+      },
+    },
+  },
+} as const;
+
+const STANDARD_ERROR_DESCRIPTIONS: Record<string, string> = {
+  "400": "Bad request — validation failed or the request body is malformed.",
+  "401": "Missing or invalid API key.",
+  "403": "Authenticated, but the key is not permitted for this resource.",
+  "404": "Resource not found.",
+  "409": "Conflict — the request conflicts with current resource state.",
+  "422": "Unprocessable entity — semantically invalid input.",
+  "429": "Rate limited — slow down and retry with exponential backoff.",
+  "500": "Internal server error.",
+};
+
+const HTTP_METHODS = new Set([
+  "get",
+  "post",
+  "put",
+  "patch",
+  "delete",
+  "options",
+  "head",
+  "trace",
+]);
+
+/**
+ * Post-process the generated OpenAPI document to:
+ *  - install a shared `components.schemas.Error` for the standard error envelope,
+ *  - ensure every public operation declares 401, 429, and 500 responses,
+ *  - ensure operations whose URL contains a path parameter also declare 404,
+ *  - ensure operations with a request body also declare 400.
+ *
+ * Routes that already declare a specific status code keep their custom shape;
+ * we only add what's missing. This keeps the per-route schemas terse while
+ * making sure the published spec satisfies redocly's `operation-4xx-response`
+ * rule and gives SDK generators useful error types.
+ */
+export function injectStandardResponses(spec: any): void {
+  if (!spec || typeof spec !== "object") return;
+
+  spec.components = spec.components ?? {};
+  spec.components.schemas = spec.components.schemas ?? {};
+  if (!spec.components.schemas.Error) {
+    spec.components.schemas.Error = ERROR_JSON_SCHEMA;
+  }
+
+  const errorContent = {
+    description: "Error response.",
+    content: {
+      "application/json": {
+        schema: { $ref: "#/components/schemas/Error" },
+      },
+    },
+  };
+
+  const paths = spec.paths ?? {};
+  for (const [pathKey, pathItem] of Object.entries<any>(paths)) {
+    if (!pathItem || typeof pathItem !== "object") continue;
+    const hasPathParam = /\{[^}]+\}/.test(pathKey);
+
+    for (const method of Object.keys(pathItem)) {
+      if (!HTTP_METHODS.has(method.toLowerCase())) continue;
+      const op = pathItem[method];
+      if (!op || typeof op !== "object") continue;
+
+      op.responses = op.responses ?? {};
+      const ensure = (code: string) => {
+        if (op.responses[code]) return;
+        op.responses[code] = {
+          ...errorContent,
+          description: STANDARD_ERROR_DESCRIPTIONS[code] ?? errorContent.description,
+        };
+      };
+
+      ensure("401");
+      ensure("429");
+      ensure("500");
+      if (hasPathParam) ensure("404");
+      if (op.requestBody) ensure("400");
+
+      // If the route only declared error responses (e.g. binary streaming
+      // endpoints that don't go through Zod), add a generic 200 so SDK
+      // generators and the redocly linter are happy.
+      const codes = Object.keys(op.responses);
+      const hasSuccess = codes.some((c) => /^2/.test(c) || /^2XX$/i.test(c));
+      if (!hasSuccess) {
+        op.responses["200"] = {
+          description: "Successful response. Body is streamed in the format documented for this endpoint (e.g. `text/csv`, `application/octet-stream`).",
+          content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } },
+        };
+      }
+    }
+  }
+}
+
+/**
  * Routes that should NOT appear in the public OpenAPI document. These are
  * either internal (admin, dashboard cookie-auth UI), public unauthenticated
  * (tracking pixels, click redirects, unsubscribe), or non-API (health probes,
