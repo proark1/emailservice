@@ -3,6 +3,11 @@ import { z } from "zod";
 export const createCompanySchema = z.object({
   name: z.string().min(1).max(255),
   slug: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/, "slug must be lowercase alphanumeric with dashes"),
+}).meta({
+  description:
+    "Create a sub-tenant company under the authenticated root account. Multi-tenant " +
+    "platforms create one company per customer.",
+  examples: [{ name: "Acme Inc.", slug: "acme" }],
 });
 
 export const updateCompanySchema = z.object({
@@ -21,6 +26,21 @@ export const provisionMemberSchema = z.object({
   // When true, also mint an API key for this member and return it once.
   issue_api_key: z.boolean().default(false),
   api_key_name: z.string().max(255).optional(),
+}).meta({
+  description:
+    "One-call provision of a customer member: creates the account, the company_member " +
+    "row, optionally a mailbox handle, and optionally an API key. Generated password and " +
+    "API key are returned only once.",
+  examples: [
+    {
+      email: "alice@acme-customer.com",
+      name: "Alice Example",
+      role: "admin",
+      domain_id: "00000000-0000-0000-0000-000000000000",
+      local_part: "alice",
+      issue_api_key: true,
+    },
+  ],
 }).refine(
   (v) => (v.domain_id && v.local_part) || (!v.domain_id && !v.local_part),
   { message: "domain_id and local_part must be provided together" },

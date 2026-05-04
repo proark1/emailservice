@@ -20,6 +20,7 @@ import Fastify from "fastify";
 import swagger from "@fastify/swagger";
 import {
   OPENAPI_TAGS,
+  buildOpenapiWebhooks,
   openapiTransform,
   serializerCompiler,
   validatorCompiler,
@@ -45,6 +46,7 @@ async function build() {
 
   await app.register(swagger, {
     openapi: {
+      openapi: "3.1.0",
       info: {
         title: "MailNowAPI",
         description:
@@ -58,7 +60,10 @@ async function build() {
         { url: "https://mailnowapi.com", description: "Production" },
         { url: "http://localhost:3000", description: "Local development" },
       ],
-      tags: [...OPENAPI_TAGS],
+      tags: [
+        ...OPENAPI_TAGS,
+        { name: "Webhook events", description: "Outbound events MailNowAPI POSTs to subscribed webhooks." },
+      ],
       components: {
         securitySchemes: {
           bearerAuth: {
@@ -69,7 +74,8 @@ async function build() {
         },
       },
       security: [{ bearerAuth: [] }],
-    },
+      webhooks: buildOpenapiWebhooks() as any,
+    } as any,
     transform: openapiTransform,
     hideUntagged: false,
   });

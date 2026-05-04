@@ -5,6 +5,11 @@ export const createApiKeySchema = z.object({
   permissions: z.record(z.string(), z.boolean()).optional().default({}),
   expires_at: z.string().datetime().optional(),
   rate_limit: z.number().int().min(1).max(10000).optional().default(60),
+}).meta({
+  description: "Create an API key for the authenticated account. The full `key` field is returned only once on the response.",
+  examples: [
+    { name: "production-server", rate_limit: 600 },
+  ],
 });
 
 export const apiKeyResponseSchema = z.object({

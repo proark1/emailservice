@@ -110,6 +110,17 @@ const httpUrl = z.string().url().max(2048).refine(
 export const createWebhookSchema = z.object({
   url: httpUrl,
   events: z.array(z.enum(WEBHOOK_EVENT_TYPES)).min(1),
+}).meta({
+  description:
+    "Subscribe to events. Each delivery is signed with HMAC-SHA256 over the raw body using " +
+    "the webhook's signing_secret (returned once on creation). Failed deliveries retry with " +
+    "exponential backoff and land in the dead-letter queue after exhaustion.",
+  examples: [
+    {
+      url: "https://api.yourapp.com/webhooks/email",
+      events: ["email.delivered", "email.bounced", "email.complained", "email.opened", "email.clicked"],
+    },
+  ],
 });
 
 export const updateWebhookSchema = z.object({

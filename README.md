@@ -77,7 +77,30 @@ implementation.
 ```bash
 pnpm openapi:export   # rewrite openapi.json
 pnpm openapi:check    # CI step — fails if openapi.json is stale
+pnpm openapi:lint     # CI step — runs redocly lint against the spec
 ```
+
+**Webhook events** are documented in the same spec under the OpenAPI 3.1
+`webhooks` map: 13 event types (`email.delivered`, `email.bounced`,
+`email.opened`, `email.clicked`, `email.complained`, `email.received`,
+`domain.verified`, `contact.*`, …) with payload schemas and HMAC signature
+verification details.
+
+**Official TypeScript SDK** lives at [`sdks/ts/`](sdks/ts/) — generated request
+/ response types from `openapi.json` plus a thin `MailNowApiClient` runtime
+wrapper and a `verifyWebhookSignature` helper. See
+[`sdks/ts/README.md`](sdks/ts/README.md) for usage.
+
+**Other clients**:
+
+- **Postman / Insomnia** — both import `openapi.json` directly. From Postman:
+  *File → Import → openapi.json* (or paste the URL `http://localhost:3000/openapi.json`).
+- **Generated SDKs** in any language —
+  `openapi-generator-cli generate -i openapi.json -g <python|go|ruby|rust|...> -o ./sdk`,
+  or feed the spec to [Stainless](https://www.stainless.com) /
+  [Speakeasy](https://www.speakeasy.com/) for managed client generation.
+- **MCP server** — exposes every endpoint as a tool for AI agents
+  (Claude Desktop, Claude Code, Cursor). See [`MCP_SERVER.md`](MCP_SERVER.md).
 
 | Method | Path | Description |
 |--------|------|-------------|

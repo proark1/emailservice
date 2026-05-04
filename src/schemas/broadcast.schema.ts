@@ -29,6 +29,20 @@ export const createBroadcastSchema = z.object({
   tags: z.record(z.string(), z.string()).optional(),
   scheduled_at: z.string().datetime().optional(),
   ab_test: abTestConfigSchema.optional(),
+}).meta({
+  description:
+    "Schedule a one-to-many send to an audience. Optionally include an `ab_test` config " +
+    "to split-test subject + body across two variants.",
+  examples: [
+    {
+      audience_id: "00000000-0000-0000-0000-000000000000",
+      name: "Q4 product update",
+      from: "Acme <hello@yourdomain.com>",
+      subject: "What's new in Q4",
+      html: "<h1>New features</h1>",
+      scheduled_at: "2026-12-01T15:00:00Z",
+    },
+  ],
 }).refine((d) => d.html || d.text || d.ab_test, {
   message: "At least one of html, text, or ab_test is required",
   path: ["html"],

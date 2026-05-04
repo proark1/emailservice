@@ -22,7 +22,9 @@
     "mcp": "tsx src/mcp-server.ts",
     "mcp:build": "node dist/mcp-server.js",
     "openapi:export": "tsx scripts/openapi-export.ts",
-    "openapi:check": "tsx scripts/openapi-export.ts --check"
+    "openapi:check": "tsx scripts/openapi-export.ts --check",
+    "openapi:lint": "redocly lint openapi.json --config redocly.yaml",
+    "sdk:typecheck": "pnpm --dir sdks/ts exec tsc --noEmit"
   },
   "keywords": [
     "email",
@@ -61,12 +63,14 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@redocly/cli": "^2.30.3",
     "@types/mailparser": "^3.4.6",
     "@types/node": "^25.5.0",
     "@types/nodemailer": "^7.0.11",
     "@types/smtp-server": "^3.5.12",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.0.3",
+    "openapi-typescript": "^7.13.0",
     "prettier": "^3.8.1",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",

@@ -1,9 +1,11 @@
 import { z, ZodTypeAny } from "zod";
+import { toJSONSchema } from "zod/v4/core";
 import {
   jsonSchemaTransform,
   serializerCompiler,
   validatorCompiler,
 } from "fastify-type-provider-zod";
+import { WEBHOOK_EVENT_SCHEMAS } from "./webhook-events.schemas.js";
 
 export { serializerCompiler, validatorCompiler };
 
@@ -121,6 +123,38 @@ function deriveTag(url: string): string | null {
     .split("-")
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
     .join(" ");
+}
+
+/**
+ * Build the OpenAPI 3.1 `webhooks` map describing the events this service
+ * sends to subscribed webhooks. Pass the result as `openapi.webhooks` in the
+ * @fastify/swagger config.
+ */
+export function buildOpenapiWebhooks() {
+  const webhooks: Record<string, unknown> = {};
+  for (const [eventName, zodSchema] of Object.entries(WEBHOOK_EVENT_SCHEMAS)) {
+    const schema = toJSONSchema(zodSchema, { target: "draft-2020-12" });
+    webhooks[eventName] = {
+      post: {
+        summary: `${eventName} event`,
+        description:
+          (schema as { description?: string }).description ??
+          `Sent to subscribed webhooks when \`${eventName}\` fires.`,
+        tags: ["Webhook events"],
+        operationId: `webhookEvent_${eventName.replace(/\./g, "_")}`,
+        requestBody: {
+          required: true,
+          description:
+            "HMAC-signed event payload. Verify the `X-Webhook-Signature` header before trusting.",
+          content: { "application/json": { schema } },
+        },
+        responses: {
+          "2XX": { description: "Acknowledge receipt with any 2xx. Non-2xx triggers retry with exponential backoff." },
+        },
+      },
+    };
+  }
+  return webhooks;
 }
 
 /**

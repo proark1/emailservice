@@ -39,3 +39,35 @@ jobs:
 
       - name: OpenAPI spec is up to date
         run: pnpm openapi:check
+
+      - name: OpenAPI spec lints clean
+        run: pnpm openapi:lint
+
+      - name: SDK typechecks against the spec
+        run: pnpm sdk:typecheck
+
+  openapi-breaking-changes:
+    name: OpenAPI breaking-change check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need both the PR branch and main to diff against.
+          fetch-depth: 0
+
+      - name: Get main's openapi.json
+        run: |
+          git show origin/${{ github.base_ref }}:openapi.json > /tmp/openapi-base.json || {
+            echo "::warning::No openapi.json on base branch — skipping breaking-change check.";
+            exit 0;
+          }
+
+      - name: oasdiff breaking
+        uses: oasdiff/oasdiff-action/breaking@main
+        with:
+          base: /tmp/openapi-base.json
+          revision: openapi.json
+          fail-on-diff: true
