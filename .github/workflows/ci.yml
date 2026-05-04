@@ -60,7 +60,10 @@ jobs:
 
       - name: Get main's openapi.json
         run: |
-          git show origin/${{ github.base_ref }}:openapi.json > /tmp/openapi-base.json || {
+          # NOTE: must live inside $GITHUB_WORKSPACE so the dockerized
+          # oasdiff action can see it — /tmp on the host isn't mounted
+          # into Docker container actions.
+          git show origin/${{ github.base_ref }}:openapi.json > openapi-base.json || {
             echo "::warning::No openapi.json on base branch — skipping breaking-change check.";
             exit 0;
           }
@@ -68,7 +71,7 @@ jobs:
       - name: Skip if base spec is on a different OpenAPI version
         id: version-check
         run: |
-          base_v=$(jq -r '.openapi // "missing"' /tmp/openapi-base.json)
+          base_v=$(jq -r '.openapi // "missing"' openapi-base.json)
           rev_v=$(jq -r '.openapi // "missing"' openapi.json)
           echo "base=$base_v rev=$rev_v"
           base_major=${base_v%%.*}
@@ -95,6 +98,6 @@ jobs:
         if: steps.version-check.outputs.skip != 'true'
         uses: oasdiff/oasdiff-action/breaking@main
         with:
-          base: /tmp/openapi-base.json
+          base: openapi-base.json
           revision: openapi.json
           fail-on: ERR

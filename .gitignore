@@ -7,3 +7,6 @@ certs/
 *.log
 .DS_Store
 coverage/
+# Written by the openapi-breaking-changes CI job (must live in $GITHUB_WORKSPACE
+# so the dockerized oasdiff action can read it).
+openapi-base.json
