@@ -13,6 +13,12 @@ import authPlugin from "./plugins/auth.js";
 import rateLimitPlugin from "./plugins/rate-limit.js";
 import errorHandler from "./plugins/error-handler.js";
 import { registerRoutes } from "./routes/index.js";
+import {
+  OPENAPI_TAGS,
+  openapiTransform,
+  serializerCompiler,
+  validatorCompiler,
+} from "./lib/openapi.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,28 +45,68 @@ async function main() {
     cookie: { cookieName: "token", signed: false },
   });
 
-  // OpenAPI docs
+  // Zod-typed request validation + response serialization. Routes opt in by
+  // declaring `schema: { body, querystring, params, response }` with Zod
+  // schemas; routes without a `schema` block are unaffected.
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+
+  // OpenAPI docs — UI at /docs, raw spec at /docs/json + /openapi.json.
   await app.register(swagger, {
     openapi: {
       info: {
-        title: "Email Service API",
-        description: "Self-hosted email service platform — send, receive, and manage email at scale",
-        version: "1.4.0",
+        title: "MailNowAPI",
+        description: [
+          "Self-hosted email service platform — send transactional and marketing email,",
+          "receive inbound mail, manage domains and webhooks, run sequences and broadcasts.",
+          "",
+          "**Authentication.** All `/v1/*` endpoints require a bearer API key (`Authorization: Bearer es_xxxx`).",
+          "Mint keys at `POST /v1/api-keys` or in the dashboard. Company-scoped keys (`POST /v1/companies/:id/api-keys`)",
+          "are restricted to that company's domains.",
+          "",
+          "**Response envelope.** Successful responses are wrapped in `{ data }`; lists are `{ data, pagination }`.",
+          "Errors are `{ error: { type, message, details? } }` with a stable `type` string per error class.",
+          "",
+          "**Idempotency.** `POST /v1/emails` accepts an `idempotency_key` field (≤255 chars). Replays within the",
+          "retention window return the original response unchanged.",
+        ].join("\n"),
+        version: process.env.npm_package_version ?? "1.6.1",
+        contact: { name: "MailNowAPI support", url: "https://mailnowapi.com" },
+        license: { name: "ISC" },
       },
+      servers: [
+        { url: "https://mailnowapi.com", description: "Production" },
+        { url: "http://localhost:3000", description: "Local development" },
+      ],
+      tags: [...OPENAPI_TAGS],
       components: {
         securitySchemes: {
           bearerAuth: {
             type: "http",
             scheme: "bearer",
-            description: "API key (es_xxxxx)",
+            description: "API key in the form `es_xxxxxxxx`. Pass as `Authorization: Bearer es_xxx`.",
           },
         },
       },
       security: [{ bearerAuth: [] }],
     },
+    transform: openapiTransform,
+    hideUntagged: false,
   });
 
-  await app.register(swaggerUi, { routePrefix: "/docs" });
+  await app.register(swaggerUi, {
+    routePrefix: "/docs",
+    uiConfig: { docExpansion: "list", deepLinking: true, persistAuthorization: true },
+  });
+
+  // Top-level OpenAPI artifact for tooling (Stainless, openapi-generator,
+  // Postman) that expects the spec at a stable, conventional URL. The same
+  // document is also at /docs/json via swagger-ui.
+  app.get(
+    "/openapi.json",
+    { schema: { hide: true } as any },
+    async () => app.swagger(),
+  );
 
   // Security
   // CORS: restrict to own origin in production
