@@ -70,4 +70,4 @@ jobs:
         with:
           base: /tmp/openapi-base.json
           revision: openapi.json
-          fail-on-diff: true
+          fail-on: ERR
