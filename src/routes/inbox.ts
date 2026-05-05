@@ -12,17 +12,23 @@ const attachmentParam = z.object({ id: z.string().uuid(), aid: z.string().uuid()
 const inboxEmailResponse = z.object({
   id: z.string().uuid(),
   from: z.string(),
-  to: z.array(z.string()),
+  from_name: z.string().nullable(),
+  to: z.string(),
+  cc: z.array(z.string()).nullable(),
   subject: z.string(),
-  text: z.string().nullable().optional(),
-  html: z.string().nullable().optional(),
-  read: z.boolean(),
-  starred: z.boolean(),
-  folder_id: z.string().uuid().nullable().optional(),
-  thread_id: z.string().uuid().nullable().optional(),
-  in_trash: z.boolean().optional(),
-  received_at: z.string(),
-  created_at: z.string(),
+  text_body: z.string().nullable(),
+  html_body: z.string().nullable(),
+  message_id: z.string().nullable(),
+  in_reply_to: z.string().nullable(),
+  thread_id: z.string().nullable(),
+  references: z.array(z.string()).nullable(),
+  folder_id: z.string().uuid().nullable(),
+  is_read: z.boolean(),
+  is_starred: z.boolean(),
+  is_archived: z.boolean(),
+  has_attachments: z.boolean(),
+  deleted_at: z.string().datetime().nullable(),
+  created_at: z.string().datetime(),
 }).passthrough();
 
 const inboxListResponse = z.object({
@@ -38,7 +44,8 @@ const attachmentResponse = z.object({
 }).passthrough();
 
 const bulkActionResponse = z.object({
-  affected: z.number(),
+  success: z.boolean(),
+  count: z.number(),
 }).passthrough();
 
 export default async function inboxRoutes(app: FastifyInstance) {
