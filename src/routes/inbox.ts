@@ -27,8 +27,8 @@ const inboxEmailResponse = z.object({
   is_starred: z.boolean(),
   is_archived: z.boolean(),
   has_attachments: z.boolean(),
-  deleted_at: z.string().nullable(),
-  created_at: z.string(),
+  deleted_at: z.string().datetime().nullable(),
+  created_at: z.string().datetime(),
 }).passthrough();
 
 const inboxListResponse = z.object({
