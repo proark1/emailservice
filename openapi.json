@@ -10972,16 +10972,36 @@
                           "from": {
                             "type": "string"
                           },
+                          "from_name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "to": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
+                            "type": "string"
+                          },
+                          "cc": {
+                            "anyOf": [
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           },
                           "subject": {
                             "type": "string"
                           },
-                          "text": {
+                          "text_body": {
                             "anyOf": [
                               {
                                 "type": "string"
@@ -10991,7 +11011,7 @@
                               }
                             ]
                           },
-                          "html": {
+                          "html_body": {
                             "anyOf": [
                               {
                                 "type": "string"
@@ -11001,11 +11021,48 @@
                               }
                             ]
                           },
-                          "read": {
-                            "type": "boolean"
+                          "message_id": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           },
-                          "starred": {
-                            "type": "boolean"
+                          "in_reply_to": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "thread_id": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "references": {
+                            "anyOf": [
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           },
                           "folder_id": {
                             "anyOf": [
@@ -11019,23 +11076,27 @@
                               }
                             ]
                           },
-                          "thread_id": {
+                          "is_read": {
+                            "type": "boolean"
+                          },
+                          "is_starred": {
+                            "type": "boolean"
+                          },
+                          "is_archived": {
+                            "type": "boolean"
+                          },
+                          "has_attachments": {
+                            "type": "boolean"
+                          },
+                          "deleted_at": {
                             "anyOf": [
                               {
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                "type": "string"
                               },
                               {
                                 "type": "null"
                               }
                             ]
-                          },
-                          "in_trash": {
-                            "type": "boolean"
-                          },
-                          "received_at": {
-                            "type": "string"
                           },
                           "created_at": {
                             "type": "string"
@@ -11044,11 +11105,22 @@
                         "required": [
                           "id",
                           "from",
+                          "from_name",
                           "to",
+                          "cc",
                           "subject",
-                          "read",
-                          "starred",
-                          "received_at",
+                          "text_body",
+                          "html_body",
+                          "message_id",
+                          "in_reply_to",
+                          "thread_id",
+                          "references",
+                          "folder_id",
+                          "is_read",
+                          "is_starred",
+                          "is_archived",
+                          "has_attachments",
+                          "deleted_at",
                           "created_at"
                         ],
                         "additionalProperties": {}
@@ -11182,12 +11254,16 @@
                     "data": {
                       "type": "object",
                       "properties": {
-                        "affected": {
+                        "success": {
+                          "type": "boolean"
+                        },
+                        "count": {
                           "type": "number"
                         }
                       },
                       "required": [
-                        "affected"
+                        "success",
+                        "count"
                       ],
                       "additionalProperties": {}
                     }
@@ -11304,16 +11380,36 @@
                         "from": {
                           "type": "string"
                         },
+                        "from_name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "to": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
+                          "type": "string"
+                        },
+                        "cc": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "subject": {
                           "type": "string"
                         },
-                        "text": {
+                        "text_body": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -11323,7 +11419,7 @@
                             }
                           ]
                         },
-                        "html": {
+                        "html_body": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -11333,11 +11429,48 @@
                             }
                           ]
                         },
-                        "read": {
-                          "type": "boolean"
+                        "message_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
-                        "starred": {
-                          "type": "boolean"
+                        "in_reply_to": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "thread_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "references": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "folder_id": {
                           "anyOf": [
@@ -11351,23 +11484,27 @@
                             }
                           ]
                         },
-                        "thread_id": {
+                        "is_read": {
+                          "type": "boolean"
+                        },
+                        "is_starred": {
+                          "type": "boolean"
+                        },
+                        "is_archived": {
+                          "type": "boolean"
+                        },
+                        "has_attachments": {
+                          "type": "boolean"
+                        },
+                        "deleted_at": {
                           "anyOf": [
                             {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              "type": "string"
                             },
                             {
                               "type": "null"
                             }
                           ]
-                        },
-                        "in_trash": {
-                          "type": "boolean"
-                        },
-                        "received_at": {
-                          "type": "string"
                         },
                         "created_at": {
                           "type": "string"
@@ -11376,11 +11513,22 @@
                       "required": [
                         "id",
                         "from",
+                        "from_name",
                         "to",
+                        "cc",
                         "subject",
-                        "read",
-                        "starred",
-                        "received_at",
+                        "text_body",
+                        "html_body",
+                        "message_id",
+                        "in_reply_to",
+                        "thread_id",
+                        "references",
+                        "folder_id",
+                        "is_read",
+                        "is_starred",
+                        "is_archived",
+                        "has_attachments",
+                        "deleted_at",
                         "created_at"
                       ],
                       "additionalProperties": {}
@@ -11515,16 +11663,36 @@
                         "from": {
                           "type": "string"
                         },
+                        "from_name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "to": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
+                          "type": "string"
+                        },
+                        "cc": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "subject": {
                           "type": "string"
                         },
-                        "text": {
+                        "text_body": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -11534,7 +11702,7 @@
                             }
                           ]
                         },
-                        "html": {
+                        "html_body": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -11544,11 +11712,48 @@
                             }
                           ]
                         },
-                        "read": {
-                          "type": "boolean"
+                        "message_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
-                        "starred": {
-                          "type": "boolean"
+                        "in_reply_to": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "thread_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "references": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "folder_id": {
                           "anyOf": [
@@ -11562,23 +11767,27 @@
                             }
                           ]
                         },
-                        "thread_id": {
+                        "is_read": {
+                          "type": "boolean"
+                        },
+                        "is_starred": {
+                          "type": "boolean"
+                        },
+                        "is_archived": {
+                          "type": "boolean"
+                        },
+                        "has_attachments": {
+                          "type": "boolean"
+                        },
+                        "deleted_at": {
                           "anyOf": [
                             {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              "type": "string"
                             },
                             {
                               "type": "null"
                             }
                           ]
-                        },
-                        "in_trash": {
-                          "type": "boolean"
-                        },
-                        "received_at": {
-                          "type": "string"
                         },
                         "created_at": {
                           "type": "string"
@@ -11587,11 +11796,22 @@
                       "required": [
                         "id",
                         "from",
+                        "from_name",
                         "to",
+                        "cc",
                         "subject",
-                        "read",
-                        "starred",
-                        "received_at",
+                        "text_body",
+                        "html_body",
+                        "message_id",
+                        "in_reply_to",
+                        "thread_id",
+                        "references",
+                        "folder_id",
+                        "is_read",
+                        "is_starred",
+                        "is_archived",
+                        "has_attachments",
+                        "deleted_at",
                         "created_at"
                       ],
                       "additionalProperties": {}
@@ -11718,16 +11938,36 @@
                         "from": {
                           "type": "string"
                         },
+                        "from_name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "to": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
+                          "type": "string"
+                        },
+                        "cc": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "subject": {
                           "type": "string"
                         },
-                        "text": {
+                        "text_body": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -11737,7 +11977,7 @@
                             }
                           ]
                         },
-                        "html": {
+                        "html_body": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -11747,11 +11987,48 @@
                             }
                           ]
                         },
-                        "read": {
-                          "type": "boolean"
+                        "message_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
-                        "starred": {
-                          "type": "boolean"
+                        "in_reply_to": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "thread_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "references": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "folder_id": {
                           "anyOf": [
@@ -11765,23 +12042,27 @@
                             }
                           ]
                         },
-                        "thread_id": {
+                        "is_read": {
+                          "type": "boolean"
+                        },
+                        "is_starred": {
+                          "type": "boolean"
+                        },
+                        "is_archived": {
+                          "type": "boolean"
+                        },
+                        "has_attachments": {
+                          "type": "boolean"
+                        },
+                        "deleted_at": {
                           "anyOf": [
                             {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              "type": "string"
                             },
                             {
                               "type": "null"
                             }
                           ]
-                        },
-                        "in_trash": {
-                          "type": "boolean"
-                        },
-                        "received_at": {
-                          "type": "string"
                         },
                         "created_at": {
                           "type": "string"
@@ -11790,11 +12071,22 @@
                       "required": [
                         "id",
                         "from",
+                        "from_name",
                         "to",
+                        "cc",
                         "subject",
-                        "read",
-                        "starred",
-                        "received_at",
+                        "text_body",
+                        "html_body",
+                        "message_id",
+                        "in_reply_to",
+                        "thread_id",
+                        "references",
+                        "folder_id",
+                        "is_read",
+                        "is_starred",
+                        "is_archived",
+                        "has_attachments",
+                        "deleted_at",
                         "created_at"
                       ],
                       "additionalProperties": {}
@@ -11932,16 +12224,36 @@
                         "from": {
                           "type": "string"
                         },
+                        "from_name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "to": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
+                          "type": "string"
+                        },
+                        "cc": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "subject": {
                           "type": "string"
                         },
-                        "text": {
+                        "text_body": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -11951,7 +12263,7 @@
                             }
                           ]
                         },
-                        "html": {
+                        "html_body": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -11961,11 +12273,48 @@
                             }
                           ]
                         },
-                        "read": {
-                          "type": "boolean"
+                        "message_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
-                        "starred": {
-                          "type": "boolean"
+                        "in_reply_to": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "thread_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "references": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "folder_id": {
                           "anyOf": [
@@ -11979,23 +12328,27 @@
                             }
                           ]
                         },
-                        "thread_id": {
+                        "is_read": {
+                          "type": "boolean"
+                        },
+                        "is_starred": {
+                          "type": "boolean"
+                        },
+                        "is_archived": {
+                          "type": "boolean"
+                        },
+                        "has_attachments": {
+                          "type": "boolean"
+                        },
+                        "deleted_at": {
                           "anyOf": [
                             {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              "type": "string"
                             },
                             {
                               "type": "null"
                             }
                           ]
-                        },
-                        "in_trash": {
-                          "type": "boolean"
-                        },
-                        "received_at": {
-                          "type": "string"
                         },
                         "created_at": {
                           "type": "string"
@@ -12004,11 +12357,22 @@
                       "required": [
                         "id",
                         "from",
+                        "from_name",
                         "to",
+                        "cc",
                         "subject",
-                        "read",
-                        "starred",
-                        "received_at",
+                        "text_body",
+                        "html_body",
+                        "message_id",
+                        "in_reply_to",
+                        "thread_id",
+                        "references",
+                        "folder_id",
+                        "is_read",
+                        "is_starred",
+                        "is_archived",
+                        "has_attachments",
+                        "deleted_at",
                         "created_at"
                       ],
                       "additionalProperties": {}
@@ -12136,16 +12500,36 @@
                         "from": {
                           "type": "string"
                         },
+                        "from_name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "to": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
+                          "type": "string"
+                        },
+                        "cc": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "subject": {
                           "type": "string"
                         },
-                        "text": {
+                        "text_body": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -12155,7 +12539,7 @@
                             }
                           ]
                         },
-                        "html": {
+                        "html_body": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -12165,11 +12549,48 @@
                             }
                           ]
                         },
-                        "read": {
-                          "type": "boolean"
+                        "message_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
-                        "starred": {
-                          "type": "boolean"
+                        "in_reply_to": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "thread_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "references": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "folder_id": {
                           "anyOf": [
@@ -12183,23 +12604,27 @@
                             }
                           ]
                         },
-                        "thread_id": {
+                        "is_read": {
+                          "type": "boolean"
+                        },
+                        "is_starred": {
+                          "type": "boolean"
+                        },
+                        "is_archived": {
+                          "type": "boolean"
+                        },
+                        "has_attachments": {
+                          "type": "boolean"
+                        },
+                        "deleted_at": {
                           "anyOf": [
                             {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              "type": "string"
                             },
                             {
                               "type": "null"
                             }
                           ]
-                        },
-                        "in_trash": {
-                          "type": "boolean"
-                        },
-                        "received_at": {
-                          "type": "string"
                         },
                         "created_at": {
                           "type": "string"
@@ -12208,11 +12633,22 @@
                       "required": [
                         "id",
                         "from",
+                        "from_name",
                         "to",
+                        "cc",
                         "subject",
-                        "read",
-                        "starred",
-                        "received_at",
+                        "text_body",
+                        "html_body",
+                        "message_id",
+                        "in_reply_to",
+                        "thread_id",
+                        "references",
+                        "folder_id",
+                        "is_read",
+                        "is_starred",
+                        "is_archived",
+                        "has_attachments",
+                        "deleted_at",
                         "created_at"
                       ],
                       "additionalProperties": {}
@@ -12330,16 +12766,36 @@
                         "from": {
                           "type": "string"
                         },
+                        "from_name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "to": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
+                          "type": "string"
+                        },
+                        "cc": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "subject": {
                           "type": "string"
                         },
-                        "text": {
+                        "text_body": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -12349,7 +12805,7 @@
                             }
                           ]
                         },
-                        "html": {
+                        "html_body": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -12359,11 +12815,48 @@
                             }
                           ]
                         },
-                        "read": {
-                          "type": "boolean"
+                        "message_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
-                        "starred": {
-                          "type": "boolean"
+                        "in_reply_to": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "thread_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "references": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "folder_id": {
                           "anyOf": [
@@ -12377,23 +12870,27 @@
                             }
                           ]
                         },
-                        "thread_id": {
+                        "is_read": {
+                          "type": "boolean"
+                        },
+                        "is_starred": {
+                          "type": "boolean"
+                        },
+                        "is_archived": {
+                          "type": "boolean"
+                        },
+                        "has_attachments": {
+                          "type": "boolean"
+                        },
+                        "deleted_at": {
                           "anyOf": [
                             {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              "type": "string"
                             },
                             {
                               "type": "null"
                             }
                           ]
-                        },
-                        "in_trash": {
-                          "type": "boolean"
-                        },
-                        "received_at": {
-                          "type": "string"
                         },
                         "created_at": {
                           "type": "string"
@@ -12402,11 +12899,22 @@
                       "required": [
                         "id",
                         "from",
+                        "from_name",
                         "to",
+                        "cc",
                         "subject",
-                        "read",
-                        "starred",
-                        "received_at",
+                        "text_body",
+                        "html_body",
+                        "message_id",
+                        "in_reply_to",
+                        "thread_id",
+                        "references",
+                        "folder_id",
+                        "is_read",
+                        "is_starred",
+                        "is_archived",
+                        "has_attachments",
+                        "deleted_at",
                         "created_at"
                       ],
                       "additionalProperties": {}
