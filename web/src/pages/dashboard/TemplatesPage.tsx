@@ -10,6 +10,7 @@ import {
   Textarea,
   Modal,
   SkeletonTable,
+  CopyButton,
   useConfirmDialog,
   useToast,
 } from "../../components/ui";
@@ -41,6 +42,11 @@ function extractVariables(text: string): string[] {
   return Array.from(vars);
 }
 
+function shortId(id: string): string {
+  if (id.length <= 11) return id;
+  return `${id.slice(0, 4)}…${id.slice(-4)}`;
+}
+
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
   const now = new Date();
@@ -63,6 +69,7 @@ export default function TemplatesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<Template | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
+  const [createdTemplate, setCreatedTemplate] = useState<Template | null>(null);
   const [form, setForm] = useState({ name: "", subject: "", html: "", text: "" });
   const [showText, setShowText] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -107,7 +114,7 @@ export default function TemplatesPage() {
     setError("");
     setSaving(true);
     try {
-      await post("/dashboard/templates", {
+      const res = await post<{ data: Template }>("/dashboard/templates", {
         name: form.name,
         subject: form.subject || undefined,
         html: form.html || undefined,
@@ -115,6 +122,7 @@ export default function TemplatesPage() {
       });
       setCreateOpen(false);
       resetForm();
+      setCreatedTemplate(res?.data ?? null);
       showSuccess("Template created");
       loadTemplates();
     } catch (e: any) {
@@ -217,6 +225,42 @@ export default function TemplatesPage() {
         }
       />
 
+      {/* New template UUID banner — shown right after a successful create */}
+      {createdTemplate && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-4 flex items-start gap-3 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800"
+        >
+          <svg className="w-4 h-4 mt-0.5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-medium text-emerald-900 dark:text-emerald-100">
+              Template "{createdTemplate.name}" created
+            </p>
+            <p className="text-[12px] text-emerald-800/80 dark:text-emerald-200/80 mt-0.5">
+              Use this <code className="font-mono">template_id</code> when calling <code className="font-mono">POST /v1/emails</code>:
+            </p>
+            <div className="mt-1.5 flex items-center gap-2">
+              <code className="font-mono text-[12px] px-2 py-1 rounded-md bg-white border border-emerald-200 text-gray-900 dark:bg-gray-900 dark:border-emerald-800 dark:text-gray-100 break-all">
+                {createdTemplate.id}
+              </code>
+              <CopyButton text={createdTemplate.id} label="template ID" />
+            </div>
+          </div>
+          <button
+            onClick={() => setCreatedTemplate(null)}
+            aria-label="Dismiss"
+            className="text-emerald-700/60 hover:text-emerald-900 dark:text-emerald-300/60 dark:hover:text-emerald-100 rounded-md p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Template list */}
       {loading && templates.length === 0 ? (
         <SkeletonTable rows={5} cols={5} />
@@ -227,10 +271,16 @@ export default function TemplatesPage() {
           action={<Button onClick={() => { resetForm(); setCreateOpen(true); }}>+ Create your first template</Button>}
         />
       ) : (
-        <Table headers={["Name", "Subject", "Variables", "Version", "Last Updated", "Actions"]}>
+        <Table headers={["Name", "ID", "Subject", "Variables", "Version", "Last Updated", "Actions"]}>
           {templates.map((t) => (
             <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
               <td className="px-4 py-3 text-gray-900 text-[13px] font-medium">{t.name}</td>
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-1">
+                  <code title={t.id} className="font-mono text-[12px] text-gray-500">{shortId(t.id)}</code>
+                  <CopyButton text={t.id} label="template ID" />
+                </div>
+              </td>
               <td className="px-4 py-3 text-gray-600 text-[13px] max-w-[250px] truncate">{t.subject || "\u2014"}</td>
               <td className="px-4 py-3">
                 {t.variables.length > 0 ? (
@@ -389,6 +439,15 @@ export default function TemplatesPage() {
       >
         {previewTemplate && (
           <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+            {/* Template ID — shown near the title for easy copy into env vars */}
+            <div className="flex items-center gap-2 -mt-2">
+              <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">ID</span>
+              <code className="font-mono text-[12px] px-2 py-1 rounded-md bg-gray-50 border border-gray-200 text-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 break-all">
+                {previewTemplate.id}
+              </code>
+              <CopyButton text={previewTemplate.id} label="template ID" />
+            </div>
+
             {/* Subject preview */}
             {previewTemplate.subject && (
               <div className="rounded-xl bg-gray-50 border border-gray-100 p-3.5">

@@ -192,7 +192,13 @@ export function CopyButton({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
-      onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        fireToast(label ? `${label} copied to clipboard` : "Copied to clipboard", "success");
+      }}
       aria-label={label ? `Copy ${label}` : "Copy"}
       className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-violet-600 font-medium transition-colors px-1.5 py-0.5 rounded-md hover:bg-violet-50 dark:hover:bg-violet-900/20">
       {copied ? (
