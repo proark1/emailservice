@@ -157,6 +157,7 @@ export default function TemplatesPage() {
         html: form.html || undefined,
         text: form.text || undefined,
       });
+      if (createdTemplate?.id === editTemplate.id) setCreatedTemplate(null);
       setEditTemplate(null);
       resetForm();
       showSuccess("Template saved");
@@ -178,6 +179,7 @@ export default function TemplatesPage() {
       onConfirm: async () => {
         try {
           await del(`/dashboard/templates/${id}`);
+          if (createdTemplate?.id === id) setCreatedTemplate(null);
           loadTemplates();
         } catch (e: any) {
           showError(e.message || "Failed to delete template");
