@@ -1,5 +1,6 @@
-import { and, eq, isNotNull, isNull, inArray, notInArray, or } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, notInArray, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { getDb } from "../db/index.js";
 import { companies, companyMailboxes, domains } from "../db/schema/index.js";
 import { ForbiddenError } from "../lib/errors.js";
@@ -20,45 +21,40 @@ import { ForbiddenError } from "../lib/errors.js";
  *   The row's `account_id` is also enforced separately (== caller) — this
  *   helper closes the "owner happens to have an account_id-stamped row on
  *   a company domain" path (catch-all fallback, owner-initiated sends, etc).
- *
- * Implementation note: rather than thread a positive allowlist through every
- * query, we compute the NEGATIVE list — company-delegated domain IDs the
- * caller does NOT hold a mailbox on — and append `domain_id NOT IN (...)`.
- * That keeps the predicate cheap and composable with existing WHERE clauses.
  */
-export async function getHiddenCompanyDomainIds(accountId: string): Promise<string[]> {
-  const db = getDb();
-  const callerMailboxDomains = await db
-    .select({ id: companyMailboxes.domainId })
-    .from(companyMailboxes)
-    .where(eq(companyMailboxes.accountId, accountId));
-  const allowed = callerMailboxDomains.map((r) => r.id);
-
-  const hiddenRows = allowed.length === 0
-    ? await db.select({ id: domains.id }).from(domains).where(isNotNull(domains.companyId))
-    : await db
-        .select({ id: domains.id })
-        .from(domains)
-        .where(and(isNotNull(domains.companyId), notInArray(domains.id, allowed)));
-
-  return hiddenRows.map((r) => r.id);
-}
 
 /**
- * Build a `domain_id NOT IN (hidden...)` predicate for an arbitrary email
- * table column (used by both `emails` and `inbound_emails` queries).
- * Returns `null` when the caller has no hidden domains — caller should skip
- * appending the predicate in that case to avoid an always-true `NOT IN ()`.
+ * Build a `domain_id NOT IN (hidden...)` predicate for an email table
+ * column. The `hidden` set is delivered as a correlated SQL subquery
+ * rather than an in-memory array — important for the platform-owner case,
+ * where the hidden set spans every tenant domain. Materializing it would
+ * round-trip a large list and could brush against Postgres's 65,535
+ * parameter cap on the subsequent `NOT IN`.
  */
-export async function buildCompanyDomainExclusion(
+export function buildCompanyDomainExclusion(
   accountId: string,
-  domainIdColumn: any,
-): Promise<SQL | null> {
-  const hidden = await getHiddenCompanyDomainIds(accountId);
-  if (hidden.length === 0) return null;
+  domainIdColumn: AnyPgColumn,
+): SQL {
+  const db = getDb();
+  // Domains the caller can see on company-delegated domains: those where
+  // they hold at least one `company_mailboxes` row. We select the negative
+  // — company-delegated domain IDs the caller does NOT hold a mailbox on
+  // — via a LEFT JOIN + IS NULL pattern, which the query planner handles
+  // efficiently against the existing indexes (`idx_company_mailboxes_account`
+  // plus the `domains.company_id` filter).
+  const hiddenDomainIds = db
+    .select({ id: domains.id })
+    .from(domains)
+    .leftJoin(
+      companyMailboxes,
+      and(eq(companyMailboxes.domainId, domains.id), eq(companyMailboxes.accountId, accountId)),
+    )
+    .where(and(isNotNull(domains.companyId), isNull(companyMailboxes.id)));
+
   // Treat NULL domain_id as "outside the hidden set" — once the domain row
-  // is gone (ON DELETE SET NULL) we can no longer prove a company link.
-  return or(isNull(domainIdColumn), notInArray(domainIdColumn, hidden))!;
+  // is gone (ON DELETE SET NULL) we can no longer prove a company link, so
+  // the safer interpretation is to leave the row visible to its accountId.
+  return or(isNull(domainIdColumn), notInArray(domainIdColumn, hiddenDomainIds))!;
 }
 
 /**
@@ -109,6 +105,5 @@ export async function resolveCompanyDefaultMailbox(companyId: string): Promise<s
   return row?.accountId ?? null;
 }
 
-// Re-export `inArray` so callers don't need a separate drizzle import just to
-// build the complementary `IN (allowed)` predicate.
-export { inArray };
+// `sql` is imported for callers that need to compose around the returned SQL.
+export { sql };

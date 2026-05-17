@@ -18,6 +18,7 @@ import { getDnsVerifyQueue } from "../queues/index.js";
 import { getConfig } from "../config/index.js";
 import { WEBHOOK_EVENT_TYPES } from "../types/webhook-events.js";
 import { buildCompanyDomainExclusion } from "../services/company-visibility.service.js";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 /**
  * Push the GDPR domain-exclusion predicate onto an existing conditions array.
@@ -27,13 +28,12 @@ import { buildCompanyDomainExclusion } from "../services/company-visibility.serv
  * the services apply — otherwise the platform owner could see content on
  * company-delegated domains via a legacy stamped accountId.
  */
-async function pushGdprFilter(
+function pushGdprFilter(
   conditions: any[],
   accountId: string,
-  domainIdCol: any,
-): Promise<void> {
-  const f = await buildCompanyDomainExclusion(accountId, domainIdCol);
-  if (f) conditions.push(f);
+  domainIdCol: AnyPgColumn,
+): void {
+  conditions.push(buildCompanyDomainExclusion(accountId, domainIdCol));
 }
 
 function escapeIlike(s: string): string {
