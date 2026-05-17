@@ -1,19 +1,50 @@
 import { eq, and, desc, or, ilike, isNull, sql, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
-import { inboundEmails } from "../db/schema/index.js";
+import { inboundEmails, domains } from "../db/schema/index.js";
 import { NotFoundError, ValidationError } from "../lib/errors.js";
 import { getFolderBySlug } from "./folder.service.js";
 import type { ListInboxInput, UpdateInboxEmailInput, BulkActionInput } from "../schemas/inbox.schema.js";
 
+/**
+ * Build the inbox read access predicate.
+ *
+ * A user always sees inbound emails delivered to their own account
+ * (inbound-server.ts:resolveMailbox() routes mail at company-delegated
+ * domains to the correct member's accountId at ingress, and unrouted /
+ * catch-all mail falls back to the domain owner).
+ *
+ * On top of that they may also see every inbound email on domains they
+ * have access to — BUT only for domains that are NOT delegated to a
+ * company. Company-delegated domains carry per-member mailboxes and the
+ * whole point of that delegation is privacy between members, so the
+ * owner / admins of the company must not be able to read other members'
+ * inboxes through the team-inbox path. (GDPR: separate data controllers
+ * per member account.)
+ */
+async function buildInboxAccessCondition(accountId: string) {
+  const { getAccessibleDomainIds } = await import("./team.service.js");
+  const db = getDb();
+  const accessibleIds = await getAccessibleDomainIds(accountId);
+  if (accessibleIds.length === 0) {
+    return eq(inboundEmails.accountId, accountId);
+  }
+  // Drop any accessible domain that is company-delegated — for those,
+  // visibility is strictly per-recipient-account.
+  const nonCompanyRows = await db
+    .select({ id: domains.id })
+    .from(domains)
+    .where(and(inArray(domains.id, accessibleIds), isNull(domains.companyId)));
+  const shareableIds = nonCompanyRows.map((r) => r.id);
+  if (shareableIds.length === 0) {
+    return eq(inboundEmails.accountId, accountId);
+  }
+  return or(eq(inboundEmails.accountId, accountId), inArray(inboundEmails.domainId, shareableIds))!;
+}
+
 export async function listInboxEmails(accountId: string, input: ListInboxInput) {
   const db = getDb();
 
-  // Build access condition: own emails OR emails on domains user is a member of
-  const { getAccessibleDomainIds } = await import("./team.service.js");
-  const accessibleIds = await getAccessibleDomainIds(accountId);
-  const accessCondition = accessibleIds.length > 0
-    ? or(eq(inboundEmails.accountId, accountId), inArray(inboundEmails.domainId, accessibleIds))!
-    : eq(inboundEmails.accountId, accountId);
+  const accessCondition = await buildInboxAccessCondition(accountId);
   const conditions: any[] = [accessCondition];
 
   // Folder filtering
@@ -75,11 +106,7 @@ export async function listInboxEmails(accountId: string, input: ListInboxInput) 
 
 export async function getInboxEmail(accountId: string, emailId: string) {
   const db = getDb();
-  const { getAccessibleDomainIds } = await import("./team.service.js");
-  const accessibleIds = await getAccessibleDomainIds(accountId);
-  const accessCondition = accessibleIds.length > 0
-    ? or(eq(inboundEmails.accountId, accountId), inArray(inboundEmails.domainId, accessibleIds))!
-    : eq(inboundEmails.accountId, accountId);
+  const accessCondition = await buildInboxAccessCondition(accountId);
 
   const [email] = await db
     .select()
@@ -90,11 +117,7 @@ export async function getInboxEmail(accountId: string, emailId: string) {
 }
 
 async function emailAccessCondition(accountId: string, emailId: string) {
-  const { getAccessibleDomainIds } = await import("./team.service.js");
-  const accessibleIds = await getAccessibleDomainIds(accountId);
-  const accessCheck = accessibleIds.length > 0
-    ? or(eq(inboundEmails.accountId, accountId), inArray(inboundEmails.domainId, accessibleIds))!
-    : eq(inboundEmails.accountId, accountId);
+  const accessCheck = await buildInboxAccessCondition(accountId);
   return and(eq(inboundEmails.id, emailId), accessCheck);
 }
 
@@ -148,11 +171,7 @@ export async function bulkAction(accountId: string, input: BulkActionInput) {
   const db = getDb();
   const { ids, action, folder_id } = input;
 
-  const { getAccessibleDomainIds } = await import("./team.service.js");
-  const accessibleIds = await getAccessibleDomainIds(accountId);
-  const accessCondition = accessibleIds.length > 0
-    ? or(eq(inboundEmails.accountId, accountId), inArray(inboundEmails.domainId, accessibleIds))!
-    : eq(inboundEmails.accountId, accountId);
+  const accessCondition = await buildInboxAccessCondition(accountId);
 
   const conditions = and(
     inArray(inboundEmails.id, ids),
