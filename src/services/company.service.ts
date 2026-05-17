@@ -92,6 +92,26 @@ export async function updateCompany(accountId: string, companyId: string, input:
   const db = getDb();
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
   if (input.name !== undefined) updateData.name = input.name;
+  if (input.default_mailbox_account_id !== undefined) {
+    // The default mailbox is the account that catches inbound mail to
+    // unrouted handles on this company's domains. The target MUST be a
+    // member of the company — otherwise unrouted mail would land in an
+    // account outside the GDPR boundary. Pass `null` to clear it (unrouted
+    // mail will then be dropped).
+    if (input.default_mailbox_account_id !== null) {
+      const [target] = await db
+        .select({ id: companyMembers.id })
+        .from(companyMembers)
+        .where(and(
+          eq(companyMembers.companyId, companyId),
+          eq(companyMembers.accountId, input.default_mailbox_account_id),
+        ));
+      if (!target) {
+        throw new ForbiddenError("default_mailbox_account_id must be a member of this company");
+      }
+    }
+    updateData.defaultMailboxAccountId = input.default_mailbox_account_id;
+  }
 
   const [updated] = await db.update(companies).set(updateData).where(eq(companies.id, companyId)).returning();
   if (!updated) throw new NotFoundError("Company");
@@ -271,6 +291,7 @@ export function formatCompanyResponse(c: typeof companies.$inferSelect & { role?
     name: c.name,
     slug: c.slug,
     owner_account_id: c.ownerAccountId,
+    default_mailbox_account_id: c.defaultMailboxAccountId ?? null,
     role: (c as any).role,
     created_at: c.createdAt.toISOString(),
     updated_at: c.updatedAt.toISOString(),

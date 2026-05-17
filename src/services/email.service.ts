@@ -163,6 +163,16 @@ export async function sendEmail(accountId: string, input: SendEmailInput, option
     throw new ValidationError(`You are not authorized to send from ${from.address}. Allowed: ${allowedMailboxes.join(", ")}`);
   }
 
+  // GDPR isolation: on a company-delegated domain, the caller must hold the
+  // exact mailbox they're sending as via `company_mailboxes` — platform
+  // owners with no mailbox assignment cannot send. This is enforced
+  // independently of the team-role mailbox filter above, because that filter
+  // is bypassed for role=owner/admin and we want it strict on company
+  // domains.
+  const { assertCanSendFromCompanyDomain } = await import("./company-visibility.service.js");
+  const fromLocalPart = from.address.split("@")[0] ?? "";
+  await assertCanSendFromCompanyDomain(accountId, domain, fromLocalPart);
+
   if (domain.status !== "verified") {
     throw new ValidationError(`Domain ${fromDomain} is not verified yet`);
   }
@@ -337,6 +347,9 @@ export async function getEmail(accountId: string, emailId: string, options: Send
   ];
   const scope = await companyScopeCondition(accountId, options.companyScopeId);
   if (scope) conditions.push(scope);
+  const { buildCompanyDomainExclusion } = await import("./company-visibility.service.js");
+  const gdprFilter = await buildCompanyDomainExclusion(accountId, emails.domainId);
+  if (gdprFilter) conditions.push(gdprFilter);
 
   const [email] = await db
     .select()
@@ -362,6 +375,10 @@ export async function listEmails(
 
   const scope = await companyScopeCondition(accountId, options.companyScopeId);
   if (scope) conditions.push(scope);
+
+  const { buildCompanyDomainExclusion } = await import("./company-visibility.service.js");
+  const gdprFilter = await buildCompanyDomainExclusion(accountId, emails.domainId);
+  if (gdprFilter) conditions.push(gdprFilter);
 
   // Keyset pagination over (createdAt DESC, id DESC). The cursor is the last
   // email id from the previous page; we look up its createdAt and then take
@@ -409,6 +426,9 @@ export async function cancelScheduledEmail(accountId: string, emailId: string, o
   ];
   const scope = await companyScopeCondition(accountId, options.companyScopeId);
   if (scope) conditions.push(scope);
+  const { buildCompanyDomainExclusion } = await import("./company-visibility.service.js");
+  const gdprFilter = await buildCompanyDomainExclusion(accountId, emails.domainId);
+  if (gdprFilter) conditions.push(gdprFilter);
   const [email] = await db
     .select()
     .from(emails)

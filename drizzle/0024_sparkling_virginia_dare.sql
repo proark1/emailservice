@@ -1,0 +1,2 @@
+ALTER TABLE "companies" ADD COLUMN "default_mailbox_account_id" uuid;--> statement-breakpoint
+ALTER TABLE "companies" ADD CONSTRAINT "companies_default_mailbox_account_id_accounts_id_fk" FOREIGN KEY ("default_mailbox_account_id") REFERENCES "public"."accounts"("id") ON DELETE set null ON UPDATE no action;

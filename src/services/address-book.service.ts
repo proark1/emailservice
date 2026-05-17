@@ -103,6 +103,8 @@ export async function autocomplete(accountId: string, query: string) {
     .limit(10);
 
   // Also search recent inbound senders
+  const { buildCompanyDomainExclusion } = await import("./company-visibility.service.js");
+  const gdpr = await buildCompanyDomainExclusion(accountId, inboundEmails.domainId);
   const recentSenders = await db
     .selectDistinctOn([inboundEmails.fromAddress], {
       email: inboundEmails.fromAddress,
@@ -114,6 +116,7 @@ export async function autocomplete(accountId: string, query: string) {
       and(
         eq(inboundEmails.accountId, accountId),
         or(ilike(inboundEmails.fromAddress, q), ilike(inboundEmails.fromName, q)),
+        ...(gdpr ? [gdpr] : []),
       ),
     )
     .orderBy(inboundEmails.fromAddress, desc(inboundEmails.createdAt))

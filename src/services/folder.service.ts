@@ -126,6 +126,8 @@ export async function getUnreadCounts(accountId: string) {
   const allFolders = await listFolders(accountId);
   const inboxFolder = allFolders.find((f) => f.slug === "inbox");
 
+  const { buildCompanyDomainExclusion } = await import("./company-visibility.service.js");
+  const gdpr = await buildCompanyDomainExclusion(accountId, inboundEmails.domainId);
   const rows = await db
     .select({
       folderId: inboundEmails.folderId,
@@ -137,6 +139,7 @@ export async function getUnreadCounts(accountId: string) {
         eq(inboundEmails.accountId, accountId),
         eq(inboundEmails.isRead, false),
         isNull(inboundEmails.deletedAt),
+        ...(gdpr ? [gdpr] : []),
       ),
     )
     .groupBy(inboundEmails.folderId);
