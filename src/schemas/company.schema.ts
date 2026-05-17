@@ -12,6 +12,11 @@ export const createCompanySchema = z.object({
 
 export const updateCompanySchema = z.object({
   name: z.string().min(1).max(255).optional(),
+  // Account that receives inbound mail on this company's domains when no
+  // per-mailbox mapping matches the recipient. Must be a member of the
+  // company. `null` clears the default (unrouted mail will be dropped
+  // rather than fall back to the platform owner).
+  default_mailbox_account_id: z.string().uuid().nullable().optional(),
 });
 
 export const provisionMemberSchema = z.object({

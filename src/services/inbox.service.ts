@@ -9,36 +9,44 @@ import type { ListInboxInput, UpdateInboxEmailInput, BulkActionInput } from "../
  * Build the inbox read access predicate.
  *
  * A user always sees inbound emails delivered to their own account
- * (inbound-server.ts:resolveMailbox() routes mail at company-delegated
- * domains to the correct member's accountId at ingress, and unrouted /
- * catch-all mail falls back to the domain owner).
+ * (inbound-server.ts routes mail on company-delegated domains to the
+ * correct mailbox holder's accountId at ingress, falling back to the
+ * configured company default mailbox when no per-mailbox mapping
+ * matches — and dropping the message if neither exists, never the
+ * platform owner).
  *
- * On top of that they may also see every inbound email on domains they
- * have access to — BUT only for domains that are NOT delegated to a
- * company. Company-delegated domains carry per-member mailboxes and the
- * whole point of that delegation is privacy between members, so the
- * owner / admins of the company must not be able to read other members'
- * inboxes through the team-inbox path. (GDPR: separate data controllers
- * per member account.)
+ * On non-company team domains we also expand visibility to other
+ * domain members, preserving the shared-team-inbox behavior. On
+ * company-delegated domains we never expand: visibility is strictly
+ * per-recipient-account.
+ *
+ * The defensive `buildCompanyDomainExclusion()` filter is layered on top
+ * to hide any legacy rows that may have been stamped with the platform
+ * owner's accountId before the send-time gate and inbound catch-all
+ * rerouting were in place. New rows can no longer reach that state.
  */
 async function buildInboxAccessCondition(accountId: string) {
   const { getAccessibleDomainIds } = await import("./team.service.js");
+  const { buildCompanyDomainExclusion } = await import("./company-visibility.service.js");
   const db = getDb();
   const accessibleIds = await getAccessibleDomainIds(accountId);
+
+  let base: ReturnType<typeof eq> | ReturnType<typeof or>;
   if (accessibleIds.length === 0) {
-    return eq(inboundEmails.accountId, accountId);
+    base = eq(inboundEmails.accountId, accountId);
+  } else {
+    const nonCompanyRows = await db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(and(inArray(domains.id, accessibleIds), isNull(domains.companyId)));
+    const shareableIds = nonCompanyRows.map((r) => r.id);
+    base = shareableIds.length === 0
+      ? eq(inboundEmails.accountId, accountId)
+      : or(eq(inboundEmails.accountId, accountId), inArray(inboundEmails.domainId, shareableIds))!;
   }
-  // Drop any accessible domain that is company-delegated — for those,
-  // visibility is strictly per-recipient-account.
-  const nonCompanyRows = await db
-    .select({ id: domains.id })
-    .from(domains)
-    .where(and(inArray(domains.id, accessibleIds), isNull(domains.companyId)));
-  const shareableIds = nonCompanyRows.map((r) => r.id);
-  if (shareableIds.length === 0) {
-    return eq(inboundEmails.accountId, accountId);
-  }
-  return or(eq(inboundEmails.accountId, accountId), inArray(inboundEmails.domainId, shareableIds))!;
+
+  const gdprFilter = await buildCompanyDomainExclusion(accountId, inboundEmails.domainId);
+  return gdprFilter ? and(base, gdprFilter)! : base;
 }
 
 export async function listInboxEmails(accountId: string, input: ListInboxInput) {

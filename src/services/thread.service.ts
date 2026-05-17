@@ -38,6 +38,9 @@ export function computeThreadId(
 
 export async function getThread(accountId: string, threadId: string) {
   const db = getDb();
+  const { buildCompanyDomainExclusion } = await import("./company-visibility.service.js");
+  const inboundGdpr = await buildCompanyDomainExclusion(accountId, inboundEmails.domainId);
+  const outboundGdpr = await buildCompanyDomainExclusion(accountId, emails.domainId);
 
   // Get inbound emails in this thread
   const inbound = await db
@@ -48,6 +51,7 @@ export async function getThread(accountId: string, threadId: string) {
         eq(inboundEmails.accountId, accountId),
         eq(inboundEmails.threadId, threadId),
         isNull(inboundEmails.deletedAt),
+        ...(inboundGdpr ? [inboundGdpr] : []),
       ),
     )
     .orderBy(inboundEmails.createdAt);
@@ -62,6 +66,7 @@ export async function getThread(accountId: string, threadId: string) {
         eq(emails.threadId, threadId),
         eq(emails.isDraft, false),
         isNull(emails.deletedAt),
+        ...(outboundGdpr ? [outboundGdpr] : []),
       ),
     )
     .orderBy(emails.createdAt);
@@ -119,10 +124,13 @@ export async function listThreads(
   const db = getDb();
   const limit = options.limit || 50;
 
+  const { buildCompanyDomainExclusion } = await import("./company-visibility.service.js");
+  const gdpr = await buildCompanyDomainExclusion(accountId, inboundEmails.domainId);
   const conditions = [
     eq(inboundEmails.accountId, accountId),
     isNull(inboundEmails.deletedAt),
     sql`${inboundEmails.threadId} IS NOT NULL`,
+    ...(gdpr ? [gdpr] : []),
   ];
 
   if (options.folderId) {

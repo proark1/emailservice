@@ -125,17 +125,34 @@ export function createInboundServer(): SMTPServer {
             const domain = await lookupReceiveDomain(recipientDomain);
             if (!domain) continue;
 
-            // If the domain is delegated to a company, try to route the message
-            // to the member account that owns this specific handle. When no
-            // mapping exists we fall back to the domain owner so mail is not lost.
-            let deliveryAccountId = domain.accountId;
+            // If the domain is delegated to a company, the message MUST be
+            // routed to a member account — never to the platform owner. We
+            // try the per-mailbox mapping first, then the company's
+            // configured `default_mailbox_account_id`. If neither resolves
+            // we drop the message (continue the rcptTo loop) instead of
+            // falling back to `domain.accountId` — that fallback was the
+            // GDPR leak (the platform owner could read every unrouted
+            // tenant email).
+            let deliveryAccountId: string | null = domain.accountId;
             if (domain.companyId) {
+              deliveryAccountId = null;
               try {
                 const { resolveMailbox } = await import("../services/company-mailbox.service.js");
+                const { resolveCompanyDefaultMailbox } = await import("../services/company-visibility.service.js");
                 const localPart = toAddress.split("@")[0];
                 const resolved = await resolveMailbox(domain.id, localPart);
-                if (resolved) deliveryAccountId = resolved.accountId;
+                if (resolved) {
+                  deliveryAccountId = resolved.accountId;
+                } else {
+                  deliveryAccountId = await resolveCompanyDefaultMailbox(domain.companyId);
+                }
               } catch {}
+              if (!deliveryAccountId) {
+                console.warn(
+                  `[inbound] Dropping mail to ${toAddress}: no company_mailboxes mapping and no default mailbox set for company ${domain.companyId}`,
+                );
+                continue;
+              }
             }
 
             // DSN (RFC 3464) and FBL (RFC 5965) short-circuit:

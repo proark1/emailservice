@@ -10,6 +10,11 @@ export const companies = pgTable("companies", {
   ownerAccountId: uuid("owner_account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   slug: varchar("slug", { length: 64 }).notNull(),
+  // Account to receive inbound mail on this company's domains when the recipient
+  // local part has no `company_mailboxes` mapping. When NULL, unrouted inbound
+  // mail is dropped (NOT routed to the platform owner) — that's the whole point
+  // of the GDPR isolation between platform and tenants.
+  defaultMailboxAccountId: uuid("default_mailbox_account_id").references(() => accounts.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

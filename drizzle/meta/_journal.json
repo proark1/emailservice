@@ -169,6 +169,13 @@
       "when": 1777892014519,
       "tag": "0023_fat_unus",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1779036860990,
+      "tag": "0024_sparkling_virginia_dare",
+      "breakpoints": true
     }
   ]
 }

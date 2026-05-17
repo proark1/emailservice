@@ -17,6 +17,24 @@ import { ForbiddenError } from "../lib/errors.js";
 import { getDnsVerifyQueue } from "../queues/index.js";
 import { getConfig } from "../config/index.js";
 import { WEBHOOK_EVENT_TYPES } from "../types/webhook-events.js";
+import { buildCompanyDomainExclusion } from "../services/company-visibility.service.js";
+
+/**
+ * Push the GDPR domain-exclusion predicate onto an existing conditions array.
+ * The dashboard talks to the `emails` / `inbound_emails` tables directly in
+ * many places (rather than going through the email/inbox services), so each
+ * of those queries needs to layer on the same per-tenant isolation filter
+ * the services apply — otherwise the platform owner could see content on
+ * company-delegated domains via a legacy stamped accountId.
+ */
+async function pushGdprFilter(
+  conditions: any[],
+  accountId: string,
+  domainIdCol: any,
+): Promise<void> {
+  const f = await buildCompanyDomainExclusion(accountId, domainIdCol);
+  if (f) conditions.push(f);
+}
 
 function escapeIlike(s: string): string {
   return s.replace(/[%_\\]/g, (c) => `\\${c}`);
@@ -60,8 +78,10 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.get("/stats", async (request) => {
     const db = getDb();
     const id = request.account.id;
+    const emailsGdpr = await buildCompanyDomainExclusion(id, emails.domainId);
+    const emailsWhere = emailsGdpr ? and(eq(emails.accountId, id), emailsGdpr)! : eq(emails.accountId, id);
     const [[e], [d], [a], [w], [au], [vd]] = await Promise.all([
-      db.select({ count: count() }).from(emails).where(eq(emails.accountId, id)),
+      db.select({ count: count() }).from(emails).where(emailsWhere),
       db.select({ count: count() }).from(domains).where(eq(domains.accountId, id)),
       db.select({ count: count() }).from(apiKeys).where(and(eq(apiKeys.accountId, id), isNull(apiKeys.revokedAt))),
       db.select({ count: count() }).from(webhooks).where(eq(webhooks.accountId, id)),
@@ -79,11 +99,15 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.get("/onboarding", async (request) => {
     const db = getDb();
     const id = request.account.id;
+    const emailsGdpr = await buildCompanyDomainExclusion(id, emails.domainId);
+    const sentEmailsWhere = emailsGdpr
+      ? and(eq(emails.accountId, id), eq(emails.isDraft, false), emailsGdpr)!
+      : and(eq(emails.accountId, id), eq(emails.isDraft, false))!;
     const [[d], [vd], [a], [e]] = await Promise.all([
       db.select({ count: count() }).from(domains).where(eq(domains.accountId, id)),
       db.select({ count: count() }).from(domains).where(and(eq(domains.accountId, id), eq(domains.status, "verified"))),
       db.select({ count: count() }).from(apiKeys).where(and(eq(apiKeys.accountId, id), isNull(apiKeys.revokedAt))),
-      db.select({ count: count() }).from(emails).where(and(eq(emails.accountId, id), eq(emails.isDraft, false))),
+      db.select({ count: count() }).from(emails).where(sentEmailsWhere),
     ]);
     const [acct] = await db.select({ dismissedAt: accounts.onboardingDismissedAt }).from(accounts).where(eq(accounts.id, id));
     return {
@@ -117,6 +141,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     }).parse(request.query);
 
     const conditions: any[] = [eq(emails.accountId, request.account.id)];
+    await pushGdprFilter(conditions, request.account.id, emails.domainId);
 
     if (query.search) {
       const pattern = `%${escapeIlike(query.search)}%`;
@@ -214,8 +239,11 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const db = getDb();
     const { emailEvents, emails } = await import("../db/schema/index.js");
     // Verify email belongs to account
-    const [email] = await db.select().from(emails)
-      .where(and(eq(emails.id, request.params.id), eq(emails.accountId, request.account.id)));
+    const gdpr = await buildCompanyDomainExclusion(request.account.id, emails.domainId);
+    const where = gdpr
+      ? and(eq(emails.id, request.params.id), eq(emails.accountId, request.account.id), gdpr)!
+      : and(eq(emails.id, request.params.id), eq(emails.accountId, request.account.id))!;
+    const [email] = await db.select().from(emails).where(where);
     if (!email) throw new (await import("../lib/errors.js")).NotFoundError("Email");
 
     const events = await db.select().from(emailEvents)
@@ -240,8 +268,11 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   // --- Retry Failed Email ---
   app.post<{ Params: { id: string } }>("/emails/:id/retry", async (request, reply) => {
     const db = getDb();
-    const [email] = await db.select().from(emails)
-      .where(and(eq(emails.id, request.params.id), eq(emails.accountId, request.account.id)));
+    const gdpr = await buildCompanyDomainExclusion(request.account.id, emails.domainId);
+    const where = gdpr
+      ? and(eq(emails.id, request.params.id), eq(emails.accountId, request.account.id), gdpr)!
+      : and(eq(emails.id, request.params.id), eq(emails.accountId, request.account.id))!;
+    const [email] = await db.select().from(emails).where(where);
     if (!email) throw new (await import("../lib/errors.js")).NotFoundError("Email");
     if (email.status !== "failed") throw new (await import("../lib/errors.js")).ValidationError("Only failed emails can be retried");
 
@@ -282,6 +313,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         eq(emails.isDraft, false),
         isNull(emails.deletedAt),
       ];
+      await pushGdprFilter(conditions, request.account.id, emails.domainId);
       if (query.search) {
         const pattern = `%${escapeIlike(query.search)}%`;
         conditions.push(
@@ -337,6 +369,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         eq(emails.isDraft, true),
         isNull(emails.deletedAt),
       ];
+      await pushGdprFilter(conditions, request.account.id, emails.domainId);
       if (query.search) {
         const pattern = `%${escapeIlike(query.search)}%`;
         conditions.push(
@@ -409,6 +442,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
           eq(inboundEmails.accountId, request.account.id),
           eq(inboundEmails.folderId, folder.id),
         ];
+        await pushGdprFilter(conditions, request.account.id, inboundEmails.domainId);
         if (query.search) {
           const pattern = `%${escapeIlike(query.search)}%`;
           conditions.push(
@@ -445,6 +479,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
     // --- Default: inbox folder (inbound emails) ---
     const conditions: any[] = [eq(inboundEmails.accountId, request.account.id)];
+    await pushGdprFilter(conditions, request.account.id, inboundEmails.domainId);
 
     // For explicit inbox folder, filter by inbox folder to exclude trash/spam/archive
     if (!query.folder_slug || query.folder_slug === "inbox") {
@@ -506,8 +541,10 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>("/inbox/:id", async (request) => {
     const db = getDb();
     const { inboundEmails } = await import("../db/schema/index.js");
-    const [email] = await db.select().from(inboundEmails)
-      .where(and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id)));
+    const gdpr = await buildCompanyDomainExclusion(request.account.id, inboundEmails.domainId);
+    const baseWhere = and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id));
+    const where = gdpr ? and(baseWhere, gdpr)! : baseWhere!;
+    const [email] = await db.select().from(inboundEmails).where(where);
     if (!email) throw new (await import("../lib/errors.js")).NotFoundError("Email");
     // Mark as read
     if (!email.isRead) {
@@ -520,7 +557,10 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const db = getDb();
     const { inboundEmails } = await import("../db/schema/index.js");
     const input = z.object({ isRead: z.boolean().optional(), isStarred: z.boolean().optional(), isArchived: z.boolean().optional() }).parse(request.body);
-    const [updated] = await db.update(inboundEmails).set(input).where(and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id))).returning();
+    const gdpr = await buildCompanyDomainExclusion(request.account.id, inboundEmails.domainId);
+    const baseWhere = and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id));
+    const where = gdpr ? and(baseWhere, gdpr)! : baseWhere!;
+    const [updated] = await db.update(inboundEmails).set(input).where(where).returning();
     if (!updated) throw new (await import("../lib/errors.js")).NotFoundError("Email");
     return { data: updated };
   });
@@ -528,7 +568,10 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>("/inbox/:id", async (request) => {
     const db = getDb();
     const { inboundEmails } = await import("../db/schema/index.js");
-    const [deleted] = await db.delete(inboundEmails).where(and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id))).returning();
+    const gdpr = await buildCompanyDomainExclusion(request.account.id, inboundEmails.domainId);
+    const baseWhere = and(eq(inboundEmails.id, request.params.id), eq(inboundEmails.accountId, request.account.id));
+    const where = gdpr ? and(baseWhere, gdpr)! : baseWhere!;
+    const [deleted] = await db.delete(inboundEmails).where(where).returning();
     if (!deleted) throw new (await import("../lib/errors.js")).NotFoundError("Email");
     return { data: { success: true } };
   });
@@ -1450,6 +1493,9 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const { contacts } = await import("../db/schema/index.js");
     const { templates } = await import("../db/schema/index.js");
 
+    const emailsGdpr = await buildCompanyDomainExclusion(accountId, emails.domainId);
+    const inboundGdpr = await buildCompanyDomainExclusion(accountId, inboundEmails.domainId);
+
     const [emailResults, inboxResults, domainResults, contactResults, templateResults] = await Promise.all([
       // Search emails
       db.select({
@@ -1462,6 +1508,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         and(
           eq(emails.accountId, accountId),
           or(ilike(emails.fromAddress, pattern), ilike(emails.subject, pattern)),
+          ...(emailsGdpr ? [emailsGdpr] : []),
         ),
       ).orderBy(desc(emails.createdAt)).limit(limit),
 
@@ -1475,6 +1522,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         and(
           eq(inboundEmails.accountId, accountId),
           or(ilike(inboundEmails.fromAddress, pattern), ilike(inboundEmails.subject, pattern)),
+          ...(inboundGdpr ? [inboundGdpr] : []),
         ),
       ).orderBy(desc(inboundEmails.createdAt)).limit(limit),
 
@@ -1663,23 +1711,25 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const { contacts } = await import("../db/schema/index.js");
     const { templates } = await import("../db/schema/index.js");
 
+    const gdpr = await buildCompanyDomainExclusion(accountId, emails.domainId);
+    const monthScope = gdpr
+      ? and(eq(emails.accountId, accountId), sql`${emails.createdAt} >= ${startOfMonth.toISOString()}::timestamp`, gdpr)!
+      : and(eq(emails.accountId, accountId), sql`${emails.createdAt} >= ${startOfMonth.toISOString()}::timestamp`)!;
+    const sixMonthScope = gdpr
+      ? and(eq(emails.accountId, accountId), sql`${emails.createdAt} > now() - interval '6 months'`, gdpr)!
+      : and(eq(emails.accountId, accountId), sql`${emails.createdAt} > now() - interval '6 months'`)!;
+
     const [[monthUsage], monthlyBreakdown, [domainCount], [audienceCount], [contactCount], [templateCount]] = await Promise.all([
       db.select({
         emailsSent: sql<number>`count(*) filter (where ${emails.status} in ('sent','delivered','bounced','failed','complained'))::int`,
         emailsDelivered: sql<number>`count(*) filter (where ${emails.status} = 'delivered')::int`,
-      }).from(emails).where(and(
-        eq(emails.accountId, accountId),
-        sql`${emails.createdAt} >= ${startOfMonth.toISOString()}::timestamp`,
-      )),
+      }).from(emails).where(monthScope),
 
       db.select({
         month: sql<string>`to_char(${emails.createdAt}, 'YYYY-MM')`,
         count: sql<number>`count(*)::int`,
       }).from(emails)
-        .where(and(
-          eq(emails.accountId, accountId),
-          sql`${emails.createdAt} > now() - interval '6 months'`,
-        ))
+        .where(sixMonthScope)
         .groupBy(sql`to_char(${emails.createdAt}, 'YYYY-MM')`)
         .orderBy(sql`to_char(${emails.createdAt}, 'YYYY-MM')`),
 
@@ -1713,6 +1763,11 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   app.get("/deliverability", async (request) => {
     const db = getDb();
     const accountId = request.account.id;
+    const gdpr = await buildCompanyDomainExclusion(accountId, emails.domainId);
+    const totalsWhere = gdpr ? and(eq(emails.accountId, accountId), gdpr)! : eq(emails.accountId, accountId);
+    const dailyWhere = gdpr
+      ? and(eq(emails.accountId, accountId), sql`${emails.createdAt} > now() - interval '7 days'`, gdpr)!
+      : and(eq(emails.accountId, accountId), sql`${emails.createdAt} > now() - interval '7 days'`)!;
     const [totals] = await db.select({
       total: count(),
       sent: sql<number>`count(*) filter (where ${emails.status} = 'sent')::int`,
@@ -1722,7 +1777,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       complained: sql<number>`count(*) filter (where ${emails.status} = 'complained')::int`,
       totalOpens: sql<number>`coalesce(sum(${emails.openCount}), 0)::int`,
       totalClicks: sql<number>`coalesce(sum(${emails.clickCount}), 0)::int`,
-    }).from(emails).where(eq(emails.accountId, accountId));
+    }).from(emails).where(totalsWhere);
 
     const daily = await db.select({
       date: sql<string>`date(${emails.createdAt})`,
@@ -1731,7 +1786,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       complained: sql<number>`count(*) filter (where ${emails.status} = 'complained')::int`,
       opens: sql<number>`coalesce(sum(${emails.openCount}), 0)::int`,
     }).from(emails)
-      .where(and(eq(emails.accountId, accountId), sql`${emails.createdAt} > now() - interval '7 days'`))
+      .where(dailyWhere)
       .groupBy(sql`date(${emails.createdAt})`)
       .orderBy(sql`date(${emails.createdAt})`);
 
